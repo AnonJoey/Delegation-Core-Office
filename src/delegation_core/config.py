@@ -484,7 +484,7 @@ class Config:
         try:
             with tmp.open("w", encoding="utf-8") as fh:
                 try:
-                    os.chmod(fh.fileno(), 0o600)
+                    os.chmod(tmp, 0o600)
                 except (OSError, AttributeError):
                     pass
                 fh.write(dados)
