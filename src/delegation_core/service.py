@@ -41,6 +41,7 @@ SYSTEMD_UNIT = Path.home() / ".config" / "systemd" / "user" / f"{SERVICE_NAME}.s
 LAUNCHD_PLIST = Path.home() / "Library" / "LaunchAgents" / f"{LAUNCHD_LABEL}.plist"
 WIN_STARTUP_DIR = Path.home() / "AppData" / "Roaming" / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup"
 WIN_STARTUP_CMD = WIN_STARTUP_DIR / f"{SERVICE_NAME}.cmd"
+WIN_STARTUP_VBS = WIN_STARTUP_DIR / f"{SERVICE_NAME}.vbs"
 
 #: The SECOND registration this project creates, and the reason these names are
 #: defined in one place now.
@@ -202,10 +203,15 @@ def install() -> dict:
                     "hint": "The task runs at logon; start it now with `schtasks /Run /TN delegation-core`."}
         try:
             WIN_STARTUP_DIR.mkdir(parents=True, exist_ok=True)
-            WIN_STARTUP_CMD.write_text(f'@echo off\r\nstart "" /B "{_executable()}" run\r\n', encoding="utf-8")
-            return {"platform": system, "unit": str(WIN_STARTUP_CMD),
-                    "status": "installed", "detail": "Configured via user Startup folder (no elevation required)",
-                    "hint": "The script runs at logon from your Startup folder."}
+            WIN_STARTUP_VBS.write_text(
+                f'shell = CreateObject("WScript.Shell")\r\n'
+                f'shell.Run """{_executable()}"" run", 0, False\r\n',
+                encoding="utf-8",
+            )
+            WIN_STARTUP_CMD.unlink(missing_ok=True)
+            return {"platform": system, "unit": str(WIN_STARTUP_VBS),
+                    "status": "installed", "detail": "Configured via hidden user Startup launcher (no elevation required)",
+                    "hint": "The launcher runs at logon without opening a terminal window."}
         except Exception as e:
             return {"platform": system, "unit": f"Task Scheduler: {SERVICE_NAME}",
                     "status": "failed", "detail": f"{out}; Startup folder fallback failed: {e}"}
@@ -232,11 +238,10 @@ def uninstall() -> dict:
 
     if system == "Windows":
         code, out = _run(["schtasks", "/Delete", "/TN", SERVICE_NAME, "/F"])
-        cmd_existed = False
-        if WIN_STARTUP_CMD.exists():
-            WIN_STARTUP_CMD.unlink(missing_ok=True)
-            cmd_existed = True
-        return {"platform": system, "status": "removed" if (code == 0 or cmd_existed) else "not_installed",
+        startup_existed = WIN_STARTUP_CMD.exists() or WIN_STARTUP_VBS.exists()
+        WIN_STARTUP_CMD.unlink(missing_ok=True)
+        WIN_STARTUP_VBS.unlink(missing_ok=True)
+        return {"platform": system, "status": "removed" if (code == 0 or startup_existed) else "not_installed",
                 "detail": out}
 
     return {"platform": system, "status": "unsupported"}
@@ -316,7 +321,7 @@ def stop(timeout: int = STOP_TIMEOUT_SEC) -> dict:
         # No scheduled task: the Startup-folder fallback leaves no handle to end,
         # so say that rather than reporting a failure the caller cannot act on.
         return {"platform": system, "action": "stop",
-                "status": "not_installed" if WIN_STARTUP_CMD.exists() else "failed",
+                "status": "not_installed" if (WIN_STARTUP_CMD.exists() or WIN_STARTUP_VBS.exists()) else "failed",
                 "detail": out}
 
     return {"platform": system, "action": "stop", "status": "unsupported", "detail": ""}
@@ -439,9 +444,10 @@ def status() -> dict:
                       manager_state="loaded" if code == 0 else "not loaded")
     elif system == "Windows":
         code, out = _run(["schtasks", "/Query", "/TN", SERVICE_NAME])
-        startup_exists = WIN_STARTUP_CMD.exists()
+        startup_exists = WIN_STARTUP_CMD.exists() or WIN_STARTUP_VBS.exists()
         result.update(installed=(code == 0 or startup_exists),
-                      manager_state=out.splitlines()[-1] if out else ("startup folder" if startup_exists else "unknown"))
+                      manager_state=(out.splitlines()[-1] if code == 0 and out else
+                                     ("startup folder" if startup_exists else (out or "unknown"))))
     else:
         result.update(installed=False, manager_state="unsupported")
     return result
