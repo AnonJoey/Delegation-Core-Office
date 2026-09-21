@@ -43,6 +43,13 @@ def _em(sistema, monkeypatch):
     monkeypatch.setattr(service.platform, "system", lambda: sistema)
 
 
+def _startup_isolado(monkeypatch, tmp_path):
+    """Prevent Windows fallback tests from observing the real Startup folder."""
+    monkeypatch.setattr(service, "WIN_STARTUP_DIR", tmp_path)
+    monkeypatch.setattr(service, "WIN_STARTUP_CMD", tmp_path / "delegation-core.cmd")
+    monkeypatch.setattr(service, "WIN_STARTUP_VBS", tmp_path / "delegation-core.vbs")
+
+
 # ── o timeout, que e a razao de stop existir separado ───────────────────────
 
 def test_o_teto_de_parada_acompanha_a_unit():
@@ -119,19 +126,49 @@ def test_windows_com_fallback_de_startup_nao_reporta_falha(comandos, monkeypatch
     encerrar. Isso e "nao instalado", nao "falhou": o chamador nao tem o que
     fazer com uma falha aqui."""
     _em("Windows", monkeypatch)
+    _startup_isolado(monkeypatch, tmp_path)
     comandos["resultado"] = (1, "ERROR: The system cannot find the file specified.")
-    cmd = tmp_path / "delegation-core.cmd"
+    cmd = service.WIN_STARTUP_CMD
     cmd.write_text("@echo off", encoding="utf-8")
-    monkeypatch.setattr(service, "WIN_STARTUP_CMD", cmd)
 
     assert service.stop()["status"] == "not_installed"
 
 
 def test_windows_sem_tarefa_e_sem_fallback_e_falha(comandos, monkeypatch, tmp_path):
     _em("Windows", monkeypatch)
+    _startup_isolado(monkeypatch, tmp_path)
     comandos["resultado"] = (1, "ERROR")
-    monkeypatch.setattr(service, "WIN_STARTUP_CMD", tmp_path / "nao_existe.cmd")
     assert service.stop()["status"] == "failed"
+
+
+def test_windows_fallback_cria_vbs_oculto_e_remove_cmd_legado(comandos, monkeypatch, tmp_path):
+    _em("Windows", monkeypatch)
+    _startup_isolado(monkeypatch, tmp_path)
+    comandos["resultado"] = (1, "ERROR: Access denied")
+    service.WIN_STARTUP_CMD.write_text("@echo off", encoding="utf-8")
+
+    result = service.install()
+
+    assert result["status"] == "installed"
+    assert result["unit"] == str(service.WIN_STARTUP_VBS)
+    assert not service.WIN_STARTUP_CMD.exists()
+    launcher = service.WIN_STARTUP_VBS.read_text(encoding="utf-8")
+    assert "WScript.Shell" in launcher
+    assert ", 0, False" in launcher
+
+
+def test_windows_uninstall_remove_os_dois_launchers(comandos, monkeypatch, tmp_path):
+    _em("Windows", monkeypatch)
+    _startup_isolado(monkeypatch, tmp_path)
+    comandos["resultado"] = (1, "ERROR")
+    service.WIN_STARTUP_CMD.write_text("@echo off", encoding="utf-8")
+    service.WIN_STARTUP_VBS.write_text("launcher", encoding="utf-8")
+
+    result = service.uninstall()
+
+    assert result["status"] == "removed"
+    assert not service.WIN_STARTUP_CMD.exists()
+    assert not service.WIN_STARTUP_VBS.exists()
 
 
 def test_plataforma_desconhecida_nao_explode(comandos, monkeypatch):
