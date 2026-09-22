@@ -146,6 +146,16 @@ class Config:
     # ── v0.2: external ingestion (ABNER) ─────────────────────────────────────
     ingest_chunk_size: int = 4000
     ingest_chunk_overlap: int = 200
+    # Sources are opt-in. An empty list preserves one-off `ingest_folder(path)`;
+    # once populated, ingestion accepts only enabled entries declared here.
+    ingest_sources: list[dict] = field(default_factory=list)
+    # A pattern can match a directory (`node_modules`), a filename (`*.log`),
+    # or a source-relative path (`exports/private/*`).
+    ingest_exclude_patterns: list[str] = field(default_factory=lambda: [
+        ".git", "node_modules", "__pycache__", ".cache", ".mypy_cache",
+        ".pytest_cache", ".ruff_cache", ".tox", ".venv", "venv", "dist",
+        "build", "coverage", "htmlcov",
+    ])
 
     # ── v0.12: vault note chunking ───────────────────────────────────────────
     # Until v0.12 a vault note was indexed as ONE ChromaDB row holding the whole
