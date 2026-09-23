@@ -153,7 +153,7 @@ def test_windows_fallback_cria_vbs_oculto_e_remove_cmd_legado(comandos, monkeypa
     assert result["unit"] == str(service.WIN_STARTUP_VBS)
     assert not service.WIN_STARTUP_CMD.exists()
     launcher = service.WIN_STARTUP_VBS.read_text(encoding="utf-8")
-    assert "WScript.Shell" in launcher
+    assert 'Set shell = CreateObject("WScript.Shell")' in launcher
     assert ", 0, False" in launcher
 
 

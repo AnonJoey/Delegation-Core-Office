@@ -204,7 +204,7 @@ def install() -> dict:
         try:
             WIN_STARTUP_DIR.mkdir(parents=True, exist_ok=True)
             WIN_STARTUP_VBS.write_text(
-                f'shell = CreateObject("WScript.Shell")\r\n'
+                f'Set shell = CreateObject("WScript.Shell")\r\n'
                 f'shell.Run """{_executable()}"" run", 0, False\r\n',
                 encoding="utf-8",
             )
