@@ -244,7 +244,7 @@ class VaultManager:
             self._initialized = True  # only reached on successful init
             stats = self.get_stats()
             logger.info(
-                "ChromaDB ready — %d chunks across %d indexed documents; "
+                "ChromaDB ready — %d chunks across, %d indexed documents; "
                 "%d Markdown notes in vault (%s)",
                 stats["indexed_rows"], stats["indexed_notes"],
                 stats["vault_markdown_files"], self.cfg.collection_name,

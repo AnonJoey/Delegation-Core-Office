@@ -182,7 +182,7 @@ def test_vault_initialization_labels_collection_rows_as_chunks(tmp_path, monkeyp
         manager = VaultManager(Config(vault_path=str(vault_path)))
         manager._init()
 
-    assert "365 chunks across 49 indexed documents; 44 Markdown notes in vault" in caplog.text
+    assert "365 chunks across, 49 indexed documents; 44 Markdown notes in vault" in caplog.text
     assert manager.get_stats()["vault_markdown_files"] == 44
 
 
