@@ -127,11 +127,15 @@ yourself — compress it first, then reason over the result.
 ---
 
 ### `vault_stats()`
-Returns note counts per folder and ChromaDB index size. Use to orient the user or
-confirm that a write was persisted.
+Returns physical Markdown-file counts, distinct indexed documents, and ChromaDB
+chunk rows. Use to orient the user or confirm that a write was persisted.
+
+`vault_markdown_files` counts files in the vault. `indexed_notes` counts distinct
+documents in the index (including external documents), while `indexed_rows` counts
+their searchable chunks.
 
 ```json
-→ { "indexed_notes": 247, "folder_counts": { "Decisions": 34, "Reference": 89, ... } }
+→ { "vault_markdown_files": 187, "indexed_notes": 247, "indexed_rows": 631, "folder_counts": { "Decisions": 34, "Reference": 89, ... } }
 ```
 
 ---
