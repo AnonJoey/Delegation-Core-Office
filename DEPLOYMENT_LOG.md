@@ -33,10 +33,11 @@ overwrite another deployment's entry.
 - The Startup launcher invoked the virtual environment Python runtime.
 - An authenticated MCP request completed successfully after service startup.
 
-**Current installation source.** The active runtime resolves to
-`Delegation-Core-Office` through its installation metadata. The official
-repository is now `Delegation-Core`; reinstall from that checkout and restart
-the service before treating the new repository as the active runtime source.
+**Runtime source transition.** The previous runtime resolved to
+`Delegation-Core-Office` through its installation metadata. It was reinstalled
+from the official `Delegation-Core` checkout on the same day; the active runtime
+now resolves to that checkout. The service was reinstalled and an authenticated
+MCP initialization returned HTTP 200 on `127.0.0.1:8787`.
 
 **Rollback.** Reinstall the previously validated checkout and restart the
 service. No vault migration or index rebuild is required.
