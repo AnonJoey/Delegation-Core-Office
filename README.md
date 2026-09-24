@@ -65,6 +65,17 @@ This finds (or lets you create) an Obsidian vault, downloads/configures a local 
 model (or lets you skip it - see "engine modes" below), and optionally registers
 delegation-core to start automatically (systemd/launchd/Task Scheduler).
 
+### Configure recurring external ingestion
+
+After the first setup, and **before the first ingestion**, configure any recurring,
+shared or broad external document source in `~/.delegation_core/config.json`. Do not
+pre-create this file before the initial installer/wizard: the wizard owns the initial
+machine configuration. The installer preserves it on upgrades.
+
+See [docs/INGEST_CONFIGURATION.md](docs/INGEST_CONFIGURATION.md) for the
+`ingest_sources` allow-list, exclusion patterns, safe edits during use, and the
+configured ingestion commands.
+
 ## Using it as an MCP server
 
 delegation-core runs as a single HTTP daemon on `127.0.0.1:8787`, and every MCP client
@@ -136,4 +147,5 @@ real model to say anything useful.
 - `AGENT_GUIDE.md` - full MCP tool reference and protocol, written for the AI agent side.
 - `CHANGELOG.md` - version history.
 - `DEPLOYMENT_LOG.md` - per-deployment upgrade notes (this repo runs on more than one machine).
+- `docs/INGEST_CONFIGURATION.md` - declarative ingestion sources, exclusions and safe re-ingestion.
 - `THIRD_PARTY_LICENSES/` - attribution for vendored code (Graphify).

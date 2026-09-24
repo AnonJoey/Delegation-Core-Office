@@ -157,6 +157,32 @@ def is_excluded(path: Path, source: Path, patterns: list[str]) -> bool:
     return False
 
 
+def _configured_sources(cfg) -> list[dict]:
+    """Return only well-formed source entries from the user configuration."""
+    raw = getattr(cfg, "ingest_sources", [])
+    if not isinstance(raw, list):
+        return []
+    return [entry for entry in raw if isinstance(entry, dict) and str(entry.get("path", "")).strip()]
+
+
+def _has_source_policy(cfg) -> bool:
+    """A non-empty configured list is an allow-list even if an entry is malformed."""
+    raw = getattr(cfg, "ingest_sources", [])
+    return isinstance(raw, list) and bool(raw)
+
+
+def _merge_patterns(*groups) -> list[str]:
+    """Combine configured and per-run patterns without changing their order."""
+    merged = []
+    for group in groups:
+        if not isinstance(group, list):
+            continue
+        for pattern in group:
+            if isinstance(pattern, str) and pattern.strip() and pattern not in merged:
+                merged.append(pattern)
+    return merged
+
+
 class IngestManager:
     """Index external files into the vault's ChromaDB without touching them on disk.
 
@@ -168,6 +194,17 @@ class IngestManager:
     def __init__(self, vault_manager):
         self._vault = vault_manager
         self._cfg = vault_manager.cfg
+
+    def _configured_source_for(self, source: Path) -> dict | None:
+        """Find the configured source that exactly authorizes ``source``."""
+        for entry in _configured_sources(self._cfg):
+            try:
+                configured_path = Path(str(entry["path"])).expanduser().resolve()
+            except (OSError, ValueError):
+                continue
+            if configured_path == source:
+                return entry
+        return None
 
     def ingest(self, source_path: str, recursive: bool = True, force: bool = False,
                exclude: list[str] | None = None) -> dict:
@@ -192,10 +229,26 @@ class IngestManager:
         if not source.exists():
             return {"error": f"Path not found: {source_path}"}
 
+        configured = _has_source_policy(self._cfg)
+        configured_source = self._configured_source_for(source)
+        if configured and configured_source is None:
+            return {
+                "error": (
+                    f"Source is not configured: {source}. Add it to ingest_sources "
+                    "before ingesting it."
+                )
+            }
+        if configured_source is not None and not configured_source.get("enabled", True):
+            return {"error": f"Configured source is disabled: {configured_source.get('name') or source}"}
+
         candidates: list[Path]
         unsupported: Counter[str] = Counter()
 
-        patterns = [p for p in (exclude or []) if p]
+        patterns = _merge_patterns(
+            getattr(self._cfg, "ingest_exclude_patterns", []),
+            configured_source.get("exclude", []) if configured_source else [],
+            exclude or [],
+        )
         excluded: list[str] = []
 
         def _keep(f: Path) -> bool:
@@ -210,8 +263,28 @@ class IngestManager:
         if source.is_file():
             candidates = [source] if _keep(source) else []
         else:
-            pattern = "**/*" if recursive else "*"
-            candidates = [f for f in source.glob(pattern) if f.is_file() and _keep(f)]
+            candidates = []
+            if recursive:
+                # Prune excluded directories before visiting their children. A
+                # post-filter still has to enumerate every path in
+                # node_modules or a virtualenv, which defeats the operational
+                # point of configuring those directories in the first place.
+                for root, directories, filenames in os.walk(source):
+                    root_path = Path(root)
+                    kept_directories = []
+                    for directory in directories:
+                        candidate_dir = root_path / directory
+                        if is_excluded(candidate_dir, source, patterns):
+                            excluded.append(candidate_dir.relative_to(source).as_posix())
+                        else:
+                            kept_directories.append(directory)
+                    directories[:] = kept_directories
+                    for filename in filenames:
+                        candidate = root_path / filename
+                        if _keep(candidate):
+                            candidates.append(candidate)
+            else:
+                candidates = [f for f in source.iterdir() if f.is_file() and _keep(f)]
 
         indexed: list[str] = []
         skipped_empty: list[str] = []
@@ -331,6 +404,8 @@ class IngestManager:
             "skipped_unchanged":  len(skipped_unchanged),
             "errors":             errors,
         }
+        if configured_source is not None:
+            result["configured_source"] = configured_source.get("name") or source_key
         if excluded:
             # Reported, not silent: a pattern that matches more than the caller
             # meant looks exactly like a folder with fewer files in it.
@@ -348,6 +423,36 @@ class IngestManager:
                     "documents only. Use graph_build() to make a codebase searchable."
                 )
         return result
+
+    def ingest_configured(self, name: str = "", force: bool = False) -> dict:
+        """Ingest one named configured source, or every enabled source when name is empty."""
+        configured = _configured_sources(self._cfg)
+        if not configured:
+            return {"error": "No ingest_sources are configured."}
+
+        selected = [entry for entry in configured if not name or entry.get("name") == name]
+        if name and not selected:
+            return {"error": f"Configured source not found: {name}"}
+
+        results = []
+        for entry in selected:
+            if not entry.get("enabled", True):
+                continue
+            result = self.ingest(
+                str(entry["path"]),
+                recursive=bool(entry.get("recursive", True)),
+                force=force,
+            )
+            result["name"] = entry.get("name") or str(entry["path"])
+            results.append(result)
+
+        return {
+            "sources": results,
+            "configured_count": len(results),
+            "indexed": sum(result.get("indexed", 0) for result in results),
+            "skipped": sum(result.get("skipped", 0) for result in results),
+            "errors": [result["error"] for result in results if "error" in result],
+        }
 
     def forget(self, source_path: str) -> dict:
         """Drop everything previously ingested from source_path.
@@ -410,7 +515,30 @@ class IngestManager:
             if not exists:
                 missing_sources.append(src)
             sources_status[src] = entry
-        res = {"sources": sources_status, "count": len(registry)}
+        configured_status = []
+        for entry in _configured_sources(self._cfg):
+            raw_path = str(entry["path"])
+            try:
+                path = Path(raw_path).expanduser().resolve()
+                exists = path.exists()
+                path_text = str(path)
+            except (OSError, ValueError):
+                exists = False
+                path_text = raw_path
+            configured_status.append({
+                "name": entry.get("name") or path_text,
+                "path": path_text,
+                "recursive": bool(entry.get("recursive", True)),
+                "enabled": bool(entry.get("enabled", True)),
+                "exists": exists,
+            })
+
+        res = {
+            "sources": sources_status,
+            "count": len(registry),
+            "configured_sources": configured_status,
+            "configured_source_count": len(configured_status),
+        }
         if missing_sources:
             res["missing_sources"] = missing_sources
             res["hint"] = "Some ingested source folders no longer exist on disk. Run ingest_forget(<source>) to clean them."
