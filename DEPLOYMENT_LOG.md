@@ -14,6 +14,35 @@ overwrite another deployment's entry.
 
 ---
 
+## WBomfim deployment — Windows ingestion configuration and startup fixes — 2026-09-24
+
+**Host / profile.** Windows local installation using the dedicated
+`.delegation_core` virtual environment. The installed package reports version
+`0.13.0`.
+
+**Delivered changes.**
+- Configured the declarative ingestion workflow with allow-listed sources and
+  exclusions.
+- Recreated the Windows Startup launcher so it invokes the virtual environment
+  Python runtime instead of the blocked legacy executable.
+- Verified distinct vault Markdown-file, indexed-document, and ChromaDB-chunk
+  metrics.
+
+**Validation.**
+- Focused integration validation passed 138 tests.
+- The Startup launcher invoked the virtual environment Python runtime.
+- An authenticated MCP request completed successfully after service startup.
+
+**Current installation source.** The active runtime resolves to
+`Delegation-Core-Office` through its installation metadata. The official
+repository is now `Delegation-Core`; reinstall from that checkout and restart
+the service before treating the new repository as the active runtime source.
+
+**Rollback.** Reinstall the previously validated checkout and restart the
+service. No vault migration or index rebuild is required.
+
+---
+
 ## SAAD deployment — v6 linking redesign — 2026-07-03
 
 **Trigger.** Post-v5.1 testing of `relink_folder` on this vault (442 notes). A
