@@ -18,6 +18,10 @@ materialised under the process's cwd instead of failing. Config.load() degrades
 to defaults on any read error, so this is reachable in production.
 """
 
+import logging
+import sys
+import types
+
 import pytest
 
 from delegation_core.config import Config
@@ -144,6 +148,42 @@ def test_vault_manager_refuses_to_index_into_cwd_when_vault_path_unset(tmp_path,
         vm._init()
 
     assert not (tmp_path / ".chroma_bge").exists()
+
+
+def test_vault_initialization_labels_collection_rows_as_chunks(tmp_path, monkeypatch, caplog):
+    monkeypatch.setattr(
+        "delegation_core.vault.make_bge_embedding_function", lambda *_, **__: object()
+    )
+
+    vault_path = tmp_path / "vault"
+    vault_path.mkdir()
+    for index in range(44):
+        (vault_path / f"note-{index}.md").write_text("note", encoding="utf-8")
+    collection_ids = [f"document-{index}" for index in range(49)]
+
+    class FakeCollection:
+        def count(self):
+            return 365
+
+        def get(self, **kwargs):
+            return {"ids": collection_ids}
+
+    class FakeClient:
+        def get_or_create_collection(self, **kwargs):
+            return FakeCollection()
+
+    fake_chromadb = types.ModuleType("chromadb")
+    fake_chromadb.Settings = lambda **kwargs: None
+    fake_chromadb.PersistentClient = lambda **kwargs: FakeClient()
+    monkeypatch.setitem(sys.modules, "chromadb", fake_chromadb)
+    monkeypatch.setattr(VaultManager, "_adopt_legacy_collection", lambda *_: None)
+
+    with caplog.at_level(logging.INFO, logger="vault"):
+        manager = VaultManager(Config(vault_path=str(vault_path)))
+        manager._init()
+
+    assert "365 chunks across 49 indexed documents; 44 Markdown notes in vault" in caplog.text
+    assert manager.get_stats()["vault_markdown_files"] == 44
 
 
 def test_resolve_in_vault_accepts_a_path_inside(tmp_path):
