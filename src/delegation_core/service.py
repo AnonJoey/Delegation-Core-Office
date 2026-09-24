@@ -78,6 +78,17 @@ def _executable() -> str:
     return SERVICE_NAME
 
 
+def _windows_run_command() -> str:
+    """Return the Windows daemon command without the console-script wrapper.
+
+    Windows Application Control can block a newly-created console-script .exe
+    even when the virtual environment's Python interpreter is allowed. Running
+    the module through that interpreter also makes the Startup fallback show
+    the same visible status window an operator gets from a terminal.
+    """
+    return f'"{sys.executable}" -m delegation_core run'
+
+
 def systemd_unit_text() -> str:
     return f"""[Unit]
 Description=delegation-core MCP daemon
@@ -193,25 +204,27 @@ def install() -> dict:
                 "detail": out}
 
     if system == "Windows":
+        windows_command = _windows_run_command()
         code, out = _run([
             "schtasks", "/Create", "/TN", SERVICE_NAME, "/SC", "ONLOGON",
-            "/TR", f'"{_executable()}" run', "/F",
+            "/TR", windows_command, "/F",
         ])
         if code == 0:
+            WIN_STARTUP_CMD.unlink(missing_ok=True)
+            WIN_STARTUP_VBS.unlink(missing_ok=True)
             return {"platform": system, "unit": f"Task Scheduler: {SERVICE_NAME}",
                     "status": "installed", "detail": out,
                     "hint": "The task runs at logon; start it now with `schtasks /Run /TN delegation-core`."}
         try:
             WIN_STARTUP_DIR.mkdir(parents=True, exist_ok=True)
-            WIN_STARTUP_VBS.write_text(
-                f'Set shell = CreateObject("WScript.Shell")\r\n'
-                f'shell.Run """{_executable()}"" run", 0, False\r\n',
+            WIN_STARTUP_CMD.write_text(
+                f"@echo off\r\n{windows_command}\r\n",
                 encoding="utf-8",
             )
-            WIN_STARTUP_CMD.unlink(missing_ok=True)
-            return {"platform": system, "unit": str(WIN_STARTUP_VBS),
-                    "status": "installed", "detail": "Configured via hidden user Startup launcher (no elevation required)",
-                    "hint": "The launcher runs at logon without opening a terminal window."}
+            WIN_STARTUP_VBS.unlink(missing_ok=True)
+            return {"platform": system, "unit": str(WIN_STARTUP_CMD),
+                    "status": "installed", "detail": "Configured via visible user Startup launcher (no elevation required)",
+                    "hint": "The launcher runs at logon and keeps its status window visible."}
         except Exception as e:
             return {"platform": system, "unit": f"Task Scheduler: {SERVICE_NAME}",
                     "status": "failed", "detail": f"{out}; Startup folder fallback failed: {e}"}

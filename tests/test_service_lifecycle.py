@@ -141,20 +141,34 @@ def test_windows_sem_tarefa_e_sem_fallback_e_falha(comandos, monkeypatch, tmp_pa
     assert service.stop()["status"] == "failed"
 
 
-def test_windows_fallback_cria_vbs_oculto_e_remove_cmd_legado(comandos, monkeypatch, tmp_path):
+def test_windows_fallback_cria_cmd_visivel_com_python_e_remove_vbs_legado(comandos, monkeypatch, tmp_path):
     _em("Windows", monkeypatch)
     _startup_isolado(monkeypatch, tmp_path)
     comandos["resultado"] = (1, "ERROR: Access denied")
-    service.WIN_STARTUP_CMD.write_text("@echo off", encoding="utf-8")
+    service.WIN_STARTUP_VBS.write_text("launcher", encoding="utf-8")
 
     result = service.install()
 
     assert result["status"] == "installed"
-    assert result["unit"] == str(service.WIN_STARTUP_VBS)
+    assert result["unit"] == str(service.WIN_STARTUP_CMD)
+    assert not service.WIN_STARTUP_VBS.exists()
+    launcher = service.WIN_STARTUP_CMD.read_text(encoding="utf-8")
+    assert launcher.startswith("@echo off")
+    assert f'"{service.sys.executable}" -m delegation_core run' in launcher
+
+
+def test_windows_task_uses_python_and_removes_stale_startup_launchers(comandos, monkeypatch, tmp_path):
+    _em("Windows", monkeypatch)
+    _startup_isolado(monkeypatch, tmp_path)
+    service.WIN_STARTUP_CMD.write_text("legacy", encoding="utf-8")
+    service.WIN_STARTUP_VBS.write_text("legacy", encoding="utf-8")
+
+    result = service.install()
+
+    assert result["unit"] == "Task Scheduler: delegation-core"
     assert not service.WIN_STARTUP_CMD.exists()
-    launcher = service.WIN_STARTUP_VBS.read_text(encoding="utf-8")
-    assert 'Set shell = CreateObject("WScript.Shell")' in launcher
-    assert ", 0, False" in launcher
+    assert not service.WIN_STARTUP_VBS.exists()
+    assert comandos["chamadas"][0]["cmd"][7] == service._windows_run_command()
 
 
 def test_windows_uninstall_remove_os_dois_launchers(comandos, monkeypatch, tmp_path):
