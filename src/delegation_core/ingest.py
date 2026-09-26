@@ -18,7 +18,7 @@ from datetime import datetime
 from pathlib import Path
 
 from .config import CONFIG_DIR
-from .embeddings import chunk_text
+from .embeddings import chunk_text, effective_chunk_chars
 from .vault import client_from_path
 
 logger = logging.getLogger("ingest")
@@ -199,6 +199,8 @@ class IngestManager:
         excluded: list[str] = []
 
         def _keep(f: Path) -> bool:
+            if f.name.startswith("~$"):
+                return False
             if is_excluded(f, source, patterns):
                 excluded.append(f.name)
                 return False
@@ -221,8 +223,12 @@ class IngestManager:
         errors: list[str] = []
         now = datetime.now().isoformat()
 
-        max_chars = self._cfg.ingest_chunk_size
-        overlap   = self._cfg.ingest_chunk_overlap
+        max_chars = effective_chunk_chars(
+            self._cfg.bge_model,
+            self._cfg.ingest_chunk_size,
+            self._cfg.embed_max_seq_length,
+        )
+        overlap = self._cfg.ingest_chunk_overlap
 
         registry = _load_registry()
         source_key = str(source)

@@ -144,7 +144,7 @@ class Config:
     budget_mode: str = "normal"
 
     # ── v0.2: external ingestion (ABNER) ─────────────────────────────────────
-    ingest_chunk_size: int = 4000
+    ingest_chunk_size: int = 3072
     ingest_chunk_overlap: int = 200
 
     # ── v0.12: vault note chunking ───────────────────────────────────────────
@@ -155,8 +155,9 @@ class Config:
     # The remainder was unsearchable with nothing anywhere reporting it missing.
     # Notes are now chunked the way ingest.py has always chunked external files.
     # Sized in CHARACTERS (chunk_text splits on characters), see
-    # embed_max_seq_length for the token ceiling these must stay under.
-    vault_chunk_size: int = 4000
+    # embed_max_seq_length for the token ceiling these must stay under (3072 chars
+    # cleanly aligns with 1024 tokens for bge-m3 / bge-base).
+    vault_chunk_size: int = 3072
     vault_chunk_overlap: int = 200
 
     # ── v0.12: embedding execution limits ────────────────────────────────────
@@ -445,6 +446,10 @@ class Config:
     def load(cls) -> "Config":
         if CONFIG_FILE.exists():
             try:
+                try:
+                    CONFIG_FILE.chmod(0o600)
+                except OSError:
+                    pass
                 data = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
                 known = {k: v for k, v in data.items() if k in cls.__dataclass_fields__}
                 cfg = cls(**known)
