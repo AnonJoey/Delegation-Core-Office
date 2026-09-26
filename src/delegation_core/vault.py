@@ -66,6 +66,7 @@ from .notes import (  # noqa: F401
     client_from_path,
     client_slug,
     compose_note,
+    ingested_link_stems,
     link_names_for_stem,
     resolve_in_vault,
     resolve_vault_folder,
@@ -1449,6 +1450,12 @@ class VaultManager:
         # Folder names (and the vault's own name) used as markers, lowercased.
         folder_markers = {f.lower() for f in self.cfg.vault_folders}
         folder_markers.add(self.cfg.vault.name.lower())
+
+        # Links para arquivo ingerido de fora do vault nao sao quebrados:
+        # apontam para algo que search_vault(scope='external') acha. Saem em
+        # balde proprio, como os marcadores de pasta, para a contagem dizer
+        # de que tipo e cada link em vez de esconder a diferenca.
+        ingested = ingested_link_stems()
         total = needs_repair = truncated = orphans = broken_links = 0
         malformed_frontmatter = 0
         malformed_notes: list[dict] = []
@@ -1456,6 +1463,7 @@ class VaultManager:
         # is that the detail and the summary cannot disagree.
         broken: list[dict] = []
         markers: list[dict] = []
+        ingested_links: list[dict] = []
         orphan_notes: list[dict] = []
         repair_notes: list[dict] = []
         truncated_notes: list[dict] = []
@@ -1538,6 +1546,10 @@ class VaultManager:
                         # to a note. 12 of the 26 "broken links" were these, and
                         # no note will ever exist to satisfy them.
                         markers.append({"source": n["stem"], "target": link})
+                    elif key in ingested:
+                        ingested_links.append({"source": n["stem"],
+                                               "folder": n["folder"],
+                                               "target": link})
                     else:
                         broken_links += 1
                         broken.append({"source": n["stem"], "folder": n["folder"],
@@ -1580,6 +1592,7 @@ class VaultManager:
             "truncated_items": truncated_notes,
             "malformed_frontmatter_items": malformed_notes,
             "folder_marker_items": markers,
+            "ingested_link_items": ingested_links,
             "unindexed_items": unindexed_notes,
         }
         try:

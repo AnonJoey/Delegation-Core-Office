@@ -483,9 +483,11 @@ async def vault_health_detail(limit: int = 50) -> str:
     pass that produces the counts, so they cannot disagree with them.
 
     Returns broken_link_items (source, folder, target), orphan_items,
-    needs_repair_items, truncated_items, and folder_marker_items — the last
-    being `[[reference]]`-style category markers that are deliberately NOT
-    counted as broken, listed so they are not "fixed" by mistake.
+    needs_repair_items, truncated_items, and two buckets of links that are
+    deliberately NOT counted as broken, listed so they are not "fixed" by
+    mistake: folder_marker_items, the `[[reference]]`-style category markers,
+    and ingested_link_items, links to files ingested from outside the vault,
+    which resolve through search_vault(scope="external").
     """
     return json.dumps(await asyncio.to_thread(_vault.health_detail, limit))
 
@@ -497,11 +499,12 @@ async def vault_stats() -> str:
 
 
 @mcp.tool()
-async def heartbeat() -> str:
+async def heartbeat(force: bool = False) -> str:
     """
     CALL THIS at the start of every session before using any other tool.
     Returns llama.cpp status, vault stats, active background jobs, and configuration summary.
     If status is 'degraded', warn the user before proceeding.
+    Pass force=true to bypass the 5-minute vault_health cache and recalculate live.
     """
     cfg = _engine.cfg
     # In agent mode there is no local model, so llama being "offline" is the
@@ -525,7 +528,7 @@ async def heartbeat() -> str:
         "llama_cpp":   llama_state,
         "llama_url":   cfg.llama_url,
         "vault":       _vault.get_stats(),
-        "vault_health": _vault.get_health_summary(),
+        "vault_health": _vault.get_health_summary(force=force),
         "background_jobs": jobs.running_count(),
         "processes":   _tracker.summary(),
         "config": {

@@ -504,3 +504,54 @@ def _merge_alias(frontmatter: str, alias: str) -> str:
         linhas.insert(j, f"  - {yaml_quote_scalar(cru)}")
         return "\n".join(linhas)
     return frontmatter
+
+
+def _load_registry_for_links() -> dict:
+    """O registro de ingestao, isolado numa funcao para ser substituivel.
+
+    O import e tardio de proposito: `ingest.py` importa `client_from_path` de
+    `vault.py`, que importa deste modulo, entao um import no topo daqui fecha
+    o ciclo e quebra a carga do pacote inteiro. Tardio, o ciclo nunca existe.
+
+    Funcao separada, e nao um import embutido em `ingested_link_stems`, porque
+    um teste precisa trocar o registro sem tocar em disco nem no subsistema de
+    ingestao. Sem esta costura, testar a classificacao dos links exigiria
+    escrever um registro real no HOME de quem roda a suite.
+    """
+    from .ingest import _load_registry
+    return _load_registry()
+
+
+def ingested_link_stems() -> set[str]:
+    """Nomes pelos quais um arquivo ingerido de fora do vault pode ser linkado.
+
+    Le o registro de ingestao em vez de varrer disco: o registro ja guarda o
+    caminho de cada arquivo indexado, entao a resposta sai sem tocar em 1.700
+    arquivos espalhados por 23 fontes.
+
+    O registro reflete a ULTIMA ingestao, nao o disco de agora, e isso e o
+    comportamento correto: se um arquivo ainda nao foi ingerido, o
+    `search_vault(scope='external')` tambem nao o encontra, entao o link
+    realmente aponta para algo que o servidor nao serve. A checagem se cura
+    sozinha quando a pasta e reingerida.
+
+    Falha calada por escolha. Esta funcao serve a uma checagem de saude, e uma
+    checagem que estoura porque o registro de OUTRO subsistema esta corrompido
+    troca um numero levemente pessimista por nenhum numero. Sem registro, cada
+    link para fonte ingerida volta a contar como quebrado, que e exatamente o
+    comportamento anterior a esta funcao.
+    """
+    try:
+        registro = _load_registry_for_links()
+    except Exception:
+        return set()
+
+    nomes: set[str] = set()
+    for entrada in registro.values():
+        if not isinstance(entrada, dict):
+            continue
+        for caminho in (entrada.get("files") or {}):
+            stem = Path(caminho).stem
+            if stem:
+                nomes.update(link_names_for_stem(stem))
+    return nomes
