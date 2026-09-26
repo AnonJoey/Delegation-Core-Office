@@ -169,6 +169,11 @@ class Config:
     # 0 means "leave the model's own default alone".
     embed_max_seq_length: int = 2048
     embed_batch_size: int = 8
+    #: "auto" (o acelerador que existir), "cpu", "cuda" ou "mps". Existe porque
+    #: o BGE-m3 e o llama-server nao cabem juntos numa placa de 16 GB, e ate
+    #: 09/09/2026 a unica forma de por o encoder na CPU era esconder a placa do
+    #: processo inteiro com CUDA_VISIBLE_DEVICES= num drop-in de systemd.
+    embed_device: str = "auto"
 
     # ── v0.12: default search scope ──────────────────────────────────────────
     # "" means adaptive (decided per vault from how much of it is generated).

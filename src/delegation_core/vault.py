@@ -221,7 +221,7 @@ class VaultManager:
                         self.cfg.bge_model,
                         max_seq_length=self.cfg.embed_max_seq_length,
                         batch_size=self.cfg.embed_batch_size,
-                    )
+                        device=getattr(self.cfg, "embed_device", "auto"))
                 client = chromadb.PersistentClient(
                     path=str(self.cfg.chroma_path),
                     settings=chromadb.Settings(anonymized_telemetry=False),
