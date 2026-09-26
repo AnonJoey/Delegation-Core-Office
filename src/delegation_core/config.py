@@ -144,7 +144,7 @@ class Config:
     budget_mode: str = "normal"
 
     # ── v0.2: external ingestion (ABNER) ─────────────────────────────────────
-    ingest_chunk_size: int = 4000
+    ingest_chunk_size: int = 3072
     ingest_chunk_overlap: int = 200
 
     # ── v0.12: vault note chunking ───────────────────────────────────────────
@@ -155,8 +155,9 @@ class Config:
     # The remainder was unsearchable with nothing anywhere reporting it missing.
     # Notes are now chunked the way ingest.py has always chunked external files.
     # Sized in CHARACTERS (chunk_text splits on characters), see
-    # embed_max_seq_length for the token ceiling these must stay under.
-    vault_chunk_size: int = 4000
+    # embed_max_seq_length for the token ceiling these must stay under (3072 chars
+    # cleanly aligns with 1024 tokens for bge-m3 / bge-base).
+    vault_chunk_size: int = 3072
     vault_chunk_overlap: int = 200
 
     # ── v0.12: embedding execution limits ────────────────────────────────────
@@ -168,6 +169,11 @@ class Config:
     # 0 means "leave the model's own default alone".
     embed_max_seq_length: int = 2048
     embed_batch_size: int = 8
+    #: "auto" (o acelerador que existir), "cpu", "cuda" ou "mps". Existe porque
+    #: o BGE-m3 e o llama-server nao cabem juntos numa placa de 16 GB, e ate
+    #: 09/09/2026 a unica forma de por o encoder na CPU era esconder a placa do
+    #: processo inteiro com CUDA_VISIBLE_DEVICES= num drop-in de systemd.
+    embed_device: str = "auto"
 
     # ── v0.12: default search scope ──────────────────────────────────────────
     # "" means adaptive (decided per vault from how much of it is generated).
@@ -445,6 +451,10 @@ class Config:
     def load(cls) -> "Config":
         if CONFIG_FILE.exists():
             try:
+                try:
+                    CONFIG_FILE.chmod(0o600)
+                except OSError:
+                    pass
                 data = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
                 known = {k: v for k, v in data.items() if k in cls.__dataclass_fields__}
                 cfg = cls(**known)

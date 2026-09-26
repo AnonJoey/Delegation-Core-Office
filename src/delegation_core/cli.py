@@ -269,6 +269,10 @@ def cmd_post_install(args):
     if pele["available"]:
         console.print(f"  skills: {len(pele['installed'])} installed, "
                       f"{len(pele['kept_yours'])} kept yours")
+    agentes = r.get("agents", {})
+    if agentes.get("available"):
+        console.print(f"  agents: {len(agentes['installed'])} installed, "
+                      f"{len(agentes['kept_yours'])} kept yours")
     painel = r["dashboard"]
     console.print(f"  dashboard: {painel['status']}"
                   + (f" ({painel['method']})" if painel.get("method") else ""))
