@@ -53,6 +53,7 @@ logger = logging.getLogger("vault")
 # Extraidos para notes.py: sao funcoes puras, sem ChromaDB, e nove modulos as
 # importam daqui. Reexportadas para que `from .vault import safe_filename`
 # continue valendo — ha teste que falha se alguma sumir.
+from . import notes
 from .notes import (  # noqa: F401
     _CHUNK_SUFFIX_RE,
     _CODE_SPAN_RE,
@@ -720,10 +721,11 @@ class VaultManager:
         except Exception as e:
             logger.warning("Delete error: %s", e)
             return 0
-        state = self._load_index_state()
-        for p in rel_paths:
-            state.pop(p, None)
-        self._save_index_state(state)
+        def sem_os_apagados(estado):
+            for p in rel_paths:
+                estado.pop(p, None)
+            return estado
+        self._update_index_state(sem_os_apagados)
         return len(rel_paths)
 
     # ── incremental index state ───────────────────────────────────────────────
@@ -745,46 +747,23 @@ class VaultManager:
     _SCHEMA_KEY = "__schema__"
 
     def _index_state_path(self) -> Path:
-        return self.cfg.vault / ".chroma_index.json"
+        return notes.caminho_do_estado(self.cfg.vault)
 
     def _load_index_state(self) -> dict[str, float]:
-        p = self._index_state_path()
-        if p.exists():
-            try:
-                return json.loads(p.read_text(encoding="utf-8"))
-            except Exception as e:
-                # Was `except Exception: pass`, completely silent. Answering {}
-                # is the right call -- every note looks unstamped and the next
-                # run re-embeds it, which is correct, just slow -- but the
-                # SYMPTOM is an "incremental" reindex that runs for minutes with
-                # nothing anywhere saying why. This file holds 8.594 stamps and
-                # 634 KB on this vault; the run-time history has a 642.3s entry.
-                logger.warning(
-                    "index state at %s is unreadable (%s) - every note will be "
-                    "treated as unstamped and re-embedded on the next reindex", p, e)
-        return {}
+        return notes.carregar_estado(self._index_state_path())
 
     def _save_index_state(self, state: dict[str, float]):
-        """Atomic: a torn write here costs a full re-embed of the whole vault.
+        notes.gravar_estado(self._index_state_path(), state)
 
-        `write_text` truncates first, and this file is 634 KB on this machine,
-        so the window is not theoretical. `_load_index_state` reads a damaged
-        file as "nothing is stamped".
+    def _update_index_state(self, modificar) -> dict:
+        """Ler-modificar-escrever do estado do indice sob trava.
+
+        Todo escritor deste arquivo passa por aqui. Ver `notes.atualizar_estado`
+        para o defeito medido que exigiu a trava: escrita atomica sozinha nao
+        impede que o ultimo a gravar apague o carimbo do outro.
         """
-        destino = self._index_state_path()
-        tmp = destino.with_suffix(".json.tmp")
-        try:
-            with tmp.open("w", encoding="utf-8") as fh:
-                json.dump(state, fh, indent=2)
-                fh.flush()
-                os.fsync(fh.fileno())
-            os.replace(tmp, destino)
-        except Exception as e:
-            try:
-                tmp.unlink(missing_ok=True)
-            except OSError:
-                pass
-            logger.warning("Could not save index state: %s", e)
+        return notes.atualizar_estado(self._index_state_path(), modificar)
+
 
     def stamp_indexed(self, rel_paths: list[str]) -> int:
         """Record that these notes are current in the index. Returns how many.
@@ -819,17 +798,15 @@ class VaultManager:
         """
         if not rel_paths:
             return 0
-        state = self._load_index_state()
-        stamped = 0
+        novos: dict[str, float] = {}
         for rel in rel_paths:
             try:
-                state[rel] = (self.cfg.vault / rel).stat().st_mtime
-                stamped += 1
+                novos[rel] = (self.cfg.vault / rel).stat().st_mtime
             except OSError:
                 continue
-        if stamped:
-            self._save_index_state(state)
-        return stamped
+        if novos:
+            self._update_index_state(lambda estado: {**estado, **novos})
+        return len(novos)
 
     def _unindexed_notes(self, notes: list[dict]) -> list[dict]:
         """Notes that exist on disk and have no rows in the index.
@@ -921,6 +898,7 @@ class VaultManager:
             return 0
 
         state = {} if force else self._load_index_state()
+        descartou_o_estado = bool(force)
         # A state file written under an older row shape certifies nothing about
         # the rows in ChromaDB now, so the mtimes in it must not be allowed to
         # skip anything. Popped either way, so the reserved key is never walked
@@ -931,6 +909,7 @@ class VaultManager:
             if state:
                 logger.info("Index state schema changed — re-indexing every note once")
             state = {}
+            descartou_o_estado = True
         count = 0
         skipped = 0
         on_disk: set[str] = set()
@@ -1028,8 +1007,16 @@ class VaultManager:
         except Exception as e:
             logger.warning("Orphan cleanup failed: %s", e)
 
-        state[self._SCHEMA_KEY] = self._INDEX_SCHEMA
-        self._save_index_state(state)
+        # Mesclar, e nao sobrescrever: a passagem acima leva minutos, e um
+        # `stamp_indexed` de outra thread nesse meio tempo era perdido aqui.
+        # Em `force` (ou esquema trocado) o descarte e deliberado, entao o
+        # estado em disco e ignorado de proposito.
+        def resultado_da_passagem(estado):
+            base = {} if descartou_o_estado else estado
+            base.update(state)
+            base[self._SCHEMA_KEY] = self._INDEX_SCHEMA
+            return base
+        self._update_index_state(resultado_da_passagem)
         if skipped:
             logger.info("Reindex: %d indexed, %d unchanged (skipped)", count, skipped)
         return count
