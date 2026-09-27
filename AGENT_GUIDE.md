@@ -861,8 +861,11 @@ Drop any of these into `<vault>/_inbox/` and run `run_maintenance` or `run_maint
 | Word | `.docx` | Paragraphs and tables extracted |
 | Excel | `.xlsx` | Each sheet converted to markdown table (max 200 rows) |
 | PowerPoint | `.pptx` | Slide text extracted in order |
+| Image | `.png`, `.jpg`, `.jpeg`, `.webp`, `.gif`, `.bmp`, `.tif`, `.tiff` | EXIF (date, camera), screenshot date from the filename, and OCR text via tesseract |
 
-**Images are not supported.** If the user wants to store an image reference, ask them to drop a `.txt` file describing it instead.
+**Images need OCR data to be searchable by their text.** With `tesseract` installed, run
+`delegation-core ocr-setup` once (downloads Portuguese and English data, ~6 MB, no root).
+Without it, an image still becomes a note with its date and dimensions, and the note says OCR did not run.
 
 **If `vault_inbox_status()` returns files in the `unsupported` list**, tell the user which files cannot be processed and what format to convert them to.
 
