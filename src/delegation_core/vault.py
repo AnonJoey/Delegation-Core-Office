@@ -121,8 +121,6 @@ def _frontmatter_parses(content: str) -> bool:
     return True
 
 
-
-
 class VaultManager:
     def __init__(self, cfg: Config):
         self.cfg = cfg
@@ -250,12 +248,10 @@ class VaultManager:
             self._disk_state = self._read_disk_state()
             self._initialized = True  # only reached on successful init
             stats = self.get_stats()
-            logger.info(
-                "ChromaDB ready — %d chunks across, %d indexed documents; "
-                "%d Markdown notes in vault (%s)",
-                stats["indexed_rows"], stats["indexed_notes"],
-                stats["vault_markdown_files"], self.cfg.collection_name,
-            )
+            logger.info("ChromaDB ready — %d chunks across, %d indexed documents; "
+                        "%d Markdown notes in vault (%s)", stats["indexed_rows"],
+                        stats["indexed_notes"], stats["vault_markdown_files"],
+                        self.cfg.collection_name)
 
     def _adopt_legacy_collection(self, client) -> None:
         """Rename a pre-derivation collection to the model-derived name, if compatible.

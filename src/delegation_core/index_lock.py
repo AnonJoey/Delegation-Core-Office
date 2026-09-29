@@ -25,19 +25,33 @@ class IndexUseLock:
     shared again even while a reopen waits. The reopen cannot run from a thread
     that holds it shared (it would wait on itself); `held_here()` lets it skip
     and try again on the next call instead.
+
+    The thread holding it exclusive may take it shared: the reopen runs
+    `_init`, and anything `_init` calls that reads the index would otherwise
+    wait on the reopen that called it. That happened on master ad8049f, where
+    `_init` began logging `get_stats()`: the first reopen hung the daemon.
     """
 
     def __init__(self):
         self._cond = threading.Condition(threading.Lock())
         self._readers = 0
         self._writer = False
+        self._writer_ident = None
         self._local = threading.local()
 
+    def _writing_here(self) -> bool:
+        return self._writer_ident == threading.get_ident()
+
     def held_here(self) -> bool:
-        return getattr(self._local, "depth", 0) > 0
+        return self._writing_here() or getattr(self._local, "depth", 0) > 0
 
     @contextmanager
     def shared(self):
+        if self._writing_here():
+            # Already exclusive on this thread: nothing else can be reading or
+            # reopening, so there is nothing to wait for.
+            yield
+            return
         with self._cond:
             while self._writer:
                 self._cond.wait()
@@ -58,11 +72,13 @@ class IndexUseLock:
             while self._writer or self._readers:
                 self._cond.wait()
             self._writer = True
+            self._writer_ident = threading.get_ident()
         try:
             yield
         finally:
             with self._cond:
                 self._writer = False
+                self._writer_ident = None
                 self._cond.notify_all()
 
 
