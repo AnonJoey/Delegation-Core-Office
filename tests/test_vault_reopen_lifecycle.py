@@ -198,3 +198,36 @@ def test_a_reopen_requested_inside_a_query_is_deferred_not_deadlocked(vm):
 
     vm._ensure_ready()
     assert vm._client is not old, "the pending reopen was lost instead of deferred"
+
+
+def test_the_reopening_thread_can_read_the_index_it_holds():
+    """The reopen holds the lock exclusive while it runs _init, and _init reads
+    the index (on master ad8049f it logs get_stats()). A shared request from
+    that same thread must enter, not wait on its own exclusive hold."""
+    from delegation_core.index_lock import IndexUseLock
+
+    lock = IndexUseLock()
+    done = threading.Event()
+
+    def reopen():
+        with lock.exclusive():
+            assert lock.held_here(), "a nested reopen on this thread would wait on itself"
+            with lock.shared():
+                pass
+        done.set()
+
+    threading.Thread(target=reopen, daemon=True).start()
+    assert done.wait(5), "the exclusive holder deadlocked on its own shared request"
+
+
+def test_a_reopen_finishes_when_init_reads_the_index(vm):
+    """The real reopen, end to end, bounded: it hung forever on ad8049f."""
+    old = vm._client
+    _foreign_write(vm)
+    t = threading.Thread(target=vm._ensure_ready, daemon=True)
+    t.start()
+    t.join(10)
+
+    assert not t.is_alive(), "the reopen deadlocked inside _init"
+    assert vm._client is not old
+    assert vm.get_stats()["indexed_rows"] >= 0
