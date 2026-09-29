@@ -438,6 +438,45 @@ def cmd_clients(args):
     return 0
 
 
+def _index_row_counts(cfg, timeout: float = 10.0) -> tuple[dict[str, int], str]:
+    """Rows per collection, and where the answer came from.
+
+    With the daemon up it is asked, not bypassed. Opening a PersistentClient
+    changes chroma.sqlite3's mtime even to only count (measured on chromadb
+    1.5.9: open, count and close each bump it), and the daemon reads any change
+    to that file as another process's write and reopens its index. Before the
+    reopen closed its old client, each `status` left 27 chromadb threads behind
+    in the daemon.
+
+    The daemon only knows its own collection, so that is the one counted then.
+
+    Returns ``(counts, source)`` with source "daemon", "local", or
+    "daemon-unresponsive: <reason>". A daemon that accepts connections and does
+    not answer is exactly the 2026-09-26 failure, so it is reported rather than
+    worked around by opening the index here.
+    """
+    from . import daemon
+    if daemon.is_listening(cfg):
+        try:
+            stats = daemon.call_tool(cfg, "vault_stats", timeout=timeout)
+        except daemon.DaemonUnavailable:
+            pass   # went away between the probe and the call: count locally
+        except Exception as e:
+            return {}, f"daemon-unresponsive: {type(e).__name__}: {e}"
+        else:
+            rows = stats.get("indexed_rows")
+            return ({cfg.collection_name: rows} if isinstance(rows, int) else {}), "daemon"
+
+    import chromadb
+    client = chromadb.PersistentClient(path=str(cfg.chroma_path))
+    try:
+        return {c.name: c.count() for c in client.list_collections()}, "local"
+    finally:
+        close = getattr(client, "close", None)
+        if close:
+            close()
+
+
 def cmd_status(_args):
     from rich.console import Console
     from rich.table import Table
@@ -502,20 +541,27 @@ def cmd_status(_args):
         pass
 
     try:
-        import chromadb
-        client = chromadb.PersistentClient(path=str(cfg.chroma_path))
-        # cfg.collection_name, not the historical literal: every other caller
-        # derives the name from the embedding model, so on any install using
-        # something other than bge-base this looked up a collection that does
-        # not exist and reported "not initialized: run: delegation-core
-        # reindex" over a perfectly healthy index: recommending a rebuild that
-        # costs hours on a real vault.
-        col = client.get_collection(cfg.collection_name)
+        counts, source = _index_row_counts(cfg)
+    except Exception:
+        counts, source = {}, "local"
+    # cfg.collection_name, not the historical literal: every other caller
+    # derives the name from the embedding model, so on any install using
+    # something other than bge-base this looked up a collection that does
+    # not exist and reported "not initialized: run: delegation-core
+    # reindex" over a perfectly healthy index: recommending a rebuild that
+    # costs hours on a real vault.
+    rows = counts.get(cfg.collection_name)
+    if source.startswith("daemon-unresponsive"):
+        table.add_row("ChromaDB", f"[red]✗[/red]  daemon on {cfg.server_host}:{cfg.server_port} "
+                                  f"accepts connections but does not answer "
+                                  f"({source.split(': ', 1)[1]}). Restart it.")
+    elif rows:
         # "rows", not "notes": since v0.12 a note is one row per chunk, so this
         # number runs well ahead of the note count and calling it notes invites
         # exactly the wrong conclusion about the size of the vault.
-        table.add_row("ChromaDB", f"[green]✓[/green]  {col.count()} rows indexed")
-    except Exception:
+        via = "  [dim](via daemon)[/dim]" if source == "daemon" else ""
+        table.add_row("ChromaDB", f"[green]✓[/green]  {rows} rows indexed{via}")
+    else:
         table.add_row("ChromaDB", "[dim]not initialized: run: delegation-core reindex[/dim]")
 
     # v0.2 feature flags
@@ -1170,24 +1216,26 @@ def cmd_embed_model(args):
         sys.exit(1)
 
     if not args.model:
-        import chromadb
-        counts = {}
         try:
-            client = chromadb.PersistentClient(path=str(cfg.chroma_path))
-            counts = {c.name: c.count() for c in client.list_collections()}
+            counts, source = _index_row_counts(cfg)
         except Exception:
-            pass
+            counts, source = {}, "local"
 
         table = Table(title="Modelos de embedding calibrados")
         for col in ("", "modelo", "dim", "ctx", "limiar", "idiomas", "indexado"):
             table.add_column(col)
         for name, p in MODEL_PROFILES.items():
             n = counts.get(p["collection"])
+            if n:
+                indexed = f"{n} linhas"
+            elif source != "local":
+                indexed = "[dim]? (com o daemon no ar só a coleção ativa é contada)[/dim]"
+            else:
+                indexed = "[dim]não indexado[/dim]"
             table.add_row(
                 "→" if name == cfg.bge_model else "",
                 name, str(p["dim"]), str(p["max_seq"]), str(p["search_threshold"]),
-                p["languages"],
-                f"{n} linhas" if n else "[dim]não indexado[/dim]",
+                p["languages"], indexed,
             )
         console.print(table)
         for name, p in MODEL_PROFILES.items():
@@ -1210,13 +1258,20 @@ def cmd_embed_model(args):
     console.print(f"  coleção: {collection}  ·  search_threshold: "
                   f"{previous_threshold} → {cfg.search_threshold}")
 
-    import chromadb
+    # The target collection is not the daemon's, so with the daemon up it cannot
+    # be counted without opening the index here, which is what this avoids.
+    from . import daemon
     existing = 0
-    try:
-        client = chromadb.PersistentClient(path=str(cfg.chroma_path))
-        existing = client.get_collection(collection).count()
-    except Exception:
-        pass
+    if daemon.is_listening(cfg):
+        if not args.reindex:
+            console.print("  [dim]Daemon no ar: a coleção nova não foi contada. Se estiver "
+                          f"vazia, rode: delegation-core embed-model {target} --reindex[/dim]")
+    else:
+        try:
+            counts, _ = _index_row_counts(cfg)
+            existing = counts.get(collection, 0)
+        except Exception:
+            pass
 
     if existing and not args.reindex:
         console.print(f"  [green]{existing} linhas já indexadas nessa coleção: pronto para usar.[/green]")

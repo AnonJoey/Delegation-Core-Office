@@ -38,6 +38,7 @@ from pathlib import Path, PurePosixPath, PureWindowsPath
 
 from . import gpu
 from .config import Config
+from .index_lock import close_chroma_client, index_lock_of, reads_index, uses_index
 from .embeddings import (
     chunk_text,
     effective_chunk_chars,
@@ -87,7 +88,6 @@ index_note() calls across both paths.
 """
 
 
-
 def _frontmatter_parses(content: str) -> bool:
     """Does this note's frontmatter block survive a real YAML parser?
 
@@ -130,6 +130,7 @@ class VaultManager:
         self.ef = None
         self._initialized = False
         self._init_lock = threading.Lock()
+        self._client = None
         self._disk_state: tuple | None = None
         # Registered so the arbiter can drop this manager's `ef` and
         # `collection` when llama.cpp needs the card. Those two are the
@@ -169,21 +170,24 @@ class VaultManager:
         current = self._read_disk_state()
         if current is None or current == self._disk_state:
             return
-        logger.info("Index changed on disk by another process — reopening")
-        # Constructing a new PersistentClient is not enough on its own: chromadb
-        # caches one System per path for the life of the process, so the "new"
-        # client shares the stale segment state and keeps failing filtered
-        # queries with "Error finding id" even while reporting the new row count.
-        # Dropping that cache is what makes the reopen equivalent to the fresh
-        # process that reads the same index correctly.
-        try:
-            from chromadb.api.client import SharedSystemClient
-            SharedSystemClient.clear_system_cache()
-        except Exception as e:  # pragma: no cover - depends on chromadb internals
-            logger.warning("Could not clear chromadb system cache: %s", e)
-        self._initialized = False
-        self.collection = None
-        self._init()
+        # A thread already holding the index shared would wait on itself for the
+        # exclusive lock. The change stays pending and the next call reopens.
+        if index_lock_of(self).held_here():
+            return
+        with index_lock_of(self).exclusive():
+            # Another thread may have reopened while this one waited.
+            current = self._read_disk_state()
+            if not self._initialized or current is None or current == self._disk_state:
+                return
+            logger.info("Index changed on disk by another process — reopening")
+            self._close_client()
+            self._initialized = False
+            self.collection = None
+            self._init()
+
+    def _close_client(self) -> None:
+        client, self._client = getattr(self, "_client", None), None
+        close_chroma_client(client)
 
     def _init(self):
         with self._init_lock:
@@ -232,6 +236,7 @@ class VaultManager:
                 except Exception as e:
                     logger.warning("Legacy collection rename check failed: %s", e)
 
+                self._client = client
                 self.collection = client.get_or_create_collection(
                     name=self.cfg.collection_name,
                     embedding_function=self.ef,
@@ -375,6 +380,7 @@ class VaultManager:
             meta["graph"] = graph
         return meta
 
+    @uses_index
     def search(self, query: str, limit: int = 5, scope: str = "all",
                graph: str = "", snippet_chars: int = 800, client: str = "") -> list[dict]:
         """Semantic search, optionally narrowed to one kind of indexed content.
@@ -513,6 +519,7 @@ class VaultManager:
 
     # ── write / index ────────────────────────────────────────────────────────
 
+    @uses_index
     def index_note(self, content: str, metadata: dict, doc_id: str = "") -> bool:
         """Upsert content into ChromaDB. Returns True when the rows landed.
 
@@ -680,6 +687,7 @@ class VaultManager:
             return False
         return True
 
+    @uses_index
     def delete_notes(self, rel_paths: list[str]) -> int:
         """Drop notes from ChromaDB and the incremental index state by vault-relative path.
 
@@ -808,6 +816,7 @@ class VaultManager:
             self._update_index_state(lambda estado: {**estado, **novos})
         return len(novos)
 
+    @reads_index
     def _unindexed_notes(self, notes: list[dict]) -> list[dict]:
         """Notes that exist on disk and have no rows in the index.
 
@@ -859,6 +868,7 @@ class VaultManager:
         return [{"rel": n["rel"], "folder": n["folder"], "stem": n["stem"]}
                 for n in notes if n.get("rel") and n["rel"] not in indexed]
 
+    @reads_index
     def _paged_get(self, limit: int = 5000, **kwargs) -> dict:
         """Safely fetch all matching rows from ChromaDB in batches to prevent SQLite variable limits."""
         if not self.collection:
@@ -883,6 +893,7 @@ class VaultManager:
             # Fallback for test mocks or custom wrappers
             return self.collection.get(**kwargs)
 
+    @uses_index
     def reindex_vault(self, force: bool = False) -> int:
         """Reindex markdown notes in configured vault folders.
 
@@ -1287,6 +1298,7 @@ class VaultManager:
             )
         return matches
 
+    @uses_index
     def find_similar(self, note_name: str, threshold: float = 0.80, limit: int = 5) -> list[dict]:
         """Find notes semantically similar to the given note."""
         self._ensure_ready()
@@ -1703,6 +1715,7 @@ class VaultManager:
 
     # ── stats ─────────────────────────────────────────────────────────────────
 
+    @reads_index
     def _client_counts(self) -> dict:
         """{client slug: distinct documents} over the whole index.
 
@@ -1757,6 +1770,7 @@ class VaultManager:
             "folder_counts": folder_counts,
         }
 
+    @reads_index
     def _index_counts(self) -> tuple[int, int]:
         """(rows, distinct documents) in the collection.
 
