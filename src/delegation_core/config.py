@@ -229,6 +229,13 @@ class Config:
     heal_per_run: int = 10
     never_merge_folders: list = field(default_factory=lambda: ["sessions"])
 
+    # ── daemon liveness ──────────────────────────────────────────────────────
+    # Seconds the daemon's event loop may stay stuck before the process dumps
+    # every thread's stack and exits 1, so launchd/systemd start a fresh one.
+    # 0 turns it off. A stuck loop answers nobody: clients give up after 10-30s,
+    # so 300 only ever ends a process that was already dead to every caller.
+    loop_watchdog_sec: int = 300
+
     # ── v0.13.1: guard against a second index writer ─────────────────────────
     # When no daemon answers, index commands do the work in this process. That
     # is what keeps the CLI usable on a machine that never installed the
