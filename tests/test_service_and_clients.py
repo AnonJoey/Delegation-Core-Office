@@ -27,10 +27,13 @@ def _cfg():
 
 # ── service definitions ──────────────────────────────────────────────────────
 
-def test_systemd_unit_starts_the_daemon_by_absolute_path():
+def test_systemd_unit_starts_the_daemon_by_absolute_path(monkeypatch):
     """`which delegation-core` finds nothing on a venv install — the console
     script lives in the venv's bin. A service manager's environment is thinner
     than a shell's, so a bare name here is a service that never starts."""
+    monkeypatch.setattr(
+        service, "_executable", lambda: "/opt/delegation-core/bin/delegation-core"
+    )
     unit = service.systemd_unit_text()
     exec_line = next(l for l in unit.splitlines() if l.startswith("ExecStart="))
     path = exec_line.split("=", 1)[1].rsplit(" run", 1)[0]
@@ -50,7 +53,10 @@ def test_systemd_start_limits_are_unit_keys_not_service_keys():
     assert not any("StartLimit" in l for l in directives)
 
 
-def test_launchd_plist_parses_and_runs_at_load():
+def test_launchd_plist_parses_and_runs_at_load(monkeypatch):
+    monkeypatch.setattr(
+        service, "_executable", lambda: "/opt/delegation-core/bin/delegation-core"
+    )
     parsed = plistlib.loads(service.launchd_plist_text().encode())
     assert parsed["Label"] == service.LAUNCHD_LABEL
     assert parsed["ProgramArguments"][-1] == "run"

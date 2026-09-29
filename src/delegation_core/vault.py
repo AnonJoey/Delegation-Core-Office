@@ -242,8 +242,6 @@ class VaultManager:
                     embedding_function=self.ef,
                     metadata={"hnsw:space": "cosine"},
                 )
-                logger.info("ChromaDB ready — %d notes indexed in %s",
-                            self.collection.count(), self.cfg.collection_name)
             except Exception as e:
                 logger.error("ChromaDB/BGE init failed: %s — vault will retry on next call", e)
                 return  # do NOT set _initialized; leave it False so _ensure_ready() retries
@@ -251,6 +249,13 @@ class VaultManager:
             # change on the next call rather than being missed for the session.
             self._disk_state = self._read_disk_state()
             self._initialized = True  # only reached on successful init
+            stats = self.get_stats()
+            logger.info(
+                "ChromaDB ready — %d chunks across, %d indexed documents; "
+                "%d Markdown notes in vault (%s)",
+                stats["indexed_rows"], stats["indexed_notes"],
+                stats["vault_markdown_files"], self.cfg.collection_name,
+            )
 
     def _adopt_legacy_collection(self, client) -> None:
         """Rename a pre-derivation collection to the model-derived name, if compatible.
@@ -1757,6 +1762,10 @@ class VaultManager:
             # being quietly redefined.
             "indexed_notes": docs,
             "indexed_rows": rows,
+            "vault_markdown_files": sum(
+                1 for path in self.cfg.vault.rglob("*.md")
+                if self.cfg.chroma_path not in path.parents
+            ),
             # The clients actually present in the index, as the filter sees
             # them. This is the verification surface for client_path_roots: a
             # derivation rule that mislabels shows up here as a bucket nobody
