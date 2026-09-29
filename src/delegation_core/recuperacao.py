@@ -250,7 +250,18 @@ def pos_em_quarentena(cfg, motivo: str, novo_caminho: str | None = None) -> dict
     # Carimbos por arquivo de cada fonte ingerida, pelo mesmo motivo. As
     # configuracoes da fonte (recursive, exclude) ficam: sao elas que dizem
     # como reingerir.
+    # A lista de fontes vem do registro E do indice que acabou de sair. So o
+    # registro nao basta: em 29/09/2026 um teste o tinha reduzido a uma fonte do
+    # pytest num Mac, e a reconstrucao de la pulou as 172 fontes reais. O indice
+    # guarda `source_folder` em cada linha externa e le por sqlite puro, mesmo
+    # quando trava ou derruba o chromadb. Se nem isso ler, fica o registro.
     registro = _ingest._load_registry()
+    if destino is not None:
+        try:
+            registro = _ingest.reconstruir_registro_do_indice(destino, carimbar_arquivos=False)
+        except Exception as e:
+            logger.warning("Nao consegui ler as fontes do indice em quarentena (%s); "
+                           "a reconstrucao usa so o registro", e)
     fontes = []
     for fonte, entrada in registro.items():
         if not isinstance(entrada, dict):

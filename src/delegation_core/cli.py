@@ -1476,6 +1476,66 @@ def cmd_recover_index(args):
                   "rebuilds in the background and heartbeat() shows the progress.")
 
 
+def cmd_ingest_registry(args):
+    """Remonta `ingested_sources.json` a partir das linhas do indice.
+
+    Sem --from, le o indice em uso e carimba os arquivos que nao mudaram desde
+    a ingestao, entao o proximo `ingest` so reembute o que mudou. Com --from
+    apontando para um indice em quarentena e --queue, poe as fontes dele na
+    fila de reconstrucao do daemon, sem refazer as notas: e o conserto de uma
+    reconstrucao que rodou com o registro errado.
+    """
+    from datetime import datetime
+    from pathlib import Path
+    from rich.console import Console
+    from . import ingest, recuperacao
+    from .daemon import is_listening
+
+    console = Console()
+    cfg = _graph_config()
+    if cfg is None:
+        console.print("[yellow]Not configured.[/yellow] Run: delegation-core setup")
+        sys.exit(1)
+
+    origem = Path(args.from_index).expanduser() if args.from_index else cfg.chroma_path
+    em_uso = origem.resolve() == Path(cfg.chroma_path).resolve()
+    if args.queue:
+        if em_uso:
+            console.print("[red]✗[/red] --queue is for an index that is no longer in use "
+                          "(e.g. the .chroma_bge-danificado-* directory); pass it with --from")
+            sys.exit(1)
+        if is_listening(cfg):
+            console.print("[red]✗[/red] The daemon is running; a rebuild it is doing would "
+                          "overwrite the queue. Stop it first: delegation-core service stop")
+            sys.exit(1)
+
+    registro = ingest.reconstruir_registro_do_indice(origem, carimbar_arquivos=em_uso)
+    if not em_uso:
+        # As linhas desse indice nao estao no indice novo: carimbo nenhum vale.
+        for entrada in registro.values():
+            if isinstance(entrada, dict):
+                entrada["files"] = {}
+    ingest._save_registry(registro)
+    console.print(f"[green]✓[/green] Registry rebuilt from {origem}: {len(registro)} source(s)")
+
+    if args.queue:
+        fontes = [{"path": f, "recursive": bool((e or {}).get("recursive", True)),
+                   "exclude": (e or {}).get("exclude") or []}
+                  for f, e in registro.items()]
+        pedido = recuperacao.reconstrucao_pendente() or {
+            "motivo": f"fontes do indice {origem} postas na fila a mao",
+            "pedido_em": datetime.now().isoformat(timespec="seconds"),
+            "quarentena": str(origem), "indice_novo": str(cfg.chroma_path),
+            "relocado_para_fora_da_nuvem": False, "notas_feitas": True,
+            "fontes": [], "fontes_feitas": []}
+        conhecidas = {f["path"] for f in pedido.get("fontes") or []}
+        pedido["fontes"] = (pedido.get("fontes") or []) + [
+            f for f in fontes if f["path"] not in conhecidas]
+        recuperacao._gravar_json(recuperacao.caminho_do_pedido(), pedido)
+        console.print(f"[green]✓[/green] {len(pedido['fontes'])} source(s) queued. Start the "
+                      "daemon; it re-ingests them and heartbeat() shows the progress.")
+
+
 def cmd_graph_list(_args):
     from rich.console import Console
     from . import graphbridge
@@ -1717,6 +1777,14 @@ def main():
                            help="Rebuild the index at this path instead (e.g. out of a "
                                 "cloud-synced vault); saved as index_path in config.json")
     p_recover.add_argument("--yes", action="store_true", help="Do not ask for confirmation")
+    p_registry = sub.add_parser(
+        "ingest-registry",
+        help="Rebuild ingested_sources.json from the rows of an index")
+    p_registry.add_argument("--from", dest="from_index", default="",
+                            help="Index directory to read (default: the index in use)")
+    p_registry.add_argument("--queue", action="store_true",
+                            help="Queue the sources for re-ingestion by the daemon "
+                                 "(only with --from pointing to an index no longer in use)")
     p_reindex = sub.add_parser("reindex", help="Rebuild ChromaDB search index from vault folders")
     p_reindex.add_argument("--force", action="store_true",
                            help="Reindex every note, not just those changed since last run "
@@ -1881,6 +1949,7 @@ def main():
         "status":   cmd_status,
         "doctor":   cmd_doctor,
         "recover-index": cmd_recover_index,
+        "ingest-registry": cmd_ingest_registry,
         "reindex":  cmd_reindex,
         "maintain": cmd_maintain,
         "dashboard-api": cmd_dashboard_api,
