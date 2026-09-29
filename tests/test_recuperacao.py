@@ -287,6 +287,43 @@ def test_sonda_que_morre_de_verdade_por_sigsegv_dispara_a_quarentena(tmp_path, m
         vm._close_client()
 
 
+def test_sonda_que_trava_confirma_o_dano(tmp_path, monkeypatch):
+    """O Mac de 29/09 13:39: `collection.count()` parado em mutexwait, o watchdog
+    encerrando o daemon a cada 300s. A primeira versao da guarda so aceitava
+    sinal, tomou o prazo esgotado por indice saudavel e deixou o ciclo girar.
+    Aqui o filho trava de verdade e o prazo e que decide."""
+    monkeypatch.setattr(gpu, "take", lambda *a, **k: None)
+    monkeypatch.setattr(doctor, "_PROBE_SOURCE", "import time\ntime.sleep(60)\n")
+    monkeypatch.setattr(recuperacao, "PRAZO_DA_SONDA", 1)
+    cfg = _cfg(tmp_path)
+    _indice_falso(cfg)
+    _marcador_de(_pid_morto(), cfg)
+
+    assert recuperacao.falha_da_sonda(cfg) == "nao abriu em 1s"
+    vm = VaultManager(cfg)
+    vm.ef = _Embedder()
+    vm._init()
+    try:
+        assert vm._initialized
+        assert list(cfg.vault.glob(".chroma_bge-danificado-*"))
+        assert "nao abriu em 1s" in recuperacao.reconstrucao_pendente()["motivo"]
+    finally:
+        vm._close_client()
+
+
+def test_sonda_com_erro_de_python_nao_poe_em_quarentena(tmp_path, monkeypatch):
+    """Erro com saida normal nao derruba o processo: o `_init` ja tenta de novo
+    na chamada seguinte. Nao e a condicao que justifica uma reconstrucao."""
+    monkeypatch.setattr(doctor, "_PROBE_SOURCE", "raise SystemExit(3)\n")
+    cfg = _cfg(tmp_path)
+    _indice_falso(cfg)
+    _marcador_de(_pid_morto(), cfg)
+
+    assert recuperacao.falha_da_sonda(cfg) is None
+    assert recuperacao.antes_de_abrir(cfg) is False
+    assert (cfg.chroma_path / "chroma.sqlite3").exists()
+
+
 @pytest.mark.parametrize("codigo", [0xC0000005, -1073741819])
 def test_crash_no_windows_conta_como_sinal(tmp_path, monkeypatch, codigo):
     cfg = _cfg(tmp_path)
