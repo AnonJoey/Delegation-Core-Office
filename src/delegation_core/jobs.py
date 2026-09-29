@@ -202,12 +202,15 @@ TAREFAS_EXCLUSIVAS = frozenset({
     "vault_reindex",       # reescreve o estado do indice do vault todo
     "run_maintenance",     # classifica, funde e religa o inbox inteiro
     "ingest_folder",       # o defeito de 31/08, mecanizado em vez de instruido
+    "ingest_configured",   # todas as fontes declaradas de uma vez (PR#2)
 })
-#: `ingest_configured` NAO entra aqui: a ingestao por nome declarado e do
-#: PR#2 do William, que vive no fork e ainda nao chegou nesta arvore. Declarar
-#: exclusividade para tarefa que ninguem submete e protecao dada a ninguem, e
-#: `test_a_lista_de_exclusivas_bate_com_tarefa_que_existe` derruba quem tentar.
-#: Quando o PR#2 entrar, o nome entra junto.
+#: `ingest_configured` entrou com o PR#2 do William (29/09/2026). Ate la ficava
+#: fora de proposito, porque exclusividade para tarefa que ninguem submete e
+#: protecao dada a ninguem, e o teste que confere os nomes contra o server.py
+#: derrubaria a entrada. Sem argumento ela ingere TODAS as fontes, entao duas
+#: juntas sao o mesmo trabalho duas vezes sobre o mesmo registro.
+#: A reconstrucao do indice (recuperacao.py) roda como `vault_reindex:reconstrucao`,
+#: na familia do reindex, e por isso nao precisa de nome proprio aqui.
 
 #: FORA da lista, de proposito, porque sao particionadas por argumento e duas
 #: pedidos diferentes sao trabalho diferente e legitimo:

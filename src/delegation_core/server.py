@@ -101,6 +101,7 @@ from . import graphbridge
 from . import jobs
 from . import localqueue as _localqueue
 from . import notewriter as _notewriter
+from . import recuperacao
 from .auth import LocalTokenAuth
 from .client_tracking import ClientTrackingMiddleware as _ClientTrackingMiddleware
 from .client_tracking import cleanup_own_session_file as _cleanup_own_session_file
@@ -209,6 +210,33 @@ async def _lifespan(_server):
 
 
 mcp = FastMCP("delegation-core", lifespan=_lifespan)
+
+
+def _retomar_reconstrucao_na_partida() -> threading.Thread:
+    """Espera o indice abrir e, havendo pedido de reconstrucao, a executa.
+
+    O pedido nasce em `recuperacao.pos_em_quarentena`, chamado de dentro da
+    abertura do indice, e sobrevive a reinicios: o daemon que cai no meio da
+    reconstrucao a retoma na proxima partida. Numa thread porque a abertura
+    carrega o BGE e o transporte tem que subir sem esperar por ela.
+
+    Submetida na familia `vault_reindex`, e nao numa propria: um reindex pedido
+    por hook durante a reconstrucao e absorvido por ela em vez de correr junto.
+    """
+    def _esperar_e_submeter():
+        try:
+            _vault._ensure_ready()
+        except Exception as e:
+            logger.warning("Indice nao abriu na partida (%s)", e)
+        if recuperacao.reconstrucao_pendente():
+            job_id = jobs.submit("vault_reindex:reconstrucao",
+                                 recuperacao.reconstruir, _vault, _ingest)
+            logger.warning("Reconstrucao do indice em andamento (job %s)", job_id)
+
+    t = threading.Thread(target=_esperar_e_submeter, daemon=True,
+                         name="reconstrucao-do-indice")
+    t.start()
+    return t
 
 # Tools that only call synchronous code are plain `def`: fastmcp (>=3.4, the
 # pinned floor) runs those in its threadpool. As `async def` they ran on the
@@ -606,8 +634,21 @@ async def heartbeat(force: bool = False) -> str:
     stats, health, processes = await asyncio.to_thread(
         lambda: (_vault.get_stats(), _vault.get_health_summary(force=force),
                  _tracker.summary()))
+    # Um indice sendo reconstruido responde, mas responde pouco: sem isto a
+    # busca parece so pior, e nada diz que vai melhorar sozinha.
+    pedido = recuperacao.reconstrucao_pendente()
+    if pedido and status == "healthy":
+        status = "degraded"
     return json.dumps({
         "status":      status,
+        "index_recovery": pedido and {
+            "motivo": pedido.get("motivo"), "pedido_em": pedido.get("pedido_em"),
+            "quarentena": pedido.get("quarentena"),
+            "notas_feitas": pedido.get("notas_feitas"),
+            "fontes": f"{len(pedido.get('fontes_feitas') or [])}/{len(pedido.get('fontes') or [])}",
+            "detail": "the index crashed whoever opened it and was set aside; the "
+                      "daemon is rebuilding it from the vault and the ingest sources, "
+                      "and search fills in as it goes"},
         "timestamp":   datetime.now().isoformat(),
         "engine_mode": cfg.engine_mode,
         "llama_cpp":   llama_state,
@@ -1587,6 +1628,7 @@ def run_server(cfg: Config):
     _arm_watchdog(getattr(cfg, "loop_watchdog_sec", 0))
 
     _vault.warm_up()
+    _retomar_reconstrucao_na_partida()
 
     # The dashboard's JSON API, on the daemon's own VaultManager. It was a
     # sidecar the Tauri app spawned, which stopped making sense the moment this

@@ -236,6 +236,14 @@ class Config:
     # so 300 only ever ends a process that was already dead to every caller.
     loop_watchdog_sec: int = 300
 
+    # ── onde mora o indice ───────────────────────────────────────────────────
+    # Vazio: `<vault>/.chroma_bge`, como sempre. Preenchido: o indice mora ali.
+    # Existe para o vault que fica numa pasta sincronizada (OneDrive, iCloud):
+    # sincronizacao mexendo no SQLite do Chroma sob um processo aberto danifica
+    # o indice. A recuperacao automatica preenche este campo sozinha quando poe
+    # em quarentena um indice nessa situacao. Ver recuperacao.py.
+    index_path: str = ""
+
     # ── v0.13.1: guard against a second index writer ─────────────────────────
     # When no daemon answers, index commands do the work in this process. That
     # is what keeps the CLI usable on a machine that never installed the
@@ -360,6 +368,8 @@ class Config:
 
     @property
     def chroma_path(self) -> Path:
+        if str(self.index_path or "").strip():
+            return Path(self.index_path).expanduser()
         return self.vault / ".chroma_bge"
 
     @property
