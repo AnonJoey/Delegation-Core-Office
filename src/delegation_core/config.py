@@ -331,6 +331,18 @@ class Config:
     # it only if the model is served with real parallel slots.
     llama_queue_concurrency: int = 1
 
+    # Ingestion source policy stays last because these lists can be long.
+    # Sources are opt-in. An empty list preserves one-off `ingest_folder(path)`;
+    # once populated, ingestion accepts only enabled entries declared here.
+    ingest_sources: list[dict] = field(default_factory=list)
+    # A pattern can match a directory (`node_modules`), a filename (`*.log`),
+    # or a source-relative path (`exports/private/*`).
+    ingest_exclude_patterns: list[str] = field(default_factory=lambda: [
+        ".git", "node_modules", "__pycache__", ".cache", ".mypy_cache",
+        ".pytest_cache", ".ruff_cache", ".tox", ".venv", "venv", "dist",
+        "build", "coverage", "htmlcov",
+    ])
+
     # ── derived ──────────────────────────────────────────────────────────────
 
     @property

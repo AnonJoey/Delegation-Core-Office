@@ -709,6 +709,32 @@ def cmd_ingest(args):
         console.print("[yellow]Not configured.[/yellow] Run: delegation-core setup")
         sys.exit(1)
 
+    configured_name = getattr(args, "configured", None)
+    if configured_name is not None:
+        if getattr(args, "path", None):
+            console.print("[red]Use either a path or --configured, not both.[/red]")
+            sys.exit(2)
+        if getattr(args, "exclude", "") or getattr(args, "no_recursive", False):
+            console.print("[red]--exclude and --no-recursive belong in the configured source.[/red]")
+            sys.exit(2)
+        label = configured_name or "all enabled configured sources"
+        console.print(f"Ingesting [bold]{label}[/bold] from configuration ...")
+        force = bool(getattr(args, "force", False))
+        job = _delegate(cfg, args, "ingest_configured_bg", {"name": configured_name, "force": force},
+                        lambda msg: console.print(f"[dim]{msg}[/dim]"))
+        result = job.get("result") if job is not None else None
+        if result is None:
+            from .vault import VaultManager
+            from .ingest import IngestManager
+            result = IngestManager(VaultManager(cfg)).ingest_configured(configured_name, force=force)
+        if "error" in result:
+            console.print(f"[red]Error:[/red] {result['error']}")
+            sys.exit(1)
+        console.print(f"[green]✓[/green]  {result['indexed']} files indexed across "
+                      f"{result['configured_count']} configured source(s), "
+                      f"{len(result['errors'])} errors.")
+        return
+
     recursive = not getattr(args, "no_recursive", False)
     force = bool(getattr(args, "force", False))
     raw_exclude = getattr(args, "exclude", None)
@@ -723,6 +749,9 @@ def cmd_ingest(args):
     # working directory, so a relative path that means one thing in this shell
     # means something else (or nothing) there. Doing it for the local path too
     # keeps one interpretation of the argument.
+    if not args.path:
+        console.print("[red]Provide a path or use --configured.[/red]")
+        sys.exit(2)
     source = str(Path(args.path).expanduser().resolve())
     flags = []
     if not recursive:
@@ -1660,7 +1689,9 @@ def main():
     p_dashboard_api.add_argument("--host", default="127.0.0.1")
 
     p_ingest = sub.add_parser("ingest", help="Index files from an external folder without moving them")
-    p_ingest.add_argument("path",           help="Absolute path to a file or directory to index")
+    p_ingest.add_argument("path", nargs="?", help="Absolute path to a file or directory to index")
+    p_ingest.add_argument("--configured", nargs="?", const="", default=None, metavar="NAME",
+                          help="Run one configured source by name, or all enabled sources when NAME is omitted")
     p_ingest.add_argument("--no-recursive", action="store_true", help="Only index top-level files")
     p_ingest.add_argument("--force",        action="store_true", help="Re-index even if file mtime and size are unchanged")
     p_ingest.add_argument("--exclude",      default="", help="Comma-separated glob patterns to exclude (e.g. Logs,*.tmp)")

@@ -1186,6 +1186,27 @@ async def ingest_folder_bg(source_path: str, recursive: bool = True, force: bool
 
 
 @mcp.tool()
+async def ingest_configured(name: str = "", force: bool = False) -> str:
+    """Ingest a configured source by name, or every enabled source when name is empty.
+
+    Configure `ingest_sources` and `ingest_exclude_patterns` in config.json first.
+    This is the declarative route: the configured path, recursion setting and
+    source-specific exclusions are used as recorded, rather than supplied again.
+    """
+    loop = asyncio.get_running_loop()
+    result = await loop.run_in_executor(None, lambda: _ingest.ingest_configured(name, force))
+    return json.dumps(result)
+
+
+@mcp.tool()
+async def ingest_configured_bg(name: str = "", force: bool = False) -> str:
+    """Start configured ingestion in the background; omit name to run all enabled sources."""
+    job_id = jobs.submit("ingest_configured", _ingest.ingest_configured, name, force)
+    return json.dumps({"job_id": job_id, "source": name or "all configured sources", "status": "running",
+                       "message": "Configured ingestion started. Call task_status(job_id) to check progress."})
+
+
+@mcp.tool()
 async def ingest_status() -> str:
     """Return the ingestion registry: which external paths have been indexed and when."""
     return json.dumps(_ingest.status())
