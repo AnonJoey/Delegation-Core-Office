@@ -1428,6 +1428,54 @@ def cmd_doctor(args):
     sys.exit(1 if result["status"] == "error" else 0)
 
 
+def cmd_recover_index(args):
+    """Poe o indice de lado e deixa o daemon reconstrui-lo na proxima partida.
+
+    O mesmo caminho que o daemon toma sozinho quando o indice o derruba na
+    abertura, para quem nao quer esperar por isso. Nao abre o indice: renomear
+    o diretorio e zerar os carimbos nao exige ChromaDB, e abrir um indice
+    danificado e justamente o que mata o processo. A reconstrucao fica com o
+    daemon, que e o unico escritor.
+    """
+    from pathlib import Path
+    from rich.console import Console
+    from . import recuperacao
+    from .daemon import is_listening
+
+    console = Console()
+    cfg = _graph_config()
+    if cfg is None:
+        console.print("[yellow]Not configured.[/yellow] Run: delegation-core setup")
+        sys.exit(1)
+    if is_listening(cfg):
+        console.print("[red]✗[/red] The daemon is running and holds the index open. "
+                      "Stop it first: [bold]delegation-core service stop[/bold]")
+        sys.exit(1)
+
+    novo = str(Path(args.index_path).expanduser().resolve()) if args.index_path else None
+    if not args.yes:
+        console.print(f"Index at [bold]{cfg.chroma_path}[/bold] will be moved aside "
+                      "(renamed, not deleted), and the daemon will rebuild it from the "
+                      "vault and every ingest source on its next start.")
+        if novo:
+            console.print(f"The new index will live at [bold]{novo}[/bold].")
+        if input("Proceed? [y/N] ").strip().lower() not in ("y", "yes", "s", "sim"):
+            console.print("Nothing changed.")
+            return
+
+    pedido = recuperacao.pos_em_quarentena(
+        cfg, motivo="recover-index pedido a mao", novo_caminho=novo)
+
+    if pedido.get("quarentena"):
+        console.print(f"[green]✓[/green] Old index moved to {pedido['quarentena']}")
+    else:
+        console.print("[dim]No index on disk; nothing to move.[/dim]")
+    console.print(f"[green]✓[/green] Rebuild queued: the vault notes and "
+                  f"{len(pedido['fontes'])} ingest source(s). New index: {pedido['indice_novo']}")
+    console.print("Start the daemon ([bold]delegation-core service start[/bold]); it "
+                  "rebuilds in the background and heartbeat() shows the progress.")
+
+
 def cmd_graph_list(_args):
     from rich.console import Console
     from . import graphbridge
@@ -1662,6 +1710,13 @@ def main():
                           help="Remove orphan ChromaDB segment directories on disk")
     p_doctor.add_argument("--rebuild-fts", action="store_true",
                           help="Rebuild SQLite full-text search index if corrupted")
+    p_recover = sub.add_parser(
+        "recover-index",
+        help="Move a damaged index aside; the daemon rebuilds it on its next start")
+    p_recover.add_argument("--index-path", default="",
+                           help="Rebuild the index at this path instead (e.g. out of a "
+                                "cloud-synced vault); saved as index_path in config.json")
+    p_recover.add_argument("--yes", action="store_true", help="Do not ask for confirmation")
     p_reindex = sub.add_parser("reindex", help="Rebuild ChromaDB search index from vault folders")
     p_reindex.add_argument("--force", action="store_true",
                            help="Reindex every note, not just those changed since last run "
@@ -1825,6 +1880,7 @@ def main():
         "clients":  cmd_clients,
         "status":   cmd_status,
         "doctor":   cmd_doctor,
+        "recover-index": cmd_recover_index,
         "reindex":  cmd_reindex,
         "maintain": cmd_maintain,
         "dashboard-api": cmd_dashboard_api,

@@ -36,7 +36,7 @@ import threading
 from datetime import datetime
 from pathlib import Path, PurePosixPath, PureWindowsPath
 
-from . import gpu
+from . import gpu, recuperacao
 from .config import Config
 from .index_lock import close_chroma_client, index_lock_of, reads_index, uses_index
 from .embeddings import (
@@ -225,6 +225,7 @@ class VaultManager:
                         max_seq_length=self.cfg.embed_max_seq_length,
                         batch_size=self.cfg.embed_batch_size,
                         device=getattr(self.cfg, "embed_device", "auto"))
+                recuperacao.antes_de_abrir(self.cfg)  # pode trocar o indice por um novo
                 client = chromadb.PersistentClient(
                     path=str(self.cfg.chroma_path),
                     settings=chromadb.Settings(anonymized_telemetry=False),
@@ -243,11 +244,11 @@ class VaultManager:
             except Exception as e:
                 logger.error("ChromaDB/BGE init failed: %s — vault will retry on next call", e)
                 return  # do NOT set _initialized; leave it False so _ensure_ready() retries
-            # Taken after the open, so a write that lands mid-open is seen as a
-            # change on the next call rather than being missed for the session.
+            # Taken after the open: a write landing mid-open shows up next call.
             self._disk_state = self._read_disk_state()
             self._initialized = True  # only reached on successful init
             stats = self.get_stats()
+            recuperacao.depois_de_abrir(self.cfg)
             logger.info("ChromaDB ready — %d chunks across, %d indexed documents; "
                         "%d Markdown notes in vault (%s)", stats["indexed_rows"],
                         stats["indexed_notes"], stats["vault_markdown_files"],
