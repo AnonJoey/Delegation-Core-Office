@@ -15,10 +15,12 @@ O que este modulo faz, na ordem:
    `depois_de_abrir` o remove. Um marcador de um PID que ja nao existe quer
    dizer que aquele processo morreu no meio da abertura.
 2. Nesse caso, antes de abrir, o indice e testado num processo FILHO (a mesma
-   sonda do `doctor`). Se o filho tambem morre por sinal, o dano esta
-   confirmado por duas mortes independentes, e o indice vai para quarentena:
-   renomeado ao lado, nunca apagado. Se o filho abre normalmente, a morte
-   anterior teve outra causa (OOM, kill manual) e nada muda.
+   sonda do `doctor`). Se o filho tambem nao abre, morto por sinal ou parado
+   ate o prazo, o dano esta confirmado por duas falhas independentes, e o
+   indice vai para quarentena: renomeado ao lado, nunca apagado. Se o filho
+   abre normalmente, a morte anterior teve outra causa (OOM, kill manual) e
+   nada muda. Travar conta como morrer: um indice cujo `count()` nunca volta
+   faz o watchdog do loop encerrar o daemon, e o ciclo e o mesmo do SIGSEGV.
 3. Na quarentena os carimbos que certificavam o indice antigo sao zerados, os
    do vault e os de cada fonte ingerida, porque certificam linhas que o indice
    novo nao tem. Sem isso o reindex "incremental" pularia todas as notas e o
@@ -142,10 +144,11 @@ def antes_de_abrir(cfg) -> bool:
                 "O processo %s morreu enquanto abria o indice em %s (desde %s). "
                 "Testando o indice num processo filho antes de abrir.",
                 marcador.get("pid"), caminho, marcador.get("inicio"))
-            if indice_derruba_quem_abre(cfg):
+            falha = falha_da_sonda(cfg)
+            if falha:
                 pos_em_quarentena(cfg, motivo=(
                     f"o processo {marcador.get('pid')} morreu abrindo o indice e "
-                    "a sonda num processo filho morreu do mesmo jeito"))
+                    f"a sonda num processo filho tambem nao abriu ({falha})"))
                 quarentena = True
             else:
                 logger.info("A sonda abriu o indice normalmente: a morte anterior "
@@ -169,15 +172,36 @@ def depois_de_abrir(cfg) -> None:
         logger.warning("Nao consegui remover o marcador de abertura: %s", e)
 
 
-def indice_derruba_quem_abre(cfg) -> bool:
-    """A sonda do doctor, num filho, morreu por sinal?
+#: Quanto a sonda da guarda espera o indice abrir. Maior que os 120s do doctor
+#: porque aqui um tempo esgotado confirma dano, e a margem protege o indice
+#: grande em disco lento de uma quarentena por engano.
+PRAZO_DA_SONDA = 180
 
-    So o sinal conta. Timeout, erro de Python ou indice vazio nao sao a
-    condicao que este modulo conserta, e uma quarentena por engano custa uma
-    reconstrucao inteira.
+
+def falha_da_sonda(cfg) -> str | None:
+    """A sonda do doctor, num filho, conseguiu abrir e consultar o indice?
+
+    None quando conseguiu. Senao, o que aconteceu: morte por sinal ou prazo
+    esgotado. As duas sao a mesma condicao vista de lados diferentes, e as duas
+    foram medidas em campo em 29/09/2026:
+
+    - num Mac o indice matava quem o abria com SIGSEGV;
+    - noutro, `collection.count()` nunca voltava, com threads paradas em
+      mutexwait dentro de chromadb_rust_bindings, e o watchdog do loop
+      encerrava o daemon a cada 300s. A primeira versao desta guarda so
+      aceitava sinal, tomou o prazo esgotado por indice saudavel, e o ciclo
+      continuou.
+
+    Erro de Python com saida normal nao conta: o `_init` ja o trata tentando
+    de novo na chamada seguinte, sem derrubar o processo.
     """
     from .doctor import sondar_indice
-    return sondar_indice(cfg).get("sinal") is not None
+    sonda = sondar_indice(cfg, timeout=PRAZO_DA_SONDA)
+    if sonda.get("sinal") is not None:
+        return f"morreu pelo sinal {sonda['sinal']}"
+    if sonda.get("timeout"):
+        return f"nao abriu em {PRAZO_DA_SONDA}s"
+    return None
 
 
 # ── quarentena ───────────────────────────────────────────────────────────────
