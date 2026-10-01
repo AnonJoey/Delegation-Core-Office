@@ -5,6 +5,11 @@ This changelog is derived directly from the canonical versioning recorded across
 
 ---
 
+## Unreleased (2026-10-01) - Default MCP port
+
+### Changed
+- The default MCP port is now `8797` instead of `8787`, avoiding a collision with Headroom's commonly used proxy port. Explicit `server_port` values in existing configurations are preserved. Client configuration examples use the new default.
+
 ## Unreleased (2026-09-29) - Daemon travado no Mac: reabertura do indice, loop bloqueado e watchdog
 
 ### Fixed

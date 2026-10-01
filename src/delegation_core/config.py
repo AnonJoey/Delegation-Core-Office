@@ -295,7 +295,7 @@ class Config:
     # from another machine: the token below is a guard against other *local*
     # processes, not a substitute for network isolation.
     server_host: str = "127.0.0.1"
-    server_port: int = 8787
+    server_port: int = 8797
     server_path: str = "/mcp"
 
     # Bearer token every client must present. Generated on first use by
