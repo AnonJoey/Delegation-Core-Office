@@ -65,14 +65,32 @@ This finds (or lets you create) an Obsidian vault, downloads/configures a local 
 model (or lets you skip it - see "engine modes" below), and optionally registers
 delegation-core to start automatically (systemd/launchd/Task Scheduler).
 
+### Configure recurring external ingestion
+
+After the first setup, and **before the first ingestion**, configure any recurring,
+shared or broad external document source in `~/.delegation_core/config.json`. Do not
+pre-create this file before the initial installer/wizard: the wizard owns the initial
+machine configuration. The installer preserves it on upgrades.
+
+See [docs/INGEST_CONFIGURATION.md](docs/INGEST_CONFIGURATION.md) for the
+`ingest_sources` allow-list, exclusion patterns, safe edits during use, and the
+configured ingestion commands.
+
 ## Using it as an MCP server
 
-delegation-core runs as a single HTTP daemon on `127.0.0.1:8787`, and every MCP client
+delegation-core runs as a single HTTP daemon on `127.0.0.1:8797`, and every MCP client
 connects to that one process. Point your clients at it with:
 
 ```bash
 delegation-core clients          # writes the http entry + bearer token into known clients
 ```
+
+The default MCP port is `8797` to avoid a collision with Headroom's commonly used
+`8787` proxy port. Existing installations keep the `server_port` saved in
+`~/.delegation_core/config.json`. To migrate one, change that setting, restart the
+daemon, and refresh the affected clients with `delegation-core clients` (follow
+its instructions for an existing Codex entry). The dashboard API port is a
+separate setting.
 
 This is a one-time migration for anyone upgrading from v0.10 or earlier, which spoke stdio:
 a leftover `{"command": ..., "args": ["run"]}` entry spawns a second server that fights the
@@ -136,4 +154,5 @@ real model to say anything useful.
 - `AGENT_GUIDE.md` - full MCP tool reference and protocol, written for the AI agent side.
 - `CHANGELOG.md` - version history.
 - `DEPLOYMENT_LOG.md` - per-deployment upgrade notes (this repo runs on more than one machine).
+- `docs/INGEST_CONFIGURATION.md` - declarative ingestion sources, exclusions and safe re-ingestion.
 - `THIRD_PARTY_LICENSES/` - attribution for vendored code (Graphify).

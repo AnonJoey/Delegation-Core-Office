@@ -21,16 +21,19 @@ from delegation_core.windows import SELF
 
 
 def _cfg():
-    return Config(vault_path="/tmp", server_host="127.0.0.1", server_port=8787,
+    return Config(vault_path="/tmp", server_host="127.0.0.1",
                   server_path="/mcp", server_token="tok-abc")
 
 
 # ── service definitions ──────────────────────────────────────────────────────
 
-def test_systemd_unit_starts_the_daemon_by_absolute_path():
+def test_systemd_unit_starts_the_daemon_by_absolute_path(monkeypatch):
     """`which delegation-core` finds nothing on a venv install — the console
     script lives in the venv's bin. A service manager's environment is thinner
     than a shell's, so a bare name here is a service that never starts."""
+    monkeypatch.setattr(
+        service, "_executable", lambda: "/opt/delegation-core/bin/delegation-core"
+    )
     unit = service.systemd_unit_text()
     exec_line = next(l for l in unit.splitlines() if l.startswith("ExecStart="))
     path = exec_line.split("=", 1)[1].rsplit(" run", 1)[0]
@@ -50,7 +53,10 @@ def test_systemd_start_limits_are_unit_keys_not_service_keys():
     assert not any("StartLimit" in l for l in directives)
 
 
-def test_launchd_plist_parses_and_runs_at_load():
+def test_launchd_plist_parses_and_runs_at_load(monkeypatch):
+    monkeypatch.setattr(
+        service, "_executable", lambda: "/opt/delegation-core/bin/delegation-core"
+    )
     parsed = plistlib.loads(service.launchd_plist_text().encode())
     assert parsed["Label"] == service.LAUNCHD_LABEL
     assert parsed["ProgramArguments"][-1] == "run"
@@ -73,7 +79,7 @@ def test_status_reports_manager_and_reachability_separately(monkeypatch):
 def test_claude_code_entry_is_http_with_bearer_header():
     entry = clients.claude_code_entry(_cfg())
     assert entry["type"] == "http"
-    assert entry["url"] == "http://127.0.0.1:8787/mcp"
+    assert entry["url"] == "http://127.0.0.1:8797/mcp"
     assert entry["headers"]["Authorization"] == "Bearer tok-abc"
 
 
@@ -95,7 +101,7 @@ def test_install_claude_code_replaces_stdio_entry_and_keeps_projects(monkeypatch
     after = json.loads(client_config.read_text())
 
     assert result["replaced"]["command"] == "/old/path/delegation-core"
-    assert after["mcpServers"][SELF]["url"] == "http://127.0.0.1:8787/mcp"
+    assert after["mcpServers"][SELF]["url"] == "http://127.0.0.1:8797/mcp"
     assert "command" not in after["mcpServers"][SELF]
     # Untouched neighbours — the invariants windows.py already guarantees.
     assert after["mcpServers"]["clickup"] == {"command": "npx", "args": ["clickup-mcp"]}
@@ -109,7 +115,7 @@ def test_install_codex_creates_config_when_absent(monkeypatch, tmp_path):
     assert result["status"] == "created"
     written = (tmp_path / "config.toml").read_text()
     assert f"[mcp_servers.{SELF}]" in written
-    assert 'url = "http://127.0.0.1:8787/mcp"' in written
+    assert 'url = "http://127.0.0.1:8797/mcp"' in written
     # Codex reads the secret from the environment, not from its config file.
     assert clients.CODEX_TOKEN_ENV_VAR in written
     assert "tok-abc" not in written
@@ -142,7 +148,7 @@ def test_install_codex_refuses_to_rewrite_an_existing_block(monkeypatch, tmp_pat
 
     assert result["status"] == "already_present"
     assert codex_config.read_text() == original      # untouched
-    assert "8787" in result["block"]                 # the replacement is offered
+    assert "8797" in result["block"]                 # the replacement is offered
 
 
 def test_windows_registry_round_trips_an_http_spec(monkeypatch, tmp_path):

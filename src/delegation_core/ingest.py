@@ -18,7 +18,7 @@ from datetime import datetime
 from pathlib import Path
 
 from .config import CONFIG_DIR
-from .embeddings import chunk_text
+from .embeddings import chunk_text, effective_chunk_chars
 from .vault import client_from_path
 
 logger = logging.getLogger("ingest")
@@ -111,6 +111,97 @@ def _remove_source_entry(source_key: str) -> bool:
         return False
 
 
+def fontes_do_indice(chroma_dir: Path) -> dict[str, dict[str, str]]:
+    """As fontes ingeridas que um indice guarda: {fonte: {arquivo: ingested_at}}.
+
+    Lido do `chroma.sqlite3` com o sqlite da biblioteca padrao, em modo so
+    leitura, e nao pelo chromadb. E o que permite ler um indice que trava ou
+    derruba quem o abre pelo chromadb (o defeito vive no HNSW e no runtime em
+    Rust, nao nas tabelas), e ler o indice vivo sem ser um segundo escritor
+    ao lado do daemon.
+
+    Cada linha externa carrega `source_folder`, `path` e `ingested_at`
+    (ver `ingest`), entao o indice sabe tudo o que o registro sabia, menos
+    `recursive` e `exclude`.
+    """
+    import sqlite3
+
+    banco = Path(chroma_dir) / "chroma.sqlite3"
+    if not banco.exists():
+        return {}
+    conexao = sqlite3.connect(f"file:{banco}?mode=ro", uri=True, timeout=30)
+    try:
+        linhas = conexao.execute(
+            "SELECT id, key, string_value FROM embedding_metadata "
+            "WHERE key IN ('source_folder', 'path', 'ingested_at', 'is_external')"
+        ).fetchall()
+    finally:
+        conexao.close()
+
+    por_linha: dict[int, dict[str, str]] = {}
+    for linha_id, chave, valor in linhas:
+        por_linha.setdefault(linha_id, {})[chave] = valor
+    fontes: dict[str, dict[str, str]] = {}
+    for meta in por_linha.values():
+        if str(meta.get("is_external", "")).lower() != "true":
+            continue
+        fonte, arquivo = meta.get("source_folder"), meta.get("path")
+        if not fonte or not arquivo:
+            continue
+        arquivos = fontes.setdefault(fonte, {})
+        # Um arquivo em chunks tem uma linha por chunk, todas com o mesmo
+        # ingested_at; o maior cobre o caso de reingestao parcial.
+        arquivos[arquivo] = max(arquivos.get(arquivo, ""), meta.get("ingested_at") or "")
+    return fontes
+
+
+def reconstruir_registro_do_indice(chroma_dir: Path, carimbar_arquivos: bool) -> dict:
+    """Devolve as fontes do indice em `chroma_dir` somadas ao registro atual.
+
+    Existe porque em 29/09/2026 um teste gravou por cima do registro real em
+    duas maquinas (ver tests/test_guarda_de_estado.py), e o registro e a unica
+    coisa que diz quais fontes reingerir. O indice diz a mesma coisa, e estava
+    intacto: a reconstrucao le a lista dele, sem restaurar backup nenhum.
+
+    Entradas que o registro ja tem ficam como estao: e nelas que moram
+    `recursive` e `exclude`, que o indice nao guarda. Fonte que so o indice
+    conhece entra com `recursive: True`, o padrao de `ingest`.
+
+    `carimbar_arquivos`: True quando `chroma_dir` e o indice que vai continuar
+    em uso. Cada arquivo presente que nao mudou desde o `ingested_at` recebe o
+    carimbo de mtime e tamanho, e o proximo `ingest` o pula; um arquivo que
+    mudou fica sem carimbo e e reembutido. False quando o indice esta em
+    quarentena: as linhas dele nao existem no indice novo, entao nenhum
+    carimbo pode dizer que existem.
+    """
+    registro = _load_registry()
+    fontes = fontes_do_indice(chroma_dir)
+    novas = 0
+    for fonte, arquivos in fontes.items():
+        entrada = registro.get(fonte)
+        if not isinstance(entrada, dict):
+            entrada = {"recursive": True, "exclude": None, "files": {},
+                       "reconstruido_do_indice": True}
+            registro[fonte] = entrada
+            novas += 1
+        if not carimbar_arquivos:
+            continue
+        carimbos = entrada.setdefault("files", {})
+        for arquivo, ingerido_em in arquivos.items():
+            if arquivo in carimbos:
+                continue
+            try:
+                st = Path(arquivo).stat()
+                momento = datetime.fromisoformat(ingerido_em).timestamp()
+            except (OSError, ValueError):
+                continue
+            if st.st_mtime <= momento:
+                carimbos[arquivo] = [st.st_mtime, st.st_size]
+    logger.info("Registro de ingestao reconstruido de %s: %d fontes no indice, %d novas",
+                chroma_dir, len(fontes), novas)
+    return registro
+
+
 def _paged_get(collection, limit: int = 5000, **kwargs) -> dict:
     """Safely get rows from ChromaDB in batches to prevent SQLite 'too many SQL variables'."""
     offset = 0
@@ -157,6 +248,32 @@ def is_excluded(path: Path, source: Path, patterns: list[str]) -> bool:
     return False
 
 
+def _configured_sources(cfg) -> list[dict]:
+    """Return only well-formed source entries from the user configuration."""
+    raw = getattr(cfg, "ingest_sources", [])
+    if not isinstance(raw, list):
+        return []
+    return [entry for entry in raw if isinstance(entry, dict) and str(entry.get("path", "")).strip()]
+
+
+def _has_source_policy(cfg) -> bool:
+    """A non-empty configured list is an allow-list even if an entry is malformed."""
+    raw = getattr(cfg, "ingest_sources", [])
+    return isinstance(raw, list) and bool(raw)
+
+
+def _merge_patterns(*groups) -> list[str]:
+    """Combine configured and per-run patterns without changing their order."""
+    merged = []
+    for group in groups:
+        if not isinstance(group, list):
+            continue
+        for pattern in group:
+            if isinstance(pattern, str) and pattern.strip() and pattern not in merged:
+                merged.append(pattern)
+    return merged
+
+
 class IngestManager:
     """Index external files into the vault's ChromaDB without touching them on disk.
 
@@ -168,6 +285,17 @@ class IngestManager:
     def __init__(self, vault_manager):
         self._vault = vault_manager
         self._cfg = vault_manager.cfg
+
+    def _configured_source_for(self, source: Path) -> dict | None:
+        """Find the configured source that exactly authorizes ``source``."""
+        for entry in _configured_sources(self._cfg):
+            try:
+                configured_path = Path(str(entry["path"])).expanduser().resolve()
+            except (OSError, ValueError):
+                continue
+            if configured_path == source:
+                return entry
+        return None
 
     def ingest(self, source_path: str, recursive: bool = True, force: bool = False,
                exclude: list[str] | None = None) -> dict:
@@ -192,13 +320,31 @@ class IngestManager:
         if not source.exists():
             return {"error": f"Path not found: {source_path}"}
 
+        configured = _has_source_policy(self._cfg)
+        configured_source = self._configured_source_for(source)
+        if configured and configured_source is None:
+            return {
+                "error": (
+                    f"Source is not configured: {source}. Add it to ingest_sources "
+                    "before ingesting it."
+                )
+            }
+        if configured_source is not None and not configured_source.get("enabled", True):
+            return {"error": f"Configured source is disabled: {configured_source.get('name') or source}"}
+
         candidates: list[Path]
         unsupported: Counter[str] = Counter()
 
-        patterns = [p for p in (exclude or []) if p]
+        patterns = _merge_patterns(
+            getattr(self._cfg, "ingest_exclude_patterns", []),
+            configured_source.get("exclude", []) if configured_source else [],
+            exclude or [],
+        )
         excluded: list[str] = []
 
         def _keep(f: Path) -> bool:
+            if f.name.startswith("~$"):
+                return False
             if is_excluded(f, source, patterns):
                 excluded.append(f.name)
                 return False
@@ -210,8 +356,28 @@ class IngestManager:
         if source.is_file():
             candidates = [source] if _keep(source) else []
         else:
-            pattern = "**/*" if recursive else "*"
-            candidates = [f for f in source.glob(pattern) if f.is_file() and _keep(f)]
+            candidates = []
+            if recursive:
+                # Prune excluded directories before visiting their children. A
+                # post-filter still has to enumerate every path in
+                # node_modules or a virtualenv, which defeats the operational
+                # point of configuring those directories in the first place.
+                for root, directories, filenames in os.walk(source):
+                    root_path = Path(root)
+                    kept_directories = []
+                    for directory in directories:
+                        candidate_dir = root_path / directory
+                        if is_excluded(candidate_dir, source, patterns):
+                            excluded.append(candidate_dir.relative_to(source).as_posix())
+                        else:
+                            kept_directories.append(directory)
+                    directories[:] = kept_directories
+                    for filename in filenames:
+                        candidate = root_path / filename
+                        if _keep(candidate):
+                            candidates.append(candidate)
+            else:
+                candidates = [f for f in source.iterdir() if f.is_file() and _keep(f)]
 
         indexed: list[str] = []
         skipped_empty: list[str] = []
@@ -221,8 +387,12 @@ class IngestManager:
         errors: list[str] = []
         now = datetime.now().isoformat()
 
-        max_chars = self._cfg.ingest_chunk_size
-        overlap   = self._cfg.ingest_chunk_overlap
+        max_chars = effective_chunk_chars(
+            self._cfg.bge_model,
+            self._cfg.ingest_chunk_size,
+            self._cfg.embed_max_seq_length,
+        )
+        overlap = self._cfg.ingest_chunk_overlap
 
         registry = _load_registry()
         source_key = str(source)
@@ -331,6 +501,8 @@ class IngestManager:
             "skipped_unchanged":  len(skipped_unchanged),
             "errors":             errors,
         }
+        if configured_source is not None:
+            result["configured_source"] = configured_source.get("name") or source_key
         if excluded:
             # Reported, not silent: a pattern that matches more than the caller
             # meant looks exactly like a folder with fewer files in it.
@@ -348,6 +520,36 @@ class IngestManager:
                     "documents only. Use graph_build() to make a codebase searchable."
                 )
         return result
+
+    def ingest_configured(self, name: str = "", force: bool = False) -> dict:
+        """Ingest one named configured source, or every enabled source when name is empty."""
+        configured = _configured_sources(self._cfg)
+        if not configured:
+            return {"error": "No ingest_sources are configured."}
+
+        selected = [entry for entry in configured if not name or entry.get("name") == name]
+        if name and not selected:
+            return {"error": f"Configured source not found: {name}"}
+
+        results = []
+        for entry in selected:
+            if not entry.get("enabled", True):
+                continue
+            result = self.ingest(
+                str(entry["path"]),
+                recursive=bool(entry.get("recursive", True)),
+                force=force,
+            )
+            result["name"] = entry.get("name") or str(entry["path"])
+            results.append(result)
+
+        return {
+            "sources": results,
+            "configured_count": len(results),
+            "indexed": sum(result.get("indexed", 0) for result in results),
+            "skipped": sum(result.get("skipped", 0) for result in results),
+            "errors": [result["error"] for result in results if "error" in result],
+        }
 
     def forget(self, source_path: str) -> dict:
         """Drop everything previously ingested from source_path.
@@ -410,7 +612,30 @@ class IngestManager:
             if not exists:
                 missing_sources.append(src)
             sources_status[src] = entry
-        res = {"sources": sources_status, "count": len(registry)}
+        configured_status = []
+        for entry in _configured_sources(self._cfg):
+            raw_path = str(entry["path"])
+            try:
+                path = Path(raw_path).expanduser().resolve()
+                exists = path.exists()
+                path_text = str(path)
+            except (OSError, ValueError):
+                exists = False
+                path_text = raw_path
+            configured_status.append({
+                "name": entry.get("name") or path_text,
+                "path": path_text,
+                "recursive": bool(entry.get("recursive", True)),
+                "enabled": bool(entry.get("enabled", True)),
+                "exists": exists,
+            })
+
+        res = {
+            "sources": sources_status,
+            "count": len(registry),
+            "configured_sources": configured_status,
+            "configured_source_count": len(configured_status),
+        }
         if missing_sources:
             res["missing_sources"] = missing_sources
             res["hint"] = "Some ingested source folders no longer exist on disk. Run ingest_forget(<source>) to clean them."

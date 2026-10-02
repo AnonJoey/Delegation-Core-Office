@@ -127,11 +127,15 @@ yourself — compress it first, then reason over the result.
 ---
 
 ### `vault_stats()`
-Returns note counts per folder and ChromaDB index size. Use to orient the user or
-confirm that a write was persisted.
+Returns physical Markdown-file counts, distinct indexed documents, and ChromaDB
+chunk rows. Use to orient the user or confirm that a write was persisted.
+
+`vault_markdown_files` counts files in the vault. `indexed_notes` counts distinct
+documents in the index (including external documents), while `indexed_rows` counts
+their searchable chunks.
 
 ```json
-→ { "indexed_notes": 247, "folder_counts": { "Decisions": 34, "Reference": 89, ... } }
+→ { "vault_markdown_files": 187, "indexed_notes": 247, "indexed_rows": 631, "folder_counts": { "Decisions": 34, "Reference": 89, ... } }
 ```
 
 ---
@@ -301,10 +305,14 @@ by `run_maintenance` for each processed folder.
 
 ---
 
-### `ingest_folder(source_path, recursive=True)`
+### `ingest_folder(source_path, recursive=True, exclude=None)`
 Index an external directory into ChromaDB **without moving files**.
 Use to make an existing folder (project directory, external vault, document archive)
 searchable via `search_vault`. The source folder is not modified.
+
+When `ingest_sources` is configured, `source_path` must exactly match an enabled
+declared source. Global and source-specific exclusion patterns are applied automatically;
+`exclude` adds more patterns for this call.
 
 ```json
 → { "status": "ok", "indexed": 47, "skipped": 3, "errors": [] }
@@ -314,8 +322,16 @@ Use `ingest_folder_bg` for large directories to avoid blocking the conversation.
 
 ---
 
+### `ingest_configured(name="", force=False)`
+Run declarative ingestion from `config.json`. Pass a configured source name, or omit
+`name` to ingest every enabled source. Use this for recurring/shared sources so the path,
+recursion and exclusion policy are not re-entered ad hoc.
+
+---
+
 ### `ingest_status()`
-Check the status of the most recent ingest job.
+Show the external-ingestion registry and the currently declared sources, including whether
+each configured path exists. It does not start or resume an ingestion.
 
 ```json
 → { "status": "done", "indexed": 47, "skipped": 3, "errors": [] }
@@ -343,6 +359,12 @@ Use for large directories where you don't want to block the conversation.
 → { "job_id": "c5a1f3d2", "status": "running",
     "message": "Ingest started. Call task_status(job_id) to check progress." }
 ```
+
+---
+
+### `ingest_configured_bg(name="", force=False)`
+Start one configured source, or all enabled configured sources, in the background. Poll the
+returned `job_id` with `task_status`.
 
 ---
 
@@ -444,6 +466,7 @@ Apply these without exception when delegation-core is online.
 | User wants to cross-link an existing vault folder (large) | `relink_folder_bg` → poll `task_status` |
 | User has an external folder to make searchable (small) | `ingest_folder` |
 | User has an external folder to make searchable (large) | `ingest_folder_bg` → poll `task_status` |
+| User has a recurring/shared external source | configure it, then `ingest_configured` |
 | `heartbeat().vault_health.needs_repair > 5` | `run_maintenance_bg()` — heal pass runs automatically |
 
 ### Never do yourself
@@ -702,6 +725,7 @@ Avoid vague titles like "Meeting notes" or "Research". Use specific titles like
 | Error | Action |
 |-------|--------|
 | `heartbeat` returns `degraded` | Warn user: "The local AI engine is starting up — first tool call may take up to 90 seconds." Then retry. |
+| `heartbeat` carries `index_recovery` | The index crashed whoever opened it and was set aside (renamed, never deleted). The daemon is rebuilding it from the vault and every ingest source; search fills in as it goes. Tell the user, and do not run `reindex --force` or restore a backup over it. `delegation-core recover-index` does the same by hand, with the daemon stopped. |
 | `search_vault` returns no results | Proceed without vault context. Do not invent vault content. |
 | `write_note` returns invalid folder error | Call `heartbeat()` to get valid folder list, retry with correct folder. |
 | `compress` times out | The model is under load. Wait 30 seconds and retry once. |
