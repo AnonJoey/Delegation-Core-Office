@@ -127,6 +127,8 @@ class VaultManager:
         self.collection = None
         self.ef = None
         self._initialized = False
+        #: Ultima falha ao subir BGE/ChromaDB, ou None. Lida pelo heartbeat.
+        self.init_error: str | None = None
         self._init_lock = threading.Lock()
         self._client = None
         self._disk_state: tuple | None = None
@@ -242,8 +244,13 @@ class VaultManager:
                     metadata={"hnsw:space": "cosine"},
                 )
             except Exception as e:
-                logger.error("ChromaDB/BGE init failed: %s — vault will retry on next call", e)
+                # Guardado para o heartbeat: sem isto o servidor dizia "healthy"
+                # com a busca fora do ar, e o erro so existia no log.
+                self.init_error = str(e)
+                logger.error("ChromaDB/BGE init failed: %s; vault will retry on next call",
+                             e, exc_info=True)
                 return  # do NOT set _initialized; leave it False so _ensure_ready() retries
+            self.init_error = None
             # Taken after the open: a write landing mid-open shows up next call.
             self._disk_state = self._read_disk_state()
             self._initialized = True  # only reached on successful init
