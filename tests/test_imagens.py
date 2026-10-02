@@ -23,6 +23,12 @@ TESSDATA = os.environ.get("DC_TESSDATA_TESTE", "")
     ("Screenshot_20260923_225121.png", "2026-09-23T22:51"),
     ("Screenshot from 2026-09-23 22-51-21.png", "2026-09-23T22:51"),
     ("Captura de tela 2026-09-01 18.45.44.png", "2026-09-01T18:45"),
+    # WhatsApp e captura do macOS: "at", hora de 12h com AM/PM. As imagens do
+    # Saad chegam assim, e sem o padrao a data caia para o mtime (02/10/2026).
+    ("WhatsApp Image 2026-09-30 at 10.48.55 AM.jpeg", "2026-09-30T10:48"),
+    ("WhatsApp Image 2026-10-02 at 12.05.00 PM.jpeg", "2026-10-02T12:05"),
+    ("Screenshot 2026-10-02 at 11.22.20 PM.png", "2026-10-02T23:22"),
+    ("Screenshot 2026-10-02 at 12.10.04 AM.png", "2026-10-02T00:10"),
     ("Screenshot_20261399_225121.png", None),
     ("foto qualquer.png", None),
 ])
@@ -128,3 +134,29 @@ def test_markdown_tem_texto():
     from delegation_core.imagens import markdown_tem_texto
     assert markdown_tem_texto("# x\n\n## Texto na imagem (OCR)\n\nalgo\n")
     assert not markdown_tem_texto(para_markdown({"nome": "x", "data": "d", "texto": "", "ocr_motivo": "m"}))
+
+
+def test_cli_ocr_setup_sem_tesseract_nao_quebra(monkeypatch):
+    """Portado do fork (test_escopos.py): `console` nao existia no modulo."""
+    import shutil
+    from types import SimpleNamespace
+    from delegation_core import cli
+    monkeypatch.setattr(shutil, "which", lambda n: None)
+    assert cli.cmd_ocr_setup(SimpleNamespace(langs="por", force=False)) == 1
+
+
+def test_cli_ocr_setup_baixa_e_termina_sem_quebrar(monkeypatch, tmp_path):
+    """Medido em 02/10/2026 ao trazer o OCR do fork para o master: o download
+    do primeiro idioma acontecia e o comando morria com NameError ao imprimir o
+    tamanho. O teste do fork so cobria o caminho sem tesseract."""
+    import shutil
+    import urllib.request
+    from types import SimpleNamespace
+    from delegation_core import cli, config
+    monkeypatch.setattr(shutil, "which", lambda n: "/usr/bin/tesseract")
+    monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(urllib.request, "urlretrieve",
+                        lambda url, alvo: (Path(alvo).write_bytes(b"x" * 2048), None))
+    assert cli.cmd_ocr_setup(SimpleNamespace(langs="por,eng", force=False)) == 0
+    assert (tmp_path / "tessdata" / "por.traineddata").exists()
+    assert (tmp_path / "tessdata" / "eng.traineddata").exists()

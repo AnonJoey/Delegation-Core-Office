@@ -489,7 +489,14 @@ def cmd_ocr_setup(args):
     """
     import shutil
     import urllib.request
-    from .config import CONFIG_DIR
+    from rich.console import Console
+    from . import config
+
+    # Cada comando deste modulo cria o proprio Console. O fork tinha um global;
+    # trazido para o master sem ele, o download acontecia e o comando morria
+    # com NameError ao imprimir (medido em 02/10/2026).
+    console = Console()
+    CONFIG_DIR = config.CONFIG_DIR
 
     if not shutil.which("tesseract"):
         console.print("[red]tesseract nao esta instalado.[/red] Instale o pacote do sistema (ex.: pacman -S tesseract).")

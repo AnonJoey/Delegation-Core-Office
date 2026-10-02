@@ -53,7 +53,19 @@ _NOME_CAPTURA = [
 ]
 
 
+# WhatsApp e captura do macOS: "2026-09-30 at 10.48.55 AM", hora de 12h.
+_NOME_12H = re.compile(r"(\d{4})-(\d{2})-(\d{2}) at (\d{1,2})\.(\d{2})\.(\d{2})\s?(AM|PM)", re.IGNORECASE)
+
+
 def data_da_captura(nome: str) -> str | None:
+    m = _NOME_12H.search(nome)
+    if m:
+        a, mes, d, h, mi, s, ampm = m.groups()
+        h = int(h) % 12 + (12 if ampm.upper() == "PM" else 0)
+        try:
+            return datetime(int(a), int(mes), int(d), h, int(mi), int(s)).isoformat(timespec="minutes")
+        except ValueError:
+            return None
     for rx in _NOME_CAPTURA:
         m = rx.search(nome)
         if m:
