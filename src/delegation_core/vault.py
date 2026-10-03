@@ -61,6 +61,7 @@ from .notes import (  # noqa: F401
     _countable_wikilinks,
     _DATE_PREFIX_RE,
     _EXTRA_CHUNK_SUFFIX_RE,
+    _frontmatter_parses,
     _INVALID_FILENAME_CHARS,
     _LEADING_FRONTMATTER_RE,
     _merge_alias,
@@ -86,39 +87,6 @@ same VaultManager and ChromaDB collection as the main event loop. ChromaDB's
 embedded client is not thread-safe for concurrent writes. This lock serialises
 index_note() calls across both paths.
 """
-
-
-def _frontmatter_parses(content: str) -> bool:
-    """Does this note's frontmatter block survive a real YAML parser?
-
-    True for a note with no frontmatter at all: an absent block is not a broken
-    one, and counting it would invent a defect in every plain note.
-
-    PyYAML is a declared dependency of this package (pyproject: pyyaml>=6.0) and
-    already imported lazily by sidecar.py and graph/manifest_ingest.py, so this
-    adds no new requirement. Imported inside the function for the same reason
-    they do it: the health scan is the only caller and it is not on the import
-    path of the daemon's startup.
-    """
-    if not content.startswith("---"):
-        return True
-    # The same regex compose_note uses to find a caller's block, so "what counts
-    # as frontmatter" has one definition here and is not re-guessed.
-    m = _LEADING_FRONTMATTER_RE.match(content)
-    if m is None:
-        # Opens a block and never closes it. Not something YAML can be asked
-        # about, and not something to report as a parse failure either: the
-        # existing `truncated` metric is what covers a note cut off mid-write.
-        return True
-    try:
-        import yaml
-    except ImportError:      # pragma: no cover - declared dependency
-        return True
-    try:
-        yaml.safe_load(m.group(1))
-    except Exception:
-        return False
-    return True
 
 
 class VaultManager:
