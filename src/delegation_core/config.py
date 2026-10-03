@@ -589,3 +589,26 @@ def with_lang(system: str, cfg) -> str:
     if not frase:
         return system
     return f"{system.rstrip()} {frase}"
+
+
+#: Trechos de caminho que denunciam uma pasta sincronizada por cliente de nuvem.
+#: Comparados em minusculas contra cada parte do caminho.
+_MARCAS_DE_NUVEM = (
+    "onedrive",            # "OneDrive", "OneDrive - Empresa"
+    "mobile documents",    # iCloud Drive no macOS
+    "icloud drive",
+    "dropbox",
+    "google drive",
+    "googledrive",
+    "cloudstorage",        # ~/Library/CloudStorage, onde o macOS monta todos
+)
+
+
+def em_pasta_sincronizada(caminho: Path) -> bool:
+    partes = [p.lower() for p in Path(caminho).expanduser().parts]
+    return any(marca in parte for parte in partes for marca in _MARCAS_DE_NUVEM)
+
+
+def caminho_local_do_indice() -> Path:
+    """Onde o indice mora quando nao pode morar dentro do vault."""
+    return Path(CONFIG_DIR) / "indice"
