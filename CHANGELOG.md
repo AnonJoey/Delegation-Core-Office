@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to the Delegation Core project (v0.1.0 to v0.13.0 / v13) are documented in this file.
+All notable changes to the Delegation-Core Office project (v0.1.0 to v0.13.0 / v13) are documented in this file.
 This changelog is derived directly from the canonical versioning recorded across the codebase and vault archives.
 
 ---

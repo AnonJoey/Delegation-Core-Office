@@ -35,8 +35,9 @@ overwrite another deployment's entry.
 
 **Runtime source transition.** The previous runtime resolved to
 `Delegation-Core-Office` through its installation metadata. It was reinstalled
-from the official `Delegation-Core` checkout on the same day; the active runtime
-now resolves to that checkout. The service was reinstalled and an authenticated
+the same day from a local checkout of `WBomfim/Delegation-Core`, a fork of
+`AnonJoey/Delegation-Core-Office`; the active runtime now resolves to that
+checkout. The service was reinstalled and an authenticated
 MCP initialization returned HTTP 200 on `127.0.0.1:8787`.
 
 **Rollback.** Reinstall the previously validated checkout and restart the
