@@ -1103,7 +1103,6 @@ async def search_web(query: str, num_results: int = 5, use_local: bool = False) 
 
 # ── fire-and-forget ───────────────────────────────────────────────────────────
 
-@mcp.tool()
 async def _bg_maintenance_wrapper() -> dict:
     """Runs _full_maintenance_cycle with a fresh DelegationEngine for the background thread.
 
