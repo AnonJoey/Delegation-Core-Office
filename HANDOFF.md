@@ -1,6 +1,6 @@
 # delegation-core: Project Handoff
 
-_Last updated: 2026-10-03 (core v0.14.0). The sections "What this is", "Repos and
+_Last updated: 2026-10-03 (core v0.15.0). The sections "What this is", "Repos and
 remotes", "Current state" and "Architecture notes" were re-verified on that date
 against the working tree and the running daemon. Older sections say their own date._
 
@@ -38,12 +38,17 @@ repeating a number here. `docs/MAPA.md` is the structural map.
   redirects every state path so a run cannot touch `~/.delegation_core`. Check the
   exit code of pytest itself, not of a pipe after it.
 - **Static analysis is part of the suite.** `tests/test_analise_estatica.py` runs ruff
-  (pyflakes and syntax errors) over `src/` and `hooks/`; `pip install -e .[dev]` brings
+  (pyflakes and syntax errors) over `src/`, hooks included; `pip install -e .[dev]` brings
   ruff, and without it the test is skipped. It exists because an undefined `{_lang}`
   broke local `compress` for a month with every test green.
-- **CI builds the dashboard only** (`.github/workflows/build-dashboard.yml`, on
-  `dashboard-v*` tags or by hand). No workflow runs the Python tests; run them locally
-  before a PR.
+- **CI runs the suite on every push and PR to `master`**, on Linux, Windows and
+  macOS (`.github/workflows/testes.yml`). Its first Windows run found 35 failures,
+  most of them real Windows defects (backslash note paths); keep all three green.
+  The dashboard build (`build-dashboard.yml`) still runs only on `dashboard-v*`
+  tags or by hand.
+- **Session hooks run from the package.** `delegation-core-hook session-start` and
+  `session-end`, registered in `~/.claude/settings.json` by the installer. Nothing
+  is copied to `~/.delegation_core/hooks/` any more.
 - **Local install on this machine:** editable install in `~/.delegation_core/venv`,
   daemon as the `delegation-core.service` systemd user unit, dashboard installed as an
   application (`~/.local/share/applications/delegation-core-dashboard.desktop`).

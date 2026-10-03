@@ -89,7 +89,9 @@ processo. A CLI que escreve no índice entrega o trabalho ao daemon
   agente e híbrido.
 - `localqueue.py` e `localworker.py`: a fila de tarefas para o modelo local,
   com um consumidor.
-- `gpu.py`: exclusão mútua entre BGE e modelo local na mesma placa.
+- `gpu.py`: exclusão mútua entre BGE e modelo local na mesma placa. Só entra em
+  jogo para quem está na GPU: `embed_device` e `llama_device` dizem onde cada
+  um roda, e o `doctor` avisa quando os dois vão disputar a placa.
 - `jobs.py`: jobs em segundo plano com tempo típico pelo histórico.
 - `tracker.py`: processos persistentes entre sessões.
 
@@ -103,9 +105,14 @@ processo. A CLI que escreve no índice entrega o trabalho ao daemon
 - `installer.py`, `wizard.py`, `service.py`, `clients.py`, `windows.py`,
   `doctor.py`, `downloader.py` e `config.py`.
 
+**Hooks de sessão do Claude Code** (`hooks/`, dentro do pacote)
+- `entrada.py`: o comando `delegation-core-hook`, um processo por evento. O
+  instalador o registra no `~/.claude/settings.json`.
+- `session_start_brief.py`: resumo do que mudou no vault, no início da sessão.
+- `session_export.py` e `llama_session_stop.py`: no fim da sessão, em sequência,
+  a transcrição com segredos redigidos e a parada do modelo local ocioso.
+
 **Fora do pacote**
-- `hooks/`: início de sessão (resumo do que mudou), fim de sessão (transcrição
-  com segredos redigidos) e parada do modelo local ocioso.
 - `dashboard/`: a casca Tauri e a interface.
 - `skills/`: skills da Anthropic distribuídas junto.
 
@@ -128,7 +135,7 @@ voltar. Na prática:
 - Nenhum teste escreve em `~/.delegation_core` (`tests/conftest.py`, autouse).
   Existe porque um teste sobrescreveu o `config.json` real e derrubou o daemon.
 - Nenhum ciclo de import no núcleo (`test_sem_ciclos_de_import.py`).
-- Análise estática limpa no núcleo e nos hooks, com pyflakes e erro de sintaxe
+- Análise estática limpa no núcleo, hooks incluídos, com pyflakes e erro de sintaxe
   (`test_analise_estatica.py`). Pegaria o `{_lang}` que deixou o `compress`
   local quebrado por um mês.
 - Nenhuma função interna (nome com `_`) publicada como ferramenta MCP

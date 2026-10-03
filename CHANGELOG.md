@@ -1,9 +1,25 @@
 # Changelog
 
-All notable changes to the Delegation-Core Office project (v0.1.0 to v0.14.0) are documented in this file.
+All notable changes to the Delegation-Core Office project (v0.1.0 to v0.15.0) are documented in this file.
 This changelog is derived directly from the canonical versioning recorded across the codebase and vault archives.
 
 ---
+
+## v0.15.0 (2026-10-03) - CI nas tres plataformas, Windows correto, modelos por dispositivo e hooks no pacote
+
+### Fixed
+- **Caminho de nota com barra invertida no Windows** (PR 17). `str(p.relative_to(vault))` usa o separador do sistema: o vault gravava o carimbo como `Notes\a.md` e procurava `Notes/a.md`, reindexando a toa, e `create_note` devolvia caminho com barra invertida. Os 30 pontos que viram id, carimbo ou resposta de ferramenta usam `.as_posix()`. Linha antiga com barra invertida no id e varrida como orfa no reindex, para nao duplicar a busca; o primeiro reindex depois da atualizacao reembute o vault uma vez no Windows.
+- **Trava do rebuild de grafo nunca ficava obsoleta no Windows** (PR 17). A vivacidade do PID vem do `psutil` nas tres plataformas; `os.kill(pid, 0)` no Windows encerra o processo em vez de consultar.
+- **BGE na CPU derrubava o modelo local** (PR 19). O vault pedia a placa (`gpu.take("embeddings")`) a cada abertura ou reabertura do indice, mesmo com `embed_device: cpu`, e o pedido parava o llama-server. A reabertura acontece sempre que outro processo escreve no indice. Agora so pede a placa quem vai carregar o BGE na CUDA.
+
+### Added
+- **CI** (PR 17): a suite e a analise estatica rodam em todo push e PR para o `master`, em Linux, Windows e macOS.
+- **`llama_device`** (`auto`, `gpu`, `cpu`), ao lado do `embed_device` (PR 19). `cpu` usa zero camadas na GPU e esconde a placa so do processo do modelo; `gpu` e `auto` nunca herdam um `CUDA_VISIBLE_DEVICES` vazio do daemon. O `heartbeat` mostra `dispositivos`, o `doctor` ganha o check `devices`, e a rota de config do dashboard aceita os dois campos.
+- **`delegation-core-hook`**: os hooks de sessao rodam de dentro do pacote, um processo por evento (`session-start`, `session-end`). O fim de sessao le a entrada uma vez e faz o export e a parada do modelo em sequencia; um passo que falha nao impede o outro. O instalador registra os comandos no `~/.claude/settings.json` (troca os registros antigos, preserva os de terceiros, faz backup) e o uninstall os tira.
+
+### Changed
+- **Hooks nao sao mais copiados** para `~/.delegation_core/hooks/`; as copias antigas sao apagadas depois que o registro novo e gravado. O `doctor` troca `hook_drift` por `hooks`, que confere o registro.
+- **Repositorio sem nomes da equipe** (PR 18): implantacoes viram "field deployment A, B, C, D" em comentarios, docstrings, testes e no DEPLOYMENT_LOG. Incorpora o conteudo do PR 5.
 
 ## v0.14.0 (2026-10-03) - Compress local de volta, Windows legivel, imagens no vault e um nucleo sem ciclos
 
