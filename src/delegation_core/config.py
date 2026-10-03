@@ -139,11 +139,11 @@ class Config:
 
     # ── v0.2: hardware budget mode ───────────────────────────────────────────
     # "cpu": applies strict token caps to stay within the 120s MCP timeout on
-    #        CPU-only machines (SAAD deployment pattern).
+    #        CPU-only machines (field deployment A pattern).
     # "normal": no additional caps beyond max_tokens.
     budget_mode: str = "normal"
 
-    # ── v0.2: external ingestion (ABNER) ─────────────────────────────────────
+    # ── v0.2: external ingestion (field deployment C) ─────────────────────────────────────
     ingest_chunk_size: int = 3072
     ingest_chunk_overlap: int = 200
 

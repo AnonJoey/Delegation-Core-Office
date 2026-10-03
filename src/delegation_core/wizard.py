@@ -420,7 +420,7 @@ def _step_features() -> tuple[bool, str, str]:
         console.print("  [bold]Synthesis language[/bold]")
         lang_choice = _menu("Choose the language for synthesised notes:", [
             "English (default)",
-            "Portuguese (Brazilian) (prompts from the MAURICIO deployment)",
+            "Portuguese (Brazilian)",
         ])
         synthesis_lang = "pt" if lang_choice == 1 else "en"
         console.print()

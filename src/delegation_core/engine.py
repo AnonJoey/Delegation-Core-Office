@@ -3,7 +3,7 @@ engine.py — DelegationEngine: manages the llama.cpp subprocess and inference.
 
 v0.2: budget_mode awareness — when cfg.is_cpu_budget, hard caps are applied to
 max_tokens in invoke() so the server stays within the 120s MCP client timeout
-on CPU-only hardware (SAAD deployment pattern).
+on CPU-only hardware (field deployment A pattern).
 
 v0.4: async inference via httpx.AsyncClient. Subprocess management (startup
 health polling, _start) remains sync and runs in a thread executor when called

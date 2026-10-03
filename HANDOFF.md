@@ -28,8 +28,7 @@ repeating a number here. `docs/MAPA.md` is the structural map.
 - `fork` → the local clone `~/Projects/delegation-core-TEST`, a test fork whose `main`
   carries an unmerged "enrichment" line of work (see its `MERGE-ENRIQUECIMENTO.md`).
   It diverged before PRs 7 to 15 and no longer merges cleanly.
-- Team members contribute through their own forks (e.g. `WBomfim/Delegation-Core`)
-  and pull requests.
+- Team members contribute through their own forks and pull requests.
 
 ## Current state (all verified, not assumed)
 

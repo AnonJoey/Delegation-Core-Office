@@ -13,9 +13,11 @@ This changelog is derived directly from the canonical versioning recorded across
 - **Titulo das transcricoes brutas** vem da primeira fala real, e nao da marcacao `<local-command-caveat>` do Claude Code (40 de 75 tinham esse titulo).
 - **`_bg_maintenance_wrapper` deixou de ser ferramenta MCP.** Era a funcao interna da manutencao em segundo plano; aparecia na lista servida e podia ser chamada fora do job. O servidor publica 55 ferramentas.
 - **O servico gerado apontava `Documentation=` para um repositorio inexistente** (`Grimstone-Solutions/delegation-core`); aponta para `AnonJoey/Delegation-Core-Office`.
+- **Inicializacao no Windows** (PR 3, 29/09): o atalho da pasta Inicializar foi recriado para chamar o Python do venv em vez do executavel bloqueado; os testes de definicao de servico escolhem o comportamento da plataforma; as metricas de inicio distinguem arquivos Markdown, documentos indexados e trechos do ChromaDB; a permissao do `config.json` e gravada por caminho compativel com o Windows.
 - **`engine` encadeia a causa** no `RuntimeError` depois das tentativas (`raise ... from e`).
 
 ### Added
+- **Ingestao declarativa** (PR 2, 29/09): `ingest_sources` e padroes de exclusao configuram as fontes externas recorrentes, com ajustes por fonte e exclusoes seguras antes de ingerir; guia em `docs/INGEST_CONFIGURATION.md`.
 - **Imagem vira nota buscavel** (PR 15): data por EXIF, pelo nome da captura ou mtime; dimensoes, camera e GPS; OCR com tesseract. O extrator aceita png, jpg, webp, gif, bmp e tiff. `delegation-core ocr-setup` baixa `por` e `eng` para `~/.delegation_core/tessdata`. Icone pequeno nao passa pelo OCR e imagem sem texto nao e indexada pelo `ingest_folder`.
 - **Analise estatica na suite** (`test_analise_estatica.py`): ruff com pyflakes e erro de sintaxe no nucleo e nos hooks. `ruff` entra no extra `[dev]`.
 - **Testes de estrutura:** nenhum ciclo de import no nucleo, nenhuma funcao interna publicada como ferramenta, so o `engine` chama `/v1/chat/completions`, e a deriva de contagem de ferramentas agora tambem e conferida em `docs/`.

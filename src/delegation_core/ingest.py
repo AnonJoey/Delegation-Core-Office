@@ -1,5 +1,5 @@
 """
-ingest.py : External folder ingestion (ABNER).
+ingest.py : External folder ingestion (field deployment C).
 
 Index files from any path without moving or modifying them.
 Uses embeddings.chunk_text for long documents and persists an ingestion registry

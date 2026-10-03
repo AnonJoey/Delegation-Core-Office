@@ -5,11 +5,11 @@ A sidecar is a `<stem>.meta.yaml` file dropped alongside a main inbox file.
 It can carry routing hints and content metadata that bypass the LLM classifier
 and enrich the synthesis prompt.
 
-Introduced in the MAURICIO deployment.
+Introduced in the field deployment B.
 
 Supported sidecar keys:
   folder_hint   vault folder path to route to (bypasses classifier)
-  no_merge      true → never merge this file into an existing note (SAAD, ported from 0.1.0)
+  no_merge      true → never merge this file into an existing note (field deployment A, ported from 0.1.0)
   type          document type hint for synthesis (meeting, research, decision, …)
   client        client/project name injected into the note frontmatter
   topics        list of topic tags
