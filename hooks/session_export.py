@@ -239,6 +239,29 @@ def _redigir(texto):
     return texto, total
 
 
+_TAG = re.compile(r"<[^>]{1,80}>")
+
+
+def _topic(messages: list[dict]) -> str:
+    """The first real line a person typed, without Claude Code's markup.
+
+    Measured 27/09/2026: 40 of 75 raw transcripts were titled
+    "<local-command-caveat>Caveat: The messages below...", the tag Claude Code
+    puts before a local command, because that was the first "user" message.
+    """
+    for m in messages:
+        if m.get("role") != "user":
+            continue
+        texto = (m.get("text") or "").strip()
+        if not texto or texto.startswith("<"):
+            continue
+        linha = next((l.strip() for l in texto.splitlines() if l.strip()), "")
+        linha = re.sub(r"\s+", " ", _TAG.sub(" ", linha)).strip()
+        if linha:
+            return linha[:60]
+    return "Session"
+
+
 def _format_markdown(
     messages: list[dict], session_id: str, cwd: str, segredos_removidos: int = 0,
 ) -> str:
@@ -246,10 +269,7 @@ def _format_markdown(
     time_str = datetime.now().strftime("%H:%M")
     short_id = session_id[:8]
 
-    # Build a rough title from the first user message
-    first_user = next((m for m in messages if m["role"] == "user"), None)
-    topic = first_user["text"][:80].split("\n")[0].strip() if first_user else "Session"
-    topic = topic[:60]
+    topic = _topic(messages)
 
     lines = [
         "---",
