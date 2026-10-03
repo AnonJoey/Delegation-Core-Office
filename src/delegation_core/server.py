@@ -607,6 +607,15 @@ def vault_stats() -> str:
     return json.dumps(_vault.get_stats())
 
 
+
+def _dispositivos(cfg) -> dict:
+    """Onde cada modelo foi configurado para rodar. O valor de config, e nao o
+    resolvido: resolver "auto" importa o torch, caro demais para o heartbeat."""
+    from .engine import llama_device
+    return {"embeddings": (getattr(cfg, "embed_device", "auto") or "auto").strip().lower(),
+            "modelo_local": llama_device(cfg)}
+
+
 @mcp.tool()
 async def heartbeat(force: bool = False) -> str:
     """
@@ -657,6 +666,7 @@ async def heartbeat(force: bool = False) -> str:
                         if erro_embeddings else {"status": "ok"}),
         "timestamp":   datetime.now().isoformat(),
         "engine_mode": cfg.engine_mode,
+        "dispositivos": _dispositivos(cfg),
         "llama_cpp":   llama_state,
         "llama_url":   cfg.llama_url,
         "vault":       stats,

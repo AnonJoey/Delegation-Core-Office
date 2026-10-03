@@ -113,6 +113,11 @@ class Config:
     llama_port: int = 8181
     llama_ctx: int = 4096
     llama_ngl: int = 999   # GPU layers to offload (999 = all)
+    #: Onde o modelo local roda, separado de onde roda o BGE (`embed_device`).
+    #: "auto": o llama.cpp decide pelas camadas de `llama_ngl` e pela VRAM livre.
+    #: "gpu": igual, e o processo do modelo nunca herda uma placa escondida.
+    #: "cpu": zero camadas na GPU, e a placa escondida so do processo do modelo.
+    llama_device: str = "auto"
     #: Let a reasoning model spend the token budget on its private thought
     #: channel. Off, because leaving it on fails silently: the model writes
     #: into `reasoning_content` first and only then into `content`, so a

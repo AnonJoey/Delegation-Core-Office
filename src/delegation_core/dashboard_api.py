@@ -83,6 +83,10 @@ from . import notewriter as _notewriter
 
 logger = logging.getLogger("dashboard_api")
 
+#: Valores que a rota de config aceita para `llama_device` (iguais a engine.LLAMA_DEVICES,
+#: repetidos aqui para a API nao importar o engine).
+DISPOSITIVOS_DO_MODELO = ("auto", "gpu", "cpu")
+
 _cfg = None     # set once in run() or serve_in_process() — Config
 _vault = None   # set once in run() — VaultManager, shared across every request.
                 # A fresh VaultManager per request (the original version of this
@@ -672,6 +676,16 @@ class _Handler(BaseHTTPRequestHandler):
                 _cfg.llama_ctx = int(data["llama_ctx"])
             except (ValueError, TypeError):
                 pass
+
+        if "llama_device" in data:
+            valor = str(data["llama_device"]).strip().lower()
+            if valor in DISPOSITIVOS_DO_MODELO:
+                _cfg.llama_device = valor
+
+        if "embed_device" in data:
+            valor = str(data["embed_device"]).strip().lower()
+            if valor in ("auto", "cpu", "cuda", "mps"):
+                _cfg.embed_device = valor
 
         if "llama_ngl" in data:
             try:
