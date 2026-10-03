@@ -30,7 +30,6 @@ v0.12 improvements:
 
 import json
 import logging
-import os
 import re
 import threading
 from datetime import datetime
@@ -45,7 +44,6 @@ from .embeddings import (
     make_bge_embedding_function,
     profile_for,
 )
-from .linker import frontmatter_aliases
 
 logger = logging.getLogger("vault")
 
@@ -62,6 +60,7 @@ from .notes import (  # noqa: F401
     _DATE_PREFIX_RE,
     _EXTRA_CHUNK_SUFFIX_RE,
     _frontmatter_parses,
+    frontmatter_aliases,
     _INVALID_FILENAME_CHARS,
     _LEADING_FRONTMATTER_RE,
     _merge_alias,
@@ -87,6 +86,13 @@ same VaultManager and ChromaDB collection as the main event loop. ChromaDB's
 embedded client is not thread-safe for concurrent writes. This lock serialises
 index_note() calls across both paths.
 """
+
+
+def _load_registry_for_links() -> dict:
+    """O registro de ingestao, numa funcao propria para o teste poder troca-lo
+    sem tocar em disco. Import tardio: o `ingest` nao precisa carregar junto."""
+    from .ingest import _load_registry
+    return _load_registry()
 
 
 class VaultManager:
@@ -1431,7 +1437,13 @@ class VaultManager:
         # apontam para algo que search_vault(scope='external') acha. Saem em
         # balde proprio, como os marcadores de pasta, para a contagem dizer
         # de que tipo e cada link em vez de esconder a diferenca.
-        ingested = ingested_link_stems()
+        try:
+            registro = _load_registry_for_links()
+        except Exception:
+            # O registro de OUTRO subsistema corrompido nao derruba a checagem:
+            # sem ele, link para fonte ingerida volta a contar como quebrado.
+            registro = {}
+        ingested = ingested_link_stems(registro)
         total = needs_repair = truncated = orphans = broken_links = 0
         malformed_frontmatter = 0
         malformed_notes: list[dict] = []

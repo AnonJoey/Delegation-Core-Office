@@ -9,7 +9,7 @@ nove modulos pedem `safe_filename`, `yaml_quote_scalar`, `compose_note` ou
 `client_from_path` a `vault`, e nenhum deles quer o VaultManager junto.
 
 O corte e onde as dependencias mudam. Tudo aqui depende so da biblioteca
-padrao mais `linker.frontmatter_aliases`; nada aqui importa chromadb,
+padrao; nada aqui importa chromadb,
 embeddings ou gpu. E por isso que o bloco sai inteiro sem tocar em nenhuma
 linha do que ficou.
 
@@ -27,10 +27,9 @@ import os
 import re
 import threading
 import unicodedata
-from pathlib import Path, PurePosixPath, PureWindowsPath
+from pathlib import Path, PurePosixPath
 
 from . import locking
-from .linker import frontmatter_aliases
 
 logger = logging.getLogger("notes")
 
@@ -357,6 +356,34 @@ def yaml_unquote_scalar(value: str) -> str:
 _LEADING_FRONTMATTER_RE = re.compile(r"^---\n(.*?)\n---\n", re.DOTALL)
 
 
+def frontmatter_aliases(content: str) -> set:
+    """Return the set of Obsidian `aliases:` declared in a note's frontmatter.
+    Supports both block-list and inline `[a, b]` forms. Empty set if none."""
+    if not content.startswith("---\n"):
+        return set()
+    close = content.find("\n---\n", 4)
+    if close == -1:
+        return set()
+    fm = content[4:close]
+    # [^\S\n]* = horizontal whitespace only, so it never crosses the newline into
+    # the first block-list item (the bug that swallowed `- item` into group 1).
+    m = re.search(r"^aliases:[^\S\n]*(.*)$", fm, re.MULTILINE)
+    if not m:
+        return set()
+    out: set = set()
+    inline = m.group(1).strip()
+    if inline.startswith("["):                       # aliases: [a, b]
+        out |= {x.strip().strip('"').strip("'") for x in inline[1:-1].split(",")}
+    else:                                            # block list under aliases:
+        for line in fm[m.end():].splitlines():
+            lm = re.match(r"[^\S\n]*-\s+(.*\S)", line)
+            if lm:
+                out.add(lm.group(1).strip().strip('"').strip("'"))
+            elif line.strip() and not line[:1].isspace():
+                break                                # next top-level key → stop
+    return {a for a in out if a}
+
+
 def _frontmatter_parses(content: str) -> bool:
     """Does this note's frontmatter block survive a real YAML parser?
 
@@ -546,23 +573,7 @@ def _merge_alias(frontmatter: str, alias: str) -> str:
     return frontmatter
 
 
-def _load_registry_for_links() -> dict:
-    """O registro de ingestao, isolado numa funcao para ser substituivel.
-
-    O import e tardio de proposito: `ingest.py` importa `client_from_path` de
-    `vault.py`, que importa deste modulo, entao um import no topo daqui fecha
-    o ciclo e quebra a carga do pacote inteiro. Tardio, o ciclo nunca existe.
-
-    Funcao separada, e nao um import embutido em `ingested_link_stems`, porque
-    um teste precisa trocar o registro sem tocar em disco nem no subsistema de
-    ingestao. Sem esta costura, testar a classificacao dos links exigiria
-    escrever um registro real no HOME de quem roda a suite.
-    """
-    from .ingest import _load_registry
-    return _load_registry()
-
-
-def ingested_link_stems() -> set[str]:
+def ingested_link_stems(registro: dict) -> set[str]:
     """Nomes pelos quais um arquivo ingerido de fora do vault pode ser linkado.
 
     Le o registro de ingestao em vez de varrer disco: o registro ja guarda o
@@ -575,16 +586,10 @@ def ingested_link_stems() -> set[str]:
     realmente aponta para algo que o servidor nao serve. A checagem se cura
     sozinha quando a pasta e reingerida.
 
-    Falha calada por escolha. Esta funcao serve a uma checagem de saude, e uma
-    checagem que estoura porque o registro de OUTRO subsistema esta corrompido
-    troca um numero levemente pessimista por nenhum numero. Sem registro, cada
-    link para fonte ingerida volta a contar como quebrado, que e exatamente o
-    comportamento anterior a esta funcao.
+    Recebe o registro em vez de le-lo: quem le e o `vault`, que fica acima do
+    `ingest` na hierarquia de modulos. Ler daqui fazia o `notes`, a camada mais
+    baixa, depender do `ingest`, e fechava um ciclo de import.
     """
-    try:
-        registro = _load_registry_for_links()
-    except Exception:
-        return set()
 
     nomes: set[str] = set()
     for entrada in registro.values():

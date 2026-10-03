@@ -1,5 +1,5 @@
 """
-cli.py: delegation-core v0.8.0 command-line interface.
+cli.py: delegation-core command-line interface.
 
 Commands:
   setup          Interactive setup wizard (run once per machine).

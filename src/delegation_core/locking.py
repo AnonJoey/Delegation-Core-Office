@@ -38,7 +38,6 @@ ingestao por falta de trava e pior que a corrida que a trava evita.
 from __future__ import annotations
 
 import logging
-import os
 import time
 from contextlib import contextmanager
 from pathlib import Path

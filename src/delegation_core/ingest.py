@@ -19,7 +19,7 @@ from pathlib import Path
 
 from .config import CONFIG_DIR
 from .embeddings import chunk_text, effective_chunk_chars
-from .vault import client_from_path
+from .notes import client_from_path
 
 logger = logging.getLogger("ingest")
 

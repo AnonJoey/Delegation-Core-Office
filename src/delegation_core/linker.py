@@ -19,6 +19,8 @@ import re
 from datetime import datetime
 from pathlib import Path, PurePosixPath, PureWindowsPath
 
+from .notes import frontmatter_aliases  # noqa: F401  (mora no notes; reexportada)
+
 logger = logging.getLogger("linker")
 
 _WIKILINK_RE = re.compile(r"\[\[([^\]\|#]+)(?:#[^\]\|]+)?(?:\|[^\]]+)?\]\]")
@@ -116,34 +118,6 @@ def strip_frontmatter(content: str) -> str:
         return content
     m = re.match(r"^---\n.*?\n---\n", content, re.DOTALL)
     return content[m.end():] if m else content
-
-
-def frontmatter_aliases(content: str) -> set:
-    """Return the set of Obsidian `aliases:` declared in a note's frontmatter.
-    Supports both block-list and inline `[a, b]` forms. Empty set if none."""
-    if not content.startswith("---\n"):
-        return set()
-    close = content.find("\n---\n", 4)
-    if close == -1:
-        return set()
-    fm = content[4:close]
-    # [^\S\n]* = horizontal whitespace only, so it never crosses the newline into
-    # the first block-list item (the bug that swallowed `- item` into group 1).
-    m = re.search(r"^aliases:[^\S\n]*(.*)$", fm, re.MULTILINE)
-    if not m:
-        return set()
-    out: set = set()
-    inline = m.group(1).strip()
-    if inline.startswith("["):                       # aliases: [a, b]
-        out |= {x.strip().strip('"').strip("'") for x in inline[1:-1].split(",")}
-    else:                                            # block list under aliases:
-        for line in fm[m.end():].splitlines():
-            lm = re.match(r"[^\S\n]*-\s+(.*\S)", line)
-            if lm:
-                out.add(lm.group(1).strip().strip('"').strip("'"))
-            elif line.strip() and not line[:1].isspace():
-                break                                # next top-level key → stop
-    return {a for a in out if a}
 
 
 def _alias_block(aliases: list) -> str:

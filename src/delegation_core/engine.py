@@ -412,7 +412,7 @@ class DelegationEngine:
                 raise
             except Exception as e:
                 if attempt >= max_retries:
-                    raise RuntimeError(f"Delegation failed after {max_retries} attempts: {e}")
+                    raise RuntimeError(f"Delegation failed after {max_retries} attempts: {e}") from e
                 await asyncio.sleep(retry_delay)
 
         raise RuntimeError("Exhausted retries without success.")

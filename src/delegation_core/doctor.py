@@ -245,7 +245,7 @@ def check_index_location(cfg) -> dict:
     substitui arquivos do SQLite e do HNSW por baixo de um processo que os tem
     abertos e causa conhecida de dano, e nada avisava.
     """
-    from .recuperacao import caminho_local_do_indice, em_pasta_sincronizada
+    from .config import caminho_local_do_indice, em_pasta_sincronizada
     if not em_pasta_sincronizada(cfg.chroma_path):
         return {"check": "index_location", "status": "ok",
                 "detail": f"index at {cfg.chroma_path}, outside any synced folder"}
@@ -525,8 +525,7 @@ def check_local_fallback(cfg) -> dict:
 
 def _caminho_do_cli():
     """Onde mora o cli.py DESTA instalacao. Separado para o teste apontar noutro."""
-    from . import cli as _cli
-    return Path(_cli.__file__)
+    return Path(__file__).with_name("cli.py")
 
 
 def check_index_writers() -> dict:
