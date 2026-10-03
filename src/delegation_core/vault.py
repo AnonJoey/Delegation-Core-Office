@@ -5,10 +5,10 @@ Delegates embedding setup to embeddings.py (new in v0.2).
 VaultManager owns: ChromaDB lifecycle, search, index, reindex, maintenance helpers.
 
 v0.2 improvements:
-  - Lazy init with double-checked lock (ABNER) + warm_up() for background pre-loading
-  - doc_id parameter on index_note for chunked external ingestion (ABNER)
-  - Orphan cleanup in reindex_vault: drops rows whose path no longer exists (SAAD)
-  - anonymized_telemetry=False in ChromaDB client (SAAD)
+  - Lazy init with double-checked lock (field deployment C) + warm_up() for background pre-loading
+  - doc_id parameter on index_note for chunked external ingestion (field deployment C)
+  - Orphan cleanup in reindex_vault: drops rows whose path no longer exists (field deployment A)
+  - anonymized_telemetry=False in ChromaDB client (field deployment A)
   - _ensure_ready() guard on every public method
 
 v0.3 improvements:

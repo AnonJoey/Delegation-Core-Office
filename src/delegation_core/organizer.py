@@ -46,7 +46,7 @@ _PASTA_DE_TOCOS = "Reference"
 
 logger = logging.getLogger("organizer")
 
-# ── merge opt-out (ported forward from the 0.1.0 SAAD hardening) ───────────────
+# ── merge opt-out (ported forward from the 0.1.0 hardening of field deployment A) ───────────────
 # The v5.1 refactor kept automatic size-based merge suppression but dropped the
 # ability for a specific source to forbid being merged into an existing note.
 # Restored here, honoring both mechanisms:

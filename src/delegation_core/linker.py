@@ -11,7 +11,7 @@ Two responsibilities:
 relink_folder() is strictly additive: it never removes existing wikilinks
 or rewrites note bodies, only appends new entries into `## Related`.
 
-Introduced in the MAURICIO deployment.
+Introduced in the field deployment B.
 """
 
 import logging

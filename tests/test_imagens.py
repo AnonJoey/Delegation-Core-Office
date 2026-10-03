@@ -23,8 +23,8 @@ TESSDATA = os.environ.get("DC_TESSDATA_TESTE", "")
     ("Screenshot_20260923_225121.png", "2026-09-23T22:51"),
     ("Screenshot from 2026-09-23 22-51-21.png", "2026-09-23T22:51"),
     ("Captura de tela 2026-09-01 18.45.44.png", "2026-09-01T18:45"),
-    # WhatsApp e captura do macOS: "at", hora de 12h com AM/PM. As imagens do
-    # Saad chegam assim, e sem o padrao a data caia para o mtime (02/10/2026).
+    # WhatsApp e captura do macOS: "at", hora de 12h com AM/PM. As imagens de
+    # outra maquina chegam assim, e sem o padrao a data caia para o mtime (02/10/2026).
     ("WhatsApp Image 2026-09-30 at 10.48.55 AM.jpeg", "2026-09-30T10:48"),
     ("WhatsApp Image 2026-10-02 at 12.05.00 PM.jpeg", "2026-10-02T12:05"),
     ("Screenshot 2026-10-02 at 11.22.20 PM.png", "2026-10-02T23:22"),
