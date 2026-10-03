@@ -194,7 +194,7 @@ def _build_vault_graph(cfg, include_generated: bool = False,
                         if line.startswith("title:"):
                             title = yaml_unquote_scalar(line.split(":", 1)[1])
                             break
-            rel = str(f.relative_to(vault))
+            rel = f.relative_to(vault).as_posix()
             if not include_generated and VaultManager.classify_path(rel)[0] == "generated":
                 generated_skipped += 1
                 continue
