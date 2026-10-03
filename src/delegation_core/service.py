@@ -92,7 +92,7 @@ def _windows_run_command() -> str:
 def systemd_unit_text() -> str:
     return f"""[Unit]
 Description=delegation-core MCP daemon
-Documentation=https://github.com/Grimstone-Solutions/delegation-core
+Documentation=https://github.com/AnonJoey/Delegation-Core-Office
 After=network.target
 # The daemon loads BGE onto the GPU at startup, so a crash loop would thrash it.
 # These are [Unit] keys, not [Service] ones — systemd-analyze verify rejects them

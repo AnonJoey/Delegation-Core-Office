@@ -27,7 +27,7 @@ import os
 import re
 import threading
 import unicodedata
-from pathlib import Path, PurePosixPath, PureWindowsPath
+from pathlib import Path, PurePosixPath
 
 from . import locking
 

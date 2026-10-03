@@ -1014,7 +1014,6 @@ def serve_in_process(cfg, vault, tracker, host: str = "127.0.0.1",
 
 
 def run(port: int = 0, host: str = "127.0.0.1", parent_pid: int | None = None) -> None:
-    import os
     from .config import Config
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s",

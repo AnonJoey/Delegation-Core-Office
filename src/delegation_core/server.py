@@ -1,5 +1,5 @@
 """
-server.py — FastMCP tool definitions for delegation-core v0.4.
+server.py: FastMCP tool definitions for delegation-core.
 Called by run_server(); never run directly.
 
 The tool surface is deliberately NOT listed here. This header used to carry a
