@@ -638,6 +638,11 @@ async def heartbeat(force: bool = False) -> str:
     pedido = recuperacao.reconstrucao_pendente()
     if pedido and status == "healthy":
         status = "degraded"
+    # BGE ou ChromaDB que nao subiram: o servidor responde, a busca nao. Era
+    # "healthy" ate 02/10/2026, quando um Windows bloqueou a DLL do PyTorch.
+    erro_embeddings = getattr(_vault, "init_error", None)
+    if erro_embeddings:
+        status = "degraded"
     return json.dumps({
         "status":      status,
         "index_recovery": pedido and {
@@ -648,6 +653,8 @@ async def heartbeat(force: bool = False) -> str:
             "detail": "the index crashed whoever opened it and was set aside; the "
                       "daemon is rebuilding it from the vault and the ingest sources, "
                       "and search fills in as it goes"},
+        "embeddings":  ({"status": "unavailable", "error": erro_embeddings}
+                        if erro_embeddings else {"status": "ok"}),
         "timestamp":   datetime.now().isoformat(),
         "engine_mode": cfg.engine_mode,
         "llama_cpp":   llama_state,
