@@ -558,7 +558,6 @@ async def compress(source: str, raw_content: str, use_local: bool = False) -> st
         try:
             result = await engine.invoke(
                 f"Extract only key facts, decisions, and action items. No preamble.\n"
-                f"{_lang}\n"
                 f"Source: {source}\n\n{raw_content[:limit]}",
                 system=with_lang("Compression Engine. Be extremely concise.", engine.cfg),
                 max_tokens=engine.budget("compress", 1200),
