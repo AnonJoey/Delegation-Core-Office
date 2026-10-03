@@ -1,27 +1,43 @@
 # Changelog
 
-All notable changes to the Delegation-Core Office project (v0.1.0 to v0.13.0 / v13) are documented in this file.
+All notable changes to the Delegation-Core Office project (v0.1.0 to v0.14.0) are documented in this file.
 This changelog is derived directly from the canonical versioning recorded across the codebase and vault archives.
 
 ---
 
-## Unreleased (2026-10-01) - Default MCP port
-
-### Changed
-- The default MCP port is now `8797` instead of `8787`, avoiding a collision with Headroom's commonly used proxy port. Explicit `server_port` values in existing configurations are preserved. Client configuration examples use the new default.
-
-## Unreleased (2026-09-29) - Daemon travado no Mac: reabertura do indice, loop bloqueado e watchdog
+## v0.14.0 (2026-10-03) - Compress local de volta, Windows legivel, imagens no vault e um nucleo sem ciclos
 
 ### Fixed
+- **`compress` pelo modelo local falhava em toda chamada desde 03/09** (PR 13). O prompt ainda referenciava `{_lang}`, variavel apagada quando a lingua foi para o system via `with_lang`; a chamada devolvia `Compression failed: name '_lang' is not defined`. Teste reproduz a falha e outro garante a lingua no system.
+- **Windows com DLL bloqueada pelo Smart App Control** (PR 14). A causa real sobe encadeada em vez do "sentence_transformers is not installed" do chromadb; o `heartbeat` sai `degraded` com `embeddings.status = unavailable` e o erro, em vez de `healthy` com a busca fora; sem elevacao (atalho na pasta Inicializar), `stop` encerra o daemon e `start` executa o `.cmd` do venv.
+- **Titulo das transcricoes brutas** vem da primeira fala real, e nao da marcacao `<local-command-caveat>` do Claude Code (40 de 75 tinham esse titulo).
+- **`_bg_maintenance_wrapper` deixou de ser ferramenta MCP.** Era a funcao interna da manutencao em segundo plano; aparecia na lista servida e podia ser chamada fora do job. O servidor publica 55 ferramentas.
+- **O servico gerado apontava `Documentation=` para um repositorio inexistente** (`Grimstone-Solutions/delegation-core`); aponta para `AnonJoey/Delegation-Core-Office`.
+- **`engine` encadeia a causa** no `RuntimeError` depois das tentativas (`raise ... from e`).
+
+### Added
+- **Imagem vira nota buscavel** (PR 15): data por EXIF, pelo nome da captura ou mtime; dimensoes, camera e GPS; OCR com tesseract. O extrator aceita png, jpg, webp, gif, bmp e tiff. `delegation-core ocr-setup` baixa `por` e `eng` para `~/.delegation_core/tessdata`. Icone pequeno nao passa pelo OCR e imagem sem texto nao e indexada pelo `ingest_folder`.
+- **Analise estatica na suite** (`test_analise_estatica.py`): ruff com pyflakes e erro de sintaxe no nucleo e nos hooks. `ruff` entra no extra `[dev]`.
+- **Testes de estrutura:** nenhum ciclo de import no nucleo, nenhuma funcao interna publicada como ferramenta, so o `engine` chama `/v1/chat/completions`, e a deriva de contagem de ferramentas agora tambem e conferida em `docs/`.
+
+### Changed
+- **Nenhum ciclo de import no nucleo.** Eram cinco, contando import dentro de funcao. `frontmatter_aliases` foi para o `notes` (o `linker` reexporta); `em_pasta_sincronizada` e `caminho_local_do_indice` foram para o `config` (o `recuperacao` reexporta); `ingest` importa `client_from_path` do `notes`; `doctor` acha o `cli.py` sem importa-lo; `ingested_link_stems` recebe o registro, lido pelo `vault`.
+- **`vault.py` encolheu** para caber na guarda de tamanho: `_frontmatter_parses` foi para o `notes`.
+- **Porta padrao do MCP e 8797** (PR 12), por conflito com a porta que o proxy do Headroom costuma usar. Um `server_port` explicito em config existente e preservado, e os exemplos de config de cliente usam o padrao novo.
+- **Documentacao:** `docs/MAPA.md` reescrito sem numeros, `docs/INSTALL_MAC_MLX.md` entra no repositorio, e o `HANDOFF.md` volta a descrever a arquitetura do daemon HTTP.
+
+### Incluido de 2026-09-29 (PRs 7 a 11): daemon travado no Mac, reabertura do indice, loop bloqueado e watchdog
+
+#### Fixed
 - **Reabertura do indice vazava o motor do chromadb.** `clear_system_cache()` so esquecia o System antigo, sem parar; medido no chromadb 1.5.9, cada reabertura deixava 27 threads rodando (234 de 285 no daemon do Mac em 26/09). A reabertura agora chama `Client.close()` (`index_lock.close_chroma_client`).
 - **Reabertura sob consulta em andamento.** Toda chamada que usa `collection` segura uma trava compartilhada; a reabertura espera com a trava exclusiva. Pedida de dentro de uma consulta, ela e adiada para a chamada seguinte, em vez de travar em si mesma.
 - **Ferramentas bloqueantes no event loop.** 17 ferramentas sem `await` viraram `def`, que o fastmcp roda no threadpool; `search_vault` e `heartbeat` levam o trabalho do indice para `asyncio.to_thread`. As que escrevem continuam serializadas entre si.
 - **`status` e `embed-model` abriam o indice ao lado do daemon.** Abrir um PersistentClient, mesmo so para contar, muda o mtime do `chroma.sqlite3`, e o daemon le isso como escrita de outro processo e reabre. Com o daemon no ar eles perguntam a ele; um daemon que aceita conexao e nao responde e reportado em vez de contornado.
 
-### Added
+#### Added
 - **Watchdog do event loop** (`loop_watchdog_sec`, padrao 300, 0 desliga). Um timer do faulthandler, que roda sem o GIL, e rearmado pelo loop; se o loop parar, grava a pilha de todas as threads em `~/.delegation_core/watchdog_tracebacks.log` e sai com codigo 1, que launchd e systemd reiniciam.
 
-### Not in this change
+#### Not in this change
 - O indice ja danificado no Mac (SIGSEGV em `chromadb_rust_bindings` desde 29/09 07:43) precisa de recuperacao propria; esta mudanca previne, nao repara.
 - Troca do modelo padrao para bge-m3 e a lista de pastas do AGENT_GUIDE no Mac: ajustes de configuracao por maquina.
 
