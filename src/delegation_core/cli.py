@@ -477,6 +477,54 @@ def _index_row_counts(cfg, timeout: float = 10.0) -> tuple[dict[str, int], str]:
             close()
 
 
+OCR_IDIOMAS_BASE = "https://github.com/tesseract-ocr/tessdata_fast/raw/main/{}.traineddata"
+
+
+def cmd_ocr_setup(args):
+    """Baixa os dados de idioma do tesseract (versao "fast") para ~/.delegation_core/tessdata.
+
+    Sem root: o tesseract le de TESSDATA_PREFIX, e o extrator de imagem aponta
+    para ca sozinho. por+eng somam ~6 MB e bastaram para ler 75 de 78 capturas
+    de tela reais em 27/09.
+    """
+    import shutil
+    import urllib.request
+    from rich.console import Console
+    from . import config
+
+    # Cada comando deste modulo cria o proprio Console. O fork tinha um global;
+    # trazido para o master sem ele, o download acontecia e o comando morria
+    # com NameError ao imprimir (medido em 02/10/2026).
+    console = Console()
+    CONFIG_DIR = config.CONFIG_DIR
+
+    if not shutil.which("tesseract"):
+        console.print("[red]tesseract nao esta instalado.[/red] Instale o pacote do sistema (ex.: pacman -S tesseract).")
+        return 1
+    destino = CONFIG_DIR / "tessdata"
+    destino.mkdir(parents=True, exist_ok=True)
+    for sistema in ("/usr/share/tessdata/osd.traineddata", "/usr/share/tesseract-ocr/5/tessdata/osd.traineddata"):
+        if Path(sistema).is_file() and not (destino / "osd.traineddata").exists():
+            shutil.copy2(sistema, destino / "osd.traineddata")
+    for lang in [l for l in (args.langs or "por,eng").split(",") if l.strip()]:
+        alvo = destino / f"{lang.strip()}.traineddata"
+        if alvo.exists() and not args.force:
+            console.print(f"  {lang}: ja existe")
+            continue
+        tmp = alvo.with_suffix(".tmp")
+        try:
+            urllib.request.urlretrieve(OCR_IDIOMAS_BASE.format(lang.strip()), tmp)
+        except OSError as e:
+            console.print(f"[red]  {lang}: falhou ({e})[/red]")
+            tmp.unlink(missing_ok=True)
+            return 1
+        tmp.replace(alvo)
+        console.print(f"  {lang}: {alvo.stat().st_size // 1024} KB")
+    from .imagens import idiomas_disponiveis
+    console.print(f"idiomas disponiveis: {', '.join(idiomas_disponiveis(destino))}")
+    return 0
+
+
 def cmd_status(_args):
     from rich.console import Console
     from rich.table import Table
@@ -1708,6 +1756,9 @@ def main():
     sub = parser.add_subparsers(dest="command", metavar="command")
 
     sub.add_parser("setup",    help="Interactive setup wizard (run once per machine)")
+    p_ocr = sub.add_parser("ocr-setup", help="Download OCR language data so images become searchable")
+    p_ocr.add_argument("--langs", default="por,eng", help="comma list of tesseract languages")
+    p_ocr.add_argument("--force", action="store_true", help="download again even if present")
     p_run = sub.add_parser("run", help="Start the MCP server (used by Claude Desktop)")
     p_run.add_argument(
         "--recalibrate", action="store_true",
@@ -1938,6 +1989,7 @@ def main():
 
     dispatch = {
         "setup":    cmd_setup,
+        "ocr-setup": cmd_ocr_setup,
         "run":      cmd_run,
         "service":  cmd_service,
         "update":   cmd_update,

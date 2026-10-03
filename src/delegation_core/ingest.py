@@ -315,6 +315,7 @@ class IngestManager:
         each useful subfolder separately, which is a workaround, not a control.
         """
         from .extractor import DatalessFileError, SUPPORTED, UnreadableFileError, extract
+        from .imagens import EXTENSOES as _IMAGENS, markdown_tem_texto as _tem_texto
 
         source = Path(source_path).expanduser().resolve()
         if not source.exists():
@@ -429,6 +430,12 @@ class IngestManager:
             try:
                 content = extract(f)
                 if not content or not content.strip():
+                    skipped_empty.append(f.name)
+                    continue
+                # Imagem sem texto lido (icone, foto sem legenda, OCR ausente)
+                # vira so metadado: no _inbox isso ainda serve, porque alguem pos
+                # a imagem la; numa pasta ingerida seria linha sem conteudo.
+                if f.suffix.lower() in _IMAGENS and not _tem_texto(content):
                     skipped_empty.append(f.name)
                     continue
 
