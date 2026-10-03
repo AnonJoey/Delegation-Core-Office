@@ -918,7 +918,7 @@ class VaultManager:
             # ChromaDB — silently collapsing the search index on each reindex.
             # (0.5.0 used rglob here; v6.0/6.1 regressed it to glob.)
             for f in folder_path.rglob("*.md"):
-                rel = str(f.relative_to(self.cfg.vault))
+                rel = f.relative_to(self.cfg.vault).as_posix()
                 on_disk.add(rel)
                 mtime = f.stat().st_mtime
                 if not force and abs(state.get(rel, 0) - mtime) < 0.001:
@@ -982,7 +982,11 @@ class VaultManager:
                     if not base or (PurePosixPath(base).is_absolute()
                                     or PureWindowsPath(base).is_absolute()):
                         continue
-                    if base in on_disk or (self.cfg.vault / base).exists():
+                    if base in on_disk:
+                        continue
+                    # Ate a v0.14.0 o Windows gravava o id com "\"; o mesmo arquivo
+                    # hoje tem id com "/". O antigo duplicaria a busca, embora exista.
+                    if "\\" not in base and (self.cfg.vault / base).exists():
                         continue
                     orphans.append(i)
                     orphan_bases.add(base)
@@ -1060,7 +1064,7 @@ class VaultManager:
         except Exception as e:
             logger.warning("Could not read frontmatter from %s: %s", f.name, e)
         return {"title": title, "date": date,
-                "path": str(f.relative_to(self.cfg.vault)), "size_bytes": size}
+                "path": f.relative_to(self.cfg.vault).as_posix(), "size_bytes": size}
 
     def list_directories(self) -> list[dict]:
         """Every directory under a configured folder that holds notes.
@@ -1078,7 +1082,7 @@ class VaultManager:
                 continue
             seen: dict[str, int] = {}
             for f in root.rglob("*.md"):
-                rel = str(f.parent.relative_to(self.cfg.vault))
+                rel = f.parent.relative_to(self.cfg.vault).as_posix()
                 seen[rel] = seen.get(rel, 0) + 1
             for rel in sorted(seen):
                 out.append({"path": rel,
@@ -1127,7 +1131,7 @@ class VaultManager:
                 continue
             for f in root.rglob("*.md"):
                 stem = f.stem.lower()
-                rel = str(f.relative_to(self.cfg.vault))
+                rel = f.relative_to(self.cfg.vault).as_posix()
                 if stem == q:
                     rank = 0
                 elif stem.startswith(q):
@@ -1209,7 +1213,7 @@ class VaultManager:
         for link in _countable_wikilinks(own_text):
             hit = by_stem.get(link.strip().lower())
             outbound.append({"target": link.strip(),
-                             "path": str(hit.relative_to(self.cfg.vault)) if hit else None,
+                             "path": hit.relative_to(self.cfg.vault).as_posix() if hit else None,
                              "broken": hit is None})
 
         # Iterate distinct files, not by_stem keys: an aliased note appears under
@@ -1295,7 +1299,7 @@ class VaultManager:
             source_content = f.read_text(encoding="utf-8")
         except Exception as e:
             return [{"error": f"Could not read note: {note_name} — {e}"}]
-        source_path = str(f.relative_to(self.cfg.vault))
+        source_path = f.relative_to(self.cfg.vault).as_posix()
         hits = self.search(source_content[:1000], limit=limit + 1)
         return [h for h in hits if h.get("path") != source_path and h.get("similarity", 0) >= threshold]
 
@@ -1311,7 +1315,7 @@ class VaultManager:
             stamp = datetime.now().strftime("%Y-%m-%d %H:%M")
             updated = existing + f"\n\n---\n*Updated {stamp}*\n\n{append_content}"
             f.write_text(updated, encoding="utf-8")
-            rel = str(f.relative_to(self.cfg.vault))
+            rel = f.relative_to(self.cfg.vault).as_posix()
             fm = self._parse_frontmatter(updated)
             title = fm.get("title") or f.name[:-3]
             self.index_note(updated, {"title": title, "path": rel, "folder": folder})
@@ -1416,7 +1420,7 @@ class VaultManager:
                 resolvable.update(link_names_for_stem(note_stem))
                 resolvable.update(a.lower() for a in frontmatter_aliases(content))
                 notes.append({"stem": note_stem, "folder": folder, "content": content,
-                              "rel": str(f.relative_to(self.cfg.vault))})
+                              "rel": f.relative_to(self.cfg.vault).as_posix()})
 
         # Obsidian resolves a wikilink against every note in the vault, not just
         # the folders delegation-core manages. Notes do live outside them —
@@ -1692,7 +1696,7 @@ class VaultManager:
                         q = 0.0
                     if nr or (q is not None and q < th):
                         results.append({
-                            "path": str(f.relative_to(self.cfg.vault)),
+                            "path": f.relative_to(self.cfg.vault).as_posix(),
                             "content": content,
                             "quality_score": q if q is not None else 0.0,
                         })

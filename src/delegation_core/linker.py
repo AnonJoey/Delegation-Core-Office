@@ -252,7 +252,7 @@ def relink_folder(
     for f in target.rglob("*.md"):
         if cutoff is not None and f.stat().st_mtime < cutoff:
             continue
-        rel = str(f.relative_to(cfg.vault))
+        rel = f.relative_to(cfg.vault).as_posix()
         if VaultManager.classify_path(rel)[0] == "generated":
             continue
         md_files.append(f)
@@ -279,7 +279,7 @@ def relink_folder(
                 results["skipped"].append(f"{f.name}: empty body")
                 continue
 
-            self_path = str(f.relative_to(cfg.vault))
+            self_path = f.relative_to(cfg.vault).as_posix()
             already_linked = existing_targets(content)
 
             # scope='notes': this relinks the user's own writing to itself. An
@@ -326,7 +326,7 @@ def relink_folder(
             vault_manager.index_note(updated, {
                 "title": f.stem,
                 "path": self_path,
-                "folder": str(f.parent.relative_to(cfg.vault)),
+                "folder": f.parent.relative_to(cfg.vault).as_posix(),
             })
             results["updated"] += 1
             results["links_added"] += len(new_links)

@@ -330,7 +330,7 @@ def main():
             "any large batch below:"
         )
         for mtime, f in soltas[:MAX_NOTES]:
-            rel = f.relative_to(vault)
+            rel = f.relative_to(vault).as_posix()
             when = datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M")
             lines.append(f"- `{rel}` ({when})")
         if len(soltas) > MAX_NOTES:

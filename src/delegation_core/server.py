@@ -971,7 +971,7 @@ def vault_update_note(note_name: str, append_content: str) -> str:
         matches = _vault.find_notes_by_stem(note_name)
         if matches:
             f = matches[0]
-            rel = str(f.relative_to(_vault.cfg.vault))
+            rel = f.relative_to(_vault.cfg.vault).as_posix()
             _post_write_links(f, rel, f.parent.name, f.stem)
     return json.dumps(result)
 
