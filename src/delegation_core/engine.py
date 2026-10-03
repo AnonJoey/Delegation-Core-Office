@@ -18,6 +18,7 @@ _compute_budgets() derives per-task caps that stay within mcp_timeout_sec
 import asyncio
 import atexit
 import logging
+import os
 import platform
 import subprocess
 import threading
@@ -89,6 +90,37 @@ def _compute_budgets(tok_sec: float, timeout_sec: int) -> dict[str, int]:
         "section_title":  min(20,   ceiling),
         "default":        min(512,  ceiling),
     }
+
+
+#: Valores aceitos em `llama_device`.
+LLAMA_DEVICES = ("auto", "gpu", "cpu")
+
+
+def llama_device(cfg) -> str:
+    """Onde o modelo local deve rodar. Valor desconhecido vira "auto" com aviso,
+    em vez de levantar: um erro de digitacao nao pode deixar o motor sem subir."""
+    escolha = (getattr(cfg, "llama_device", "auto") or "auto").strip().lower()
+    if escolha not in LLAMA_DEVICES:
+        logger.warning("llama_device=%r nao e um valor conhecido %s; usando auto",
+                       getattr(cfg, "llama_device", None), list(LLAMA_DEVICES))
+        return "auto"
+    return escolha
+
+
+def _llama_env(device: str) -> dict:
+    """Ambiente do processo do modelo, conforme o dispositivo pedido.
+
+    "cpu" esconde a placa so deste filho. Para "gpu" e "auto", um
+    CUDA_VISIBLE_DEVICES vazio herdado do daemon sai: foi o que, em 26/09/2026,
+    deixou o modelo em CPU a 5,5 tokens/s com a placa ociosa, porque um drop-in
+    escondia a GPU do daemon inteiro para tirar o BGE de la.
+    """
+    env = dict(os.environ)
+    if device == "cpu":
+        env["CUDA_VISIBLE_DEVICES"] = ""
+    elif env.get("CUDA_VISIBLE_DEVICES") == "":
+        del env["CUDA_VISIBLE_DEVICES"]
+    return env
 
 
 def _detached_popen_kwargs() -> dict:
@@ -554,7 +586,10 @@ class DelegationEngine:
         # to 999, abort" and then dies at cudaMalloc, which is precisely the
         # failure on a card that another process is sharing. An explicit
         # positive value is still honoured for anyone who wants to pin it.
-        if self.cfg.llama_ngl > 0:
+        device = llama_device(self.cfg)
+        if device == "cpu":
+            cmd += ["--n-gpu-layers", "0"]
+        elif self.cfg.llama_ngl > 0:
             cmd += ["--n-gpu-layers", str(self.cfg.llama_ngl)]
         # Flash attention plus an 8-bit KV cache. Measured on the 16 GB board
         # this runs on: with an f16 KV cache the weights fit and the load then
@@ -566,7 +601,10 @@ class DelegationEngine:
         # Take the card before spawning. BGE and a 12B model do not both fit,
         # and the eviction has to happen before Popen rather than after a
         # failed load: llama.cpp does not retry, it exits.
-        gpu.take("llama")
+        # So quem vai para a placa pede a placa: um modelo em CPU nao tem por
+        # que despejar o BGE.
+        if device != "cpu":
+            gpu.take("llama")
 
         try:
             # llama.cpp's stdout/stderr are redirected straight into this file
@@ -592,6 +630,7 @@ class DelegationEngine:
                 cmd,
                 stdout=self._log_fh,
                 stderr=self._log_fh,
+                env=_llama_env(device),
                 **_detached_popen_kwargs(),
             )
             self._we_started_it = True

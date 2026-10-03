@@ -43,6 +43,7 @@ from .embeddings import (
     effective_chunk_chars,
     make_bge_embedding_function,
     profile_for,
+    resolver_dispositivo,
 )
 
 logger = logging.getLogger("vault")
@@ -191,8 +192,10 @@ class VaultManager:
                 # to that was make_bge_embedding_function's silent fall back to
                 # CPU: search kept working and got an order of magnitude slower
                 # with nothing in the response to say so.
-                gpu.take("embeddings")
                 if self.ef is None:
+                    # So pede a placa quem vai usa-la: BGE na CPU derrubava o modelo local.
+                    if resolver_dispositivo(getattr(self.cfg, "embed_device", "auto")) == "cuda":
+                        gpu.take("embeddings")
                     # The caps are passed here or nowhere: the config fields exist
                     # but stay inert until they reach the embedding function, and
                     # an uncapped encode is what OOM'd a 16GB card mid-reindex.

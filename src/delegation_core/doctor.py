@@ -586,10 +586,39 @@ def check_index_writers() -> dict:
             "detail": "every CLI command that opens the index routes through the daemon"}
 
 
+def check_devices(cfg, tem_cuda=None) -> dict:
+    """Onde roda cada modelo, e se os dois vao disputar a mesma placa.
+
+    Os dois na GPU funcionam, mas o arbitro (gpu.py) alterna: cada busca depois
+    de uma geracao recarrega o BGE, e cada geracao depois de uma busca recarrega
+    o modelo. Numa placa de 16 GB os dois nao cabem juntos.
+    """
+    from .embeddings import detect_device
+    from .engine import llama_device
+
+    embed = (getattr(cfg, "embed_device", "auto") or "auto").strip().lower()
+    if embed == "auto":
+        embed = detect_device() if tem_cuda is None else ("cuda" if tem_cuda() else "cpu")
+    modelo = llama_device(cfg)
+    if cfg.is_agent_mode:
+        modelo_desc = "nenhum (modo agente)"
+    else:
+        modelo_desc = modelo
+    detail = f"embeddings: {embed} · modelo local: {modelo_desc}"
+    disputa = (embed == "cuda" and not cfg.is_agent_mode and modelo != "cpu")
+    if disputa:
+        return {"check": "devices", "status": "warn",
+                "detail": detail + "; os dois disputam a GPU e se alternam nela",
+                "fix": 'ponha um na CPU: "embed_device": "cpu" (o BGE perde pouco) '
+                       'ou "llama_device": "cpu"'}
+    return {"check": "devices", "status": "ok", "detail": detail}
+
+
 def run_all(cfg) -> dict:
     """Run every check. Returns {status, counts, checks[]} with the worst status on top."""
     checks = [
         check_engine_mode(cfg),
+        check_devices(cfg),
         check_vault_folders(cfg),
         check_hook_drift(),
         check_graph_extra(),
