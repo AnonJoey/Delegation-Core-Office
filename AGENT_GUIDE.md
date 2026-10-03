@@ -527,7 +527,7 @@ How it works in practice:
 - **Desktop/Cowork → vault**: the standing orders above (`export_session()` on goodbye,
   `write_note()` for Decisions/Fixes/Reference as they happen) mean every Desktop or Cowork
   session leaves a curated digest in the vault — not just a wall of raw chat log.
-- **vault → Code**: a `SessionStart` hook (`hooks/session_start_brief.py`, stdlib-only) prints a
+- **vault → Code**: a `SessionStart` hook (`delegation-core-hook session-start`, registered by the installer) prints a
   short "what changed since you were last here" brief at the start of every Claude Code session
   — listing notes added/updated since the last Code session, plus an `_inbox/` count if files
   are waiting. This is injected directly into context, so Code is aware of Desktop/Cowork output
@@ -535,7 +535,7 @@ How it works in practice:
   in the last 30 minutes, the hook also launches `delegation-core maintain` in the background
   (logs to `~/.delegation_core/maintenance.log`) — files dropped from either surface get
   classified, deduped, and filed without anyone needing to remember to call `run_maintenance`.
-- **Code → vault**: the existing `SessionEnd` hook (`hooks/session_export.py`) backs up the raw
+- **Code → vault**: the `SessionEnd` hook (`delegation-core-hook session-end`) backs up the raw
   Code transcript to `Sessions/`, and `export_session()` writes the curated digest — both
   readable from Desktop/Cowork via `search_vault()`/`read_note()`. After writing the
   transcript, the hook also fires a detached `delegation-core reindex` (logs to

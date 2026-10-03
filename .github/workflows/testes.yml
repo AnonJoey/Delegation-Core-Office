@@ -50,7 +50,7 @@ jobs:
           pip install -e ".[dev,graph]"
 
       - name: Analise estatica
-        run: python -m ruff check --no-cache --select F,E9 --exclude src/delegation_core/graph src/ hooks/
+        run: python -m ruff check --no-cache --select F,E9 --exclude src/delegation_core/graph src/
 
       - name: Suite
         run: python -m pytest -q -p no:cacheprovider

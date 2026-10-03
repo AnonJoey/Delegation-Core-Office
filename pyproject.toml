@@ -96,6 +96,7 @@ testpaths = ["tests"]
 
 [project.scripts]
 delegation-core = "delegation_core.cli:main"
+delegation-core-hook = "delegation_core.hooks.entrada:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

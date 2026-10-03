@@ -1,4 +1,4 @@
-"""Analise estatica do nucleo e dos hooks: pyflakes (F) e erro de sintaxe (E9).
+"""Analise estatica do nucleo (hooks incluidos, em src/delegation_core/hooks): pyflakes (F) e erro de sintaxe (E9).
 
 Existe por causa de `{_lang}`: uma variavel apagada em 03/09/2026 e esquecida
 num f-string do `compress`. Nenhum teste chamava aquele caminho, a excecao
@@ -36,7 +36,7 @@ def test_nucleo_e_hooks_sem_achados_do_pyflakes():
         pytest.skip("ruff nao instalado (pip install -e .[dev])")
     r = subprocess.run(
         ruff + ["check", "--no-cache", "--select", "F,E9", "--output-format", "concise",
-                "--exclude", "src/delegation_core/graph", "src/", "hooks/"],
+                "--exclude", "src/delegation_core/graph", "src/"],
         cwd=RAIZ, capture_output=True, text=True,
     )
     assert r.returncode == 0, r.stdout + r.stderr

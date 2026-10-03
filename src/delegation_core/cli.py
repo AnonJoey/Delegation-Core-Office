@@ -262,9 +262,12 @@ def cmd_post_install(args):
 
     r = installer.post_install(raiz)
 
-    docs = r["docs_and_hooks"]
-    console.print(f"  docs and hooks: {len(docs['installed'])} installed, "
+    docs = r["docs"]
+    console.print(f"  docs: {len(docs['installed'])} installed, "
                   f"{len(docs['unchanged'])} unchanged, {len(docs['kept_yours'])} kept yours")
+    ganchos = r["hooks"]
+    console.print(f"  session hooks: {ganchos['status']}"
+                  + (f" ({ganchos['detail']})" if ganchos.get("detail") else ""))
     pele = r["skills"]
     if pele["available"]:
         console.print(f"  skills: {len(pele['installed'])} installed, "
