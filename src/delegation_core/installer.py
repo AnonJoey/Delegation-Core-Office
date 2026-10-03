@@ -160,10 +160,14 @@ def git_state(root: Path) -> dict:
     }
 
 
-# ── shipped docs and hooks ───────────────────────────────────────────────────
+# ── shipped docs ─────────────────────────────────────────────────────────────
 
 def refresh_shipped_files(root: Path) -> dict:
-    """Copy AGENT_GUIDE/CLAUDE_SYSTEM_PROMPT and the hooks into CONFIG_DIR.
+    """Copy AGENT_GUIDE/CLAUDE_SYSTEM_PROMPT into CONFIG_DIR.
+
+    The session hooks used to be copied here too. Since v0.15.0 they run from
+    the installed package (`delegation-core-hook`) and are registered, not
+    copied: see clients.register_session_hooks.
 
     Never clobbers a file the user changed: theirs is kept and the shipped copy
     lands beside it as `<name>.dist.<ext>` so the two can be diffed on purpose.
@@ -181,7 +185,6 @@ def refresh_shipped_files(root: Path) -> dict:
     doing the same job correctly, had produced no `.dist.py` at all.
     """
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    (CONFIG_DIR / "hooks").mkdir(parents=True, exist_ok=True)
     resultado: dict = {"installed": [], "kept_yours": [], "unchanged": [], "missing": []}
 
     def _copiar(origem: Path, destino: Path, rotulo: str) -> None:
@@ -202,9 +205,6 @@ def refresh_shipped_files(root: Path) -> dict:
     for nome in SHIPPED_DOCS:
         _copiar(root / nome, CONFIG_DIR / nome, nome)
 
-    for hook in sorted((root / "hooks").glob("*.py")) if (root / "hooks").is_dir() else []:
-        _copiar(hook, CONFIG_DIR / "hooks" / hook.name, f"hooks/{hook.name}")
-
     return resultado
 
 
@@ -217,10 +217,6 @@ def stale_dist_copies() -> list[str]:
     """
     sobras = []
     for base in CONFIG_DIR.glob("*.dist.*"):
-        real = base.with_name(base.name.replace(".dist", "", 1))
-        if real.is_file() and filecmp.cmp(base, real, shallow=False):
-            sobras.append(str(base.relative_to(CONFIG_DIR)))
-    for base in (CONFIG_DIR / "hooks").glob("*.dist.*"):
         real = base.with_name(base.name.replace(".dist", "", 1))
         if real.is_file() and filecmp.cmp(base, real, shallow=False):
             sobras.append(str(base.relative_to(CONFIG_DIR)))
@@ -334,7 +330,10 @@ def update(check_only: bool = False, restart: bool = True,
             resultado["detail"] = f"pip install failed:\n{detalhe}"
             return resultado
 
-        _passo("refresh_docs_and_hooks", True, **refresh_shipped_files(raiz))
+        _passo("refresh_docs", True, **refresh_shipped_files(raiz))
+        from .clients import register_session_hooks
+        ganchos = register_session_hooks()
+        _passo("register_hooks", ganchos["status"] != "error", **ganchos)
         _passo("register_service", True, **service.install())
     finally:
         # Whatever happened above, the machine does not get left without a
@@ -593,6 +592,9 @@ def uninstall(dry_run: bool = False) -> dict:
         )
         return relatorio
 
+    from .clients import unregister_session_hooks
+    ganchos = unregister_session_hooks()
+    _passo("unregister_hooks", ganchos["status"] != "error", **ganchos)
     _passo("unregister_daemon", True, **service.uninstall())
     _passo("unregister_llama_autostart", True, **service.uninstall_llama_autostart())
 
@@ -997,7 +999,9 @@ def post_install(root: Path) -> dict:
     """
     relatorio: dict = {"root": str(root)}
 
-    relatorio["docs_and_hooks"] = refresh_shipped_files(root)
+    relatorio["docs"] = refresh_shipped_files(root)
+    from .clients import register_session_hooks
+    relatorio["hooks"] = register_session_hooks()
     relatorio["skills"] = install_skills(root)
     relatorio["agents"] = install_agents(root)
     relatorio["dashboard"] = install_dashboard(root)

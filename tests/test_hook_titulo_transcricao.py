@@ -5,7 +5,7 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 
-HOOK = Path(__file__).resolve().parents[1] / "hooks" / "session_export.py"
+HOOK = Path(__file__).resolve().parents[1] / "src" / "delegation_core" / "hooks" / "session_export.py"
 
 
 def _hook():

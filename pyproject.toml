@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "delegation-core"
-version = "0.14.0"
+version = "0.15.0"
 description = "Local MCP delegation server: llama.cpp + BGE + ChromaDB + Obsidian vault"
 requires-python = ">=3.11"
 dependencies = [
@@ -96,6 +96,7 @@ testpaths = ["tests"]
 
 [project.scripts]
 delegation-core = "delegation_core.cli:main"
+delegation-core-hook = "delegation_core.hooks.entrada:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

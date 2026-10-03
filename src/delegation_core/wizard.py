@@ -643,23 +643,21 @@ def _completion(cfg: Config):
 
     agent_guide = CONFIG_DIR / "AGENT_GUIDE.md"
     system_prompt = CONFIG_DIR / "CLAUDE_SYSTEM_PROMPT.md"
-    hook_start = CONFIG_DIR / "hooks" / "session_start_brief.py"
-    hook_end = CONFIG_DIR / "hooks" / "session_export.py"
-
-    # Stock Windows Python installs expose `py`/`python`, not `python3`.
-    python_cmd = "py" if system == "Windows" else "python3"
-
+    # The installer writes this into ~/.claude/settings.json itself
+    # (clients.register_session_hooks); shown here so it can be checked.
+    from .clients import hook_executable
+    exe = hook_executable()
     hooks_snippet = (
         '{\n'
         '  "hooks": {\n'
         '    "SessionStart": [\n'
         '      { "matcher": "*", "hooks": [\n'
-        f'        {{ "type": "command", "command": "{python_cmd} {hook_start}" }}\n'
+        f'        {{ "type": "command", "command": "\\"{exe}\\" session-start" }}\n'
         '      ]}\n'
         '    ],\n'
         '    "SessionEnd": [\n'
         '      { "matcher": "*", "hooks": [\n'
-        f'        {{ "type": "command", "command": "{python_cmd} {hook_end}" }}\n'
+        f'        {{ "type": "command", "command": "\\"{exe}\\" session-end" }}\n'
         '      ]}\n'
         '    ]\n'
         '  }\n'
@@ -693,8 +691,8 @@ def _completion(cfg: Config):
     console.print(Panel(mcp_snippet, title="[bold]~/.claude.json[/bold]", border_style="blue"))
 
     console.print()
-    console.print("  [bold]3. Claude Code: install the session hooks[/bold]")
-    console.print("     Merge this into [cyan]~/.claude/settings.json[/cyan]. The SessionStart hook")
+    console.print("  [bold]3. Claude Code: session hooks[/bold]")
+    console.print("     The installer registers these in [cyan]~/.claude/settings.json[/cyan]. The SessionStart hook")
     console.print("     briefs Code on vault activity and runs maintenance on a non-empty inbox;")
     console.print("     the SessionEnd hook backs up the raw transcript to the vault.")
     console.print()

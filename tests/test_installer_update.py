@@ -118,16 +118,16 @@ def test_arquivo_REALMENTE_customizado_e_preservado(arvore):
     assert (cfg / "AGENT_GUIDE.dist.md").read_text() == "guia v2\n"
 
 
-def test_hooks_seguem_a_mesma_regra(arvore):
+def test_hooks_nao_sao_mais_copiados(arvore):
+    """Desde a v0.15.0 os hooks rodam do pacote e sao registrados, nao copiados
+    (clients.register_session_hooks). Uma arvore que ainda tenha hooks/ nao pode
+    fazer o refresh voltar a copiar."""
     raiz, cfg = arvore
-    destino = cfg / "hooks" / "session_export.py"
-    destino.parent.mkdir(exist_ok=True)
-    destino.write_text("# hook v2\n", encoding="utf-8")            # identico
 
     r = installer.refresh_shipped_files(raiz)
 
-    assert "hooks/session_export.py" in r["unchanged"]
-    assert not (cfg / "hooks" / "session_export.dist.py").exists()
+    assert not any("hooks/" in x for lista in r.values() for x in lista)
+    assert not (cfg / "hooks").exists()
 
 
 def test_arquivo_que_nao_veio_no_pacote_e_reportado(arvore):
