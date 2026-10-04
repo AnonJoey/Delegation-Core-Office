@@ -75,7 +75,7 @@ def resolve_folder_hint(hint, vault_folders: list) -> str | None:
     modelo em vez de ir para onde o sidecar mandou. Um roteamento explicito,
     ignorado em silencio.
 
-    Subcaminho e preservado: `meetings/Gazin/2026-2027` continua valendo, e so
+    Subcaminho e preservado: `meetings/Nortex/2026-2027` continua valendo, e so
     o segmento raiz e canonizado.
     """
     if not hint or not isinstance(hint, str):

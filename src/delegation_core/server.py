@@ -393,7 +393,7 @@ async def search_vault(query: str, limit: int = 5, use_local: bool = False,
     Every response names the scope it used.
 
     client='<name>' narrows to one client, composing with scope rather than
-    replacing it. Matching is normalised, so 'Gazin', 'gazin' and 'GAZIN' are
+    replacing it. Matching is normalised, so 'Nortex', 'nortex' and 'NORTEX' are
     one client. It reaches ingested files too, when client_path_roots is
     configured. Use it whenever a question is about one client and the vault
     holds several — unfiltered, a query for one client's retention metrics came

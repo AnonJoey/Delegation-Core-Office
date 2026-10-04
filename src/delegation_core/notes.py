@@ -140,14 +140,14 @@ def client_slug(value: str, aliases: dict | None = None) -> str:
     """Normalise a client name to the single form the index is keyed by.
 
     ChromaDB's `where` is exact equality, so an unnormalised key is a filter
-    that silently under-returns: one vault holds `Gazin` on 111 notes and
-    `gazin` on 13, and a query for either missed the other's rows without
+    that silently under-returns: one vault holds `Nortex` on 111 notes and
+    `nortex` on 13, and a query for either missed the other's rows without
     saying so. Lowercased, accent-folded, and everything that is not
     alphanumeric collapsed to a single hyphen.
 
     THE SAME FUNCTION MUST RUN ON BOTH SIDES — promotion and query. A patch
-    that normalised only on the way in leaves `client="Gazin"` missing every
-    row it just normalised to `gazin`, which looks exactly like "that client
+    that normalised only on the way in leaves `client="Nortex"` missing every
+    row it just normalised to `nortex`, which looks exactly like "that client
     has no notes".
 
     Folding cannot merge genuinely different strings: `Campo Incorporadora`
@@ -177,8 +177,8 @@ def client_from_path(path: str, roots: list[str] | None = None,
 
     So this guesses nothing. `roots` is an explicit, configured list of parent
     directories, and the client is the single path segment directly beneath the
-    matching root — `/Work/Oksigen/Gazin/deck.pdf` under root `/Work/Oksigen`
-    gives `gazin`. No configured root matches, no client. Empty by default, so
+    matching root — `/Work/Acme/Nortex/deck.pdf` under root `/Work/Acme`
+    gives `nortex`. No configured root matches, no client. Empty by default, so
     an install that has not opted in cannot be mislabelled by this at all.
     """
     if not path or not roots:
