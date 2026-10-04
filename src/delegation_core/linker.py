@@ -33,7 +33,7 @@ _WIKILINK_RE = re.compile(r"\[\[([^\]\|#]+)(?:#[^\]\|]+)?(?:\|[^\]]+)?\]\]")
 _DATE_PREFIX_RE = re.compile(r"^\d{4}-\d{2}-\d{2}-")
 # Drop the ` _ <tail>` staging-truncation artifact (space-underscore-space, added
 # when a long source title was cut at the 50-char filename cap). Requires spaces
-# around the underscore so plain `_` word separators (Sara_Saad_-_2024) are kept.
+# around the underscore so plain `_` word separators (Ana_Lima_-_2024) are kept.
 _TRUNC_TAIL_RE  = re.compile(r"\s+_\s+\S.*$")
 
 
@@ -227,7 +227,7 @@ def relink_folder(
       - Append new [[wikilinks]] under ## Related
       - Re-index the updated note
 
-    folder: vault-relative subpath (e.g. 'meetings/Gazin/2026' or 'meetings')
+    folder: vault-relative subpath (e.g. 'meetings/Nortex/2026' or 'meetings')
     days: restrict to notes modified within last N days (None = all)
     min_similarity: link threshold; defaults to cfg.search_threshold
     max_links_per_note: cap on new links added per note in this pass

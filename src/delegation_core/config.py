@@ -195,12 +195,12 @@ class Config:
     # for one client's retention metrics returned six of ten results from
     # another client, and there was no parameter that could exclude them.
     # `client:` in a note's frontmatter is promoted to searchable metadata,
-    # normalised through client_slug so Gazin and gazin land in one bucket.
+    # normalised through client_slug so Nortex and nortex land in one bucket.
     #
     # client_path_roots makes the same filter reach INGESTED files, which are
     # the bulk of a real index (92.8% of rows on the deployment that reported
     # this). The client is the path segment directly under a listed root:
-    # "/Work/Oksigen" turns /Work/Oksigen/Gazin/deck.pdf into client "gazin".
+    # "/Work/Acme" turns /Work/Acme/Nortex/deck.pdf into client "nortex".
     # Empty by default: deriving a client from an unconfigured path shape would
     # invent labels, and a wrong label silently excludes a document from the
     # filter that should have found it, which is worse than no label at all.
