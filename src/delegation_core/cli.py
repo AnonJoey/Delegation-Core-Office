@@ -196,6 +196,19 @@ def cmd_update(args):
     return 0 if estado == "ok" else 1
 
 
+def cmd_update_finish(args):
+    """Second half of `update`, run by it in the version pip just installed.
+
+    Prints one marked JSON line for the parent to read; see
+    installer._finish_in_new_code.
+    """
+    from . import installer
+
+    passos = installer.finish_update(Path(args.root))
+    print(installer.FINISH_MARKER + json.dumps(passos, default=str))
+    return 0
+
+
 def cmd_repair_empty_source(args):
     """Encontra e conserta notas sintetizadas a partir de arquivos sem texto."""
     from rich.console import Console
@@ -1777,6 +1790,10 @@ def main():
                           help="Report what would change; touch nothing")
     p_update.add_argument("--no-restart", action="store_true",
                           help="Leave the daemon stopped after updating")
+    # Internal: `update` runs this in a fresh interpreter after pip, so the
+    # steps that follow come from the version just installed. No help text.
+    p_update_finish = sub.add_parser("update-finish")
+    p_update_finish.add_argument("--root", required=True)
 
     p_repair = sub.add_parser(
         "repair-empty-source",
@@ -1996,6 +2013,7 @@ def main():
         "run":      cmd_run,
         "service":  cmd_service,
         "update":   cmd_update,
+        "update-finish": cmd_update_finish,
         "repair-empty-source": cmd_repair_empty_source,
         "post-install": cmd_post_install,
         "uninstall": cmd_uninstall,
