@@ -5,6 +5,13 @@ This changelog is derived directly from the canonical versioning recorded across
 
 ---
 
+## Nao lancado
+
+### Fixed
+- **`update` rodava os passos finais com o codigo da versao anterior.** O processo do `update` importa os modulos antes do `git pull` e do `pip install`, entao tudo que ele chamava depois vinha da versao velha. No update para a v0.15.0 os hooks de sessao nao foram registrados e tiveram de ser registrados a mao. Agora os passos que vem depois do pip (docs, hooks, servico) rodam num interpretador novo, pelo comando interno `update-finish`. Se o filho falhar, os passos rodam no processo atual como antes, e o passo `finish_in_new_code` do relatorio diz qual dos dois aconteceu. A correcao vale a partir do update seguinte a esta versao: o update que instala esta correcao ainda roda o codigo anterior.
+
+---
+
 ## v0.15.0 (2026-10-03) - CI nas tres plataformas, Windows correto, modelos por dispositivo e hooks no pacote
 
 ### Fixed

@@ -330,11 +330,7 @@ def update(check_only: bool = False, restart: bool = True,
             resultado["detail"] = f"pip install failed:\n{detalhe}"
             return resultado
 
-        _passo("refresh_docs", True, **refresh_shipped_files(raiz))
-        from .clients import register_session_hooks
-        ganchos = register_session_hooks()
-        _passo("register_hooks", ganchos["status"] != "error", **ganchos)
-        _passo("register_service", True, **service.install())
+        passos.extend(_finish_in_new_code(raiz))
     finally:
         # Whatever happened above, the machine does not get left without a
         # daemon it had before this command ran.
@@ -354,6 +350,53 @@ def update(check_only: bool = False, restart: bool = True,
     resultado["steps"] = passos
     resultado["stale_dist_copies"] = stale_dist_copies()
     return resultado
+
+
+def finish_update(root: Path) -> list[dict]:
+    """The steps of `update` that come after `pip install`.
+
+    Kept apart so they can run in the code that pip just installed, not in the
+    code that was loaded when `update` started. See `_finish_in_new_code`.
+    """
+    from .clients import register_session_hooks
+
+    passos = [{"step": "refresh_docs", "ok": True, **refresh_shipped_files(root)}]
+    ganchos = register_session_hooks()
+    passos.append({"step": "register_hooks", "ok": ganchos["status"] != "error", **ganchos})
+    passos.append({"step": "register_service", "ok": True, **service.install()})
+    return passos
+
+
+#: Marks the JSON line `update-finish` prints, so a warning that a library
+#: writes to stdout on import cannot be mistaken for the result.
+FINISH_MARKER = "DC_UPDATE_FINISH "
+
+
+def _finish_in_new_code(root: Path) -> list[dict]:
+    """Run `finish_update` in a fresh interpreter, i.e. in the new version.
+
+    The process running `update` imported its modules before `git pull` and
+    `pip install` replaced them, so whatever it calls afterwards is the OLD
+    version. On 03/10/2026 the update to v0.15.0 ran v0.14's steps: the hooks
+    that v0.15 moved into the package were never registered, and had to be
+    registered by hand. A child process imports the code that is on disk now.
+
+    When the child cannot do it (an older version without `update-finish`, a
+    crash, a timeout), the steps run here instead, with the old code. That is
+    what every update did before, and is better than skipping them; the step
+    `finish_in_new_code` records which of the two happened.
+    """
+    cmd = [sys.executable, "-m", "delegation_core", "update-finish", "--root", str(root)]
+    try:
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        linhas = [l for l in p.stdout.splitlines() if l.startswith(FINISH_MARKER)]
+        if p.returncode == 0 and linhas:
+            passos = json.loads(linhas[-1][len(FINISH_MARKER):])
+            return [{"step": "finish_in_new_code", "ok": True}] + passos
+        motivo = (p.stderr or p.stdout).strip()[-500:] or f"exit code {p.returncode}"
+    except (OSError, subprocess.TimeoutExpired, json.JSONDecodeError) as e:
+        motivo = f"{type(e).__name__}: {e}"
+    return [{"step": "finish_in_new_code", "ok": False, "detail": motivo}] + finish_update(root)
 
 
 # ── uninstall ────────────────────────────────────────────────────────────────
