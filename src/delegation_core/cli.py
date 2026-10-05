@@ -196,6 +196,39 @@ def cmd_update(args):
     return 0 if estado == "ok" else 1
 
 
+def cmd_eval_search(args):
+    """Mede a busca com perguntas de resposta conhecida, por escopo.
+
+    Pergunta pelo daemon em execucao; nunca abre o indice num segundo processo.
+    O arquivo de perguntas fica fora do repositorio: ver delegation_core.avaliacao.
+    """
+    from . import avaliacao
+    from .config import Config
+    from .daemon import DaemonUnavailable
+
+    cfg = Config.load()
+    try:
+        consultas = avaliacao.carregar(args.arquivo)
+    except (OSError, ValueError) as e:
+        print(f"Nao li as perguntas: {e}", file=sys.stderr)
+        return 1
+    escopos = [e.strip() for e in args.scope.split(",") if e.strip()]
+    try:
+        resultados = avaliacao.avaliar(consultas, avaliacao.buscador_do_daemon(cfg),
+                                       escopos, k=args.k)
+    except DaemonUnavailable as e:
+        print(f"Daemon fora do ar: {e}", file=sys.stderr)
+        return 1
+    if args.json:
+        print(json.dumps([r.resumo() for r in resultados], ensure_ascii=False, indent=2))
+        return 0
+    for r in resultados:
+        print(f"{r.escopo:16s} acertos@{r.k} {r.acertos}/{r.total}  mrr {r.mrr}")
+        for erro in r.erros:
+            print(f"    x {erro['pergunta']}")
+    return 0
+
+
 def cmd_update_finish(args):
     """Second half of `update`, run by it in the version pip just installed.
 
@@ -1792,6 +1825,15 @@ def main():
                           help="Leave the daemon stopped after updating")
     # Internal: `update` runs this in a fresh interpreter after pip, so the
     # steps that follow come from the version just installed. No help text.
+    p_eval = sub.add_parser(
+        "eval-search",
+        help="Measure search against questions with known answers, per scope")
+    p_eval.add_argument("arquivo", help="JSON list of {pergunta, esperado}")
+    p_eval.add_argument("--k", type=int, default=5, help="Results checked per question")
+    p_eval.add_argument("--scope", default="notes,notes+external,all",
+                        help="Comma-separated scopes to compare")
+    p_eval.add_argument("--json", action="store_true", help="Print the full result as JSON")
+
     p_update_finish = sub.add_parser("update-finish")
     p_update_finish.add_argument("--root", required=True)
 
@@ -2014,6 +2056,7 @@ def main():
         "service":  cmd_service,
         "update":   cmd_update,
         "update-finish": cmd_update_finish,
+        "eval-search": cmd_eval_search,
         "repair-empty-source": cmd_repair_empty_source,
         "post-install": cmd_post_install,
         "uninstall": cmd_uninstall,

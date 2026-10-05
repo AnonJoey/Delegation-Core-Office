@@ -372,11 +372,15 @@ class VaultManager:
         """Semantic search, optionally narrowed to one kind of indexed content.
 
         scope:
-          all       — everything (default, previous behaviour)
-          notes     — hand-written vault notes only
-          generated — graph_build wiki articles only
-          external  — ingest_folder'd files only
+          all            — everything (default, previous behaviour)
+          notes          — hand-written vault notes only
+          generated      — graph_build wiki articles only
+          external       — ingest_folder'd files only
+          notes+external — everything except graph_build articles
         graph: restrict to one built graph by name (implies scope='generated').
+        notes+external is the adaptive default's majority case; see
+        server._default_scope. `kind != "generated"` also matches rows with no
+        `kind` (ingested chunks, legacy notes): tests/test_escopo_notas_e_externos.py.
 
         Scoping matters once a vault carries machine-generated corpora: after four
         code graphs this vault held 978 generated notes against 179 written by
@@ -421,6 +425,8 @@ class VaultManager:
             where = {"is_external": "true"}
         elif scope in ("notes", "generated"):
             where = {"kind": scope[:-1] if scope == "notes" else scope}
+        elif scope == "notes+external":
+            where = {"kind": {"$ne": "generated"}}
 
         # The client filter is orthogonal to scope, so it composes with it
         # rather than replacing it — $and, not a second assignment. Normalised
