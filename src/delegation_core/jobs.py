@@ -188,9 +188,11 @@ def next_check_seconds(hint: dict, elapsed: float) -> int:
 
 #: Tarefas das quais NAO pode haver duas rodando ao mesmo tempo, com o motivo.
 #:
-#: Todas escrevem o indice do vault inteiro, e nenhuma e particionada por
-#: argumento: duas rodando juntas fazem o mesmo trabalho duas vezes sobre o
-#: mesmo dado. A concorrencia nao e hipotetica, vem dos hooks de sessao (o de
+#: Todas escrevem o indice do vault (ou o registro de ingestao), e duas rodando
+#: juntas pisam no mesmo dado. Mas `ingest_folder` e particionada por argumento
+#: (a pasta): pedidos com a MESMA pasta se juntam, e pedidos com pastas
+#: diferentes esperam a vez em `queued` (ver `submit`). Juntar sem olhar os
+#: argumentos fez o segundo de dois ingests seguidos sumir em 05/10/2026. A concorrencia nao e hipotetica, vem dos hooks de sessao (o de
 #: fim dispara `reindex`, o de inicio dispara `maintain`), e ate 26/09/2026
 #: `submit` abria uma thread nova sem olhar se ja havia uma igual.
 #:
@@ -233,14 +235,35 @@ def _familia(task_name: str) -> str:
     return task_name.split(":", 1)[0].strip()
 
 
-def em_andamento(task_name: str) -> str | None:
-    """job_id de um job da mesma familia ainda rodando, ou None."""
+def em_andamento(task_name: str, chave_args: str | None = None) -> str | None:
+    """job_id de um job da mesma familia ainda rodando (ou na fila), ou None.
+
+    Com `chave_args`, so conta o job com os MESMOS argumentos. Sem isso, um
+    `ingest_folder` da pasta B devolvia o job da pasta A e B nunca rodava:
+    medido em 05/10/2026, dois pedidos seguidos (rtk e headroom) voltaram com
+    o mesmo job_id, a resposta do segundo dizendo `source: headroom`, e so o
+    rtk foi indexado.
+    """
     familia = _familia(task_name)
     with _lock:
         for jid, j in _jobs.items():
-            if j["status"] == "running" and _familia(j["task"]) == familia:
-                return jid
+            if j["status"] in ("running", "queued") and _familia(j["task"]) == familia:
+                if chave_args is None or j.get("args_key") == chave_args:
+                    return jid
     return None
+
+
+#: Uma trava por familia exclusiva: pedidos com argumentos diferentes esperam
+#: a vez em vez de rodar juntos (o defeito de 31/08) ou de sumir (o de 05/10).
+_TRAVAS_FAMILIA: dict[str, threading.Lock] = {}
+
+
+def _chave_args(args, kwargs) -> str:
+    import json as _json
+    try:
+        return _json.dumps([list(args), kwargs], sort_keys=True, default=str)
+    except (TypeError, ValueError):
+        return repr((args, kwargs))
 
 
 def submit(task_name: str, fn, *args, **kwargs) -> str:
@@ -252,8 +275,11 @@ def submit(task_name: str, fn, *args, **kwargs) -> str:
     e o que um hook disparado duas vezes precisa. O job consultado diz quantos
     pedidos foram absorvidos, para que isso nao seja invisivel.
     """
-    if _familia(task_name) in TAREFAS_EXCLUSIVAS:
-        existente = em_andamento(task_name)
+    exclusiva = _familia(task_name) in TAREFAS_EXCLUSIVAS
+    chave = _chave_args(args, kwargs)
+    if exclusiva:
+        # Mesmo pedido, mesmos argumentos: o hook disparado duas vezes. Junta.
+        existente = em_andamento(task_name, chave)
         if existente:
             with _lock:
                 j = _jobs[existente]
@@ -263,11 +289,15 @@ def submit(task_name: str, fn, *args, **kwargs) -> str:
             return existente
 
     job_id = uuid.uuid4().hex[:8]
+    # Fora do `with _lock`: em_andamento pega a mesma trava (nao reentrante).
+    na_fila = exclusiva and em_andamento(task_name) is not None
     with _lock:
         _jobs[job_id] = {
             "job_id": job_id,
             "task": task_name,
-            "status": "running",
+            "args_key": chave,
+            # Exclusiva com outra da familia em curso: fica na fila ate a vez.
+            "status": "queued" if na_fila else "running",
             "started": datetime.now().isoformat(),
             "finished": None,
             "result": None,
@@ -275,6 +305,14 @@ def submit(task_name: str, fn, *args, **kwargs) -> str:
         }
 
     def _worker():
+        trava = None
+        if exclusiva:
+            with _lock:
+                trava = _TRAVAS_FAMILIA.setdefault(_familia(task_name), threading.Lock())
+            trava.acquire()
+            with _lock:
+                _jobs[job_id]["status"] = "running"
+                _jobs[job_id]["started"] = datetime.now().isoformat()
         started_at = datetime.now()
         try:
             result = fn(*args, **kwargs)
@@ -290,6 +328,8 @@ def submit(task_name: str, fn, *args, **kwargs) -> str:
             _record_duration(task_name, (datetime.now() - started_at).total_seconds())
         with _lock:
             _jobs[job_id].update(update)
+        if trava is not None:
+            trava.release()
 
     threading.Thread(target=_worker, daemon=True, name=f"job-{job_id}").start()
     logger.info("Submitted background job %s: %s", job_id, task_name)

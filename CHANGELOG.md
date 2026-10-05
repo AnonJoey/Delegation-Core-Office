@@ -8,6 +8,7 @@ This changelog is derived directly from the canonical versioning recorded across
 ## Nao lancado
 
 ### Fixed
+- **Tarefa exclusiva com argumentos diferentes sumia.** Dois `ingest_folder_bg` seguidos, de pastas diferentes, voltavam com o mesmo `job_id`, e so a primeira pasta era indexada; a resposta do segundo ainda citava a propria pasta. Medido em 05/10/2026 com duas pastas de codigo. Agora uma tarefa exclusiva so se junta a outra com os mesmos argumentos; as demais esperam em `queued` e rodam uma por vez, mantendo a regra de nunca rodar duas ingestoes juntas. As respostas dos `_bg` dizem o estado real.
 - **`update` rodava os passos finais com o codigo da versao anterior.** O processo do `update` importa os modulos antes do `git pull` e do `pip install`, entao tudo que ele chamava depois vinha da versao velha. No update para a v0.15.0 os hooks de sessao nao foram registrados e tiveram de ser registrados a mao. Agora os passos que vem depois do pip (docs, hooks, servico) rodam num interpretador novo, pelo comando interno `update-finish`. Se o filho falhar, os passos rodam no processo atual como antes, e o passo `finish_in_new_code` do relatorio diz qual dos dois aconteceu. A correcao vale a partir do update seguinte a esta versao: o update que instala esta correcao ainda roda o codigo anterior.
 
 ---
