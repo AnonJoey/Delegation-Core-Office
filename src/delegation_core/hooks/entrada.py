@@ -13,10 +13,15 @@ um hook.
 
 from __future__ import annotations
 
+import json
+import os
+import subprocess
 import sys
+import tempfile
+from pathlib import Path
 from typing import Callable
 
-USO = "uso: delegation-core-hook {session-start|session-end}"
+USO = "uso: delegation-core-hook {session-start|session-end|codex-session-end}"
 
 
 def _passo(nome: str, fazer: Callable[[], object]) -> None:
@@ -31,10 +36,64 @@ def session_start() -> None:
     _passo("session_start_brief", session_start_brief.main)
 
 
-def session_end(raw: str) -> None:
+def session_end(raw: str, client: str = "claude") -> None:
     from . import llama_session_stop, session_export
-    _passo("session_export", lambda: session_export.main(raw))
+    if client == "claude":
+        # Keep the established one-argument hook contract for Claude Code and
+        # for third-party wrappers that import this function directly.
+        _passo("session_export", lambda: session_export.main(raw))
+    else:
+        _passo("session_export", lambda: session_export.main(raw, client=client))
     _passo("llama_session_stop", lambda: llama_session_stop.main(raw))
+
+
+def _detached_popen_kwargs() -> dict:
+    if os.name == "nt":
+        return {"creationflags": subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP}
+    return {"start_new_session": True}
+
+
+def codex_session_end(raw: str) -> None:
+    """Return from Codex's three-second SessionEnd hook before export work starts.
+
+    Codex gives hooks a transcript path but limits SessionEnd command handlers to
+    three seconds. Persisting the small hook payload and handing it to a detached
+    worker keeps closing the client responsive while preserving the documented
+    payload for the existing redaction and indexing flow.
+    """
+    try:
+        data = json.loads(raw)
+        if not isinstance(data, dict):
+            return
+        from ..config import CONFIG_DIR
+        payload_dir = CONFIG_DIR / "session_hook_payloads"
+        payload_dir.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile("w", suffix=".json", prefix="codex-",
+                                         dir=payload_dir, delete=False, encoding="utf-8") as fh:
+            json.dump(data, fh)
+            payload = Path(fh.name)
+        subprocess.Popen(
+            [sys.executable, "-m", "delegation_core.hooks.entrada", "session-end-file", str(payload)],
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            **_detached_popen_kwargs(),
+        )
+    except Exception as e:
+        sys.stderr.write(f"delegation-core-hook: codex session dispatch failed: {type(e).__name__}: {e}\n")
+
+
+def session_end_file(payload: str) -> None:
+    path = Path(payload)
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except OSError as e:
+        sys.stderr.write(f"delegation-core-hook: cannot read session payload: {e}\n")
+        return
+    finally:
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:
+            pass
+    session_end(raw, client="codex")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -49,6 +108,16 @@ def main(argv: list[str] | None = None) -> int:
         except Exception:
             raw = ""
         session_end(raw)
+        return 0
+    if evento == "codex-session-end":
+        try:
+            raw = sys.stdin.read()
+        except Exception:
+            raw = ""
+        codex_session_end(raw)
+        return 0
+    if evento == "session-end-file" and len(args) == 2:
+        session_end_file(args[1])
         return 0
     sys.stderr.write(USO + "\n")
     return 2

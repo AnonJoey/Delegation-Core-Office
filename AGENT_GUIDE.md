@@ -178,8 +178,10 @@ key_decisions: comma-separated list of decisions, artifacts created, or next ste
 ```
 
 The note is indexed immediately and will surface in future `search_vault()` calls.
-This is the curated digest. The raw transcript backup (if Claude Code hooks are configured)
-is saved separately as `{date}-transcript-{short_id}.md`.
+This is the curated digest. A raw transcript backup is separate and is written
+only when the configured session-capture policy permits it. Claude Code and
+Codex use their own SessionEnd hooks; `automatic`, `manual` and `off` are set
+in `session_transcripts` in `config.json`.
 
 **Note:** the raw transcript backup is written by a stdlib-only `SessionEnd` hook that
 cannot import the indexing code directly, so it is **not indexed at the moment it's
@@ -311,8 +313,9 @@ Use to make an existing folder (project directory, external vault, document arch
 searchable via `search_vault`. The source folder is not modified.
 
 When `ingest_sources` is configured, `source_path` must exactly match an enabled
-declared source. Global and source-specific exclusion patterns are applied automatically;
-`exclude` adds more patterns for this call.
+declared physical path. A logical source can use one legacy `path` or a `paths`
+array of multiple physical roots. Global, source-level and path-level exclusion
+patterns are applied automatically; `exclude` adds more patterns for this call.
 
 ```json
 → { "status": "ok", "indexed": 47, "skipped": 3, "errors": [] }
@@ -535,12 +538,12 @@ How it works in practice:
   in the last 30 minutes, the hook also launches `delegation-core maintain` in the background
   (logs to `~/.delegation_core/maintenance.log`) — files dropped from either surface get
   classified, deduped, and filed without anyone needing to remember to call `run_maintenance`.
-- **Code → vault**: the `SessionEnd` hook (`delegation-core-hook session-end`) backs up the raw
-  Code transcript to `Sessions/`, and `export_session()` writes the curated digest — both
-  readable from Desktop/Cowork via `search_vault()`/`read_note()`. After writing the
-  transcript, the hook also fires a detached `delegation-core reindex` (logs to
-  `~/.delegation_core/reindex.log`) so the transcript is searchable immediately, without
-  waiting for the next `vault_reindex_bg()`.
+- **Supported client → vault**: Claude Code and Codex can back up their own raw
+  transcript to `Sessions/` when `session_transcripts` permits it, and
+  `export_session()` writes the curated digest. Both are readable through
+  `search_vault()`/`read_note()`. After writing a transcript, the hook fires a
+  detached `delegation-core reindex` (logs to `~/.delegation_core/reindex.log`)
+  so it becomes searchable without waiting for the next `vault_reindex_bg()`.
 
 Net effect: decisions made in a Desktop chat are visible to Code on its next session, and
 findings from a Code session are searchable from Desktop/Cowork — without any direct API

@@ -10,6 +10,17 @@ This changelog is derived directly from the canonical versioning recorded across
 ### Security
 - **Toda requisicao a API do dashboard exige `Authorization: Bearer <server_token>`, o mesmo segredo da porta MCP.** Medido em 14/10/2026 contra o daemon real: `GET /api/status`, `/api/processes` e `/api/vault/tree` responderam 200 sem credencial, e as rotas POST (`/api/vault/note/save`, `/api/llama/start`, `/api/config/update`) so tinham como defesa o loopback e a lista de Origin. Isso nao protege de um processo local qualquer, e nao protege de nada quando `server_host` deixa de ser `127.0.0.1`, que e o caso do daemon num servidor. O preflight CORS continua isento (o navegador o envia sem credencial e ele nao concede nada), a comparacao e em tempo constante e sobre bytes (um cabecalho nao ASCII dava `TypeError` com `str`), e um `_token` vazio rejeita tudo em vez de admitir tudo. O 401 leva o cabecalho CORS para o webview conseguir ler o erro. `tests/test_dashboard_api_auth.py` cobre sem credencial, errada, malformada, esquema em minuscula, token vazio e o preflight, e com a checagem desligada 9 dos 12 testes falham. O app Tauri le o token do `config.json` e o entrega ao webview pelo comando `get_api_token`.
 
+### Added
+- **Multiple-path ingestion sources.** A declarative source can now use the
+  legacy `path` form for one root or `paths` to group directories and files
+  under one logical name, with recursion and exclusions per path. The
+  configuration guide includes examples of both forms.
+- **Configurable transcript policy.** `session_transcripts.mode` accepts
+  `automatic`, `manual`, and `off`. In manual mode, `session capture-next
+  --client claude|codex|any` authorizes only the next session for the selected
+  target. The installer registers session-end hooks for Claude Code and Codex;
+  Codex dispatches export to a local worker to respect its short hook timeout.
+
 ### Fixed
 - **`index-migrate` reprovava uma busca correta quando trechos de nota igual empatavam no 10o lugar.** A verificacao comparava o CONJUNTO de ids do top 10 contra a busca exata; o mesmo texto em duas notas da o mesmo vetor, e qualquer desempate entre eles e valido, mas dois algoritmos corretos escolhem diferente. Uma instalacao reprovou duas vezes ("11 consultas diferem da busca exata", 39 de 50) com as 10.077 linhas identicas em texto, metadados e vetores, e ativou o indice a mao. Reproduzido com quase-duplicatas sinteticas (a verificacao antiga reprova 8 de 50 num indice correto) e medido num indice real (3,6% dos vetores repetidos; 11 de 1.049 consultas divergem, todas com a nota do 10o igual a do 11o). Agora a verificacao compara as NOTAS posicao a posicao (tolerancia 1e-5, float64 contra float32) e confere que a distancia que o indice declara e a do trecho que devolveu; o relatorio ganha `consultas_com_empate`, e uma reprovacao diz a maior diferenca de nota. Uma busca sabotada (sem o melhor resultado, ou com a distancia errada) continua reprovada.
 - **O `doctor` chamava de "indice legado abandonado" o backup que o `update` e o `index-migrate` guardam, e o `--clean-orphans` o apagava sem aviso.** O aviso agora nomeia cada pasta e diz quais sao backup; `--clean-orphans` deixa os `.chroma*-backup-*` de fora (e o caminho de volta) e `--clean-orphans --include-backups` os remove de proposito.

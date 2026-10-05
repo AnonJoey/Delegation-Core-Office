@@ -71,8 +71,17 @@ def test_transcript_mode_defaults_to_automatic_and_rejects_unknown_values(hook):
 def test_manual_capture_marker_is_single_use(hook, monkeypatch, tmp_path):
     marker = tmp_path / "capture_next_session"
     monkeypatch.setattr(hook, "MANUAL_CAPTURE_FILE", marker)
-    marker.touch()
+    marker.with_name("capture_next_session.codex").touch()
 
-    assert hook._manual_capture_requested() is True
-    assert not marker.exists()
-    assert hook._manual_capture_requested() is False
+    assert hook._manual_capture_requested("codex") is True
+    assert not marker.with_name("capture_next_session.codex").exists()
+    assert hook._manual_capture_requested("codex") is False
+
+
+def test_manual_capture_for_one_client_does_not_authorize_the_other(hook, monkeypatch, tmp_path):
+    marker = tmp_path / "capture_next_session"
+    monkeypatch.setattr(hook, "MANUAL_CAPTURE_FILE", marker)
+    marker.with_name("capture_next_session.codex").touch()
+
+    assert hook._manual_capture_requested("claude") is False
+    assert hook._manual_capture_requested("codex") is True

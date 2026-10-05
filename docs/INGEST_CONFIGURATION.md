@@ -251,12 +251,15 @@ runs at session end.
 
 ### Client scope
 
-This release registers the SessionEnd hook for **Claude Code**. The same policy
-is intentionally shared by all clients, but a Codex SessionEnd adapter must be
-installed and tested separately before Codex transcripts can be captured.
-Codex support must use its documented hook payload (`session_id`, `cwd` and
-`transcript_path`) rather than scan undocumented history files. Until that
-adapter is present, these commands affect Claude Code capture only.
+The installer registers SessionEnd hooks for **Claude Code** and **Codex**. Both
+use the same local policy and store only their own session transcripts. Codex
+provides the documented `session_id`, `cwd` and `transcript_path` payload; the
+hook dispatches its export to a local worker so Codex can close within its short
+SessionEnd timeout.
+
+After installation or upgrade, use `/hooks` in Codex to review and trust the
+new local hook before it can run. This is a Codex safety requirement; the
+installer never bypasses that review.
 
 Use these commands to manage the setting:
 
@@ -267,27 +270,21 @@ delegation-core session status
 # Save no new raw transcripts
 delegation-core session mode off
 
-# Require explicit approval for a single upcoming Claude Code session
+# Require explicit approval for the next session of one client
 delegation-core session mode manual
-delegation-core session capture-next
+delegation-core session capture-next --client codex
+
+# Or authorize one Claude Code session, or the next session of either client
+delegation-core session capture-next --client claude
+delegation-core session capture-next --client any
 
 # Restore the default automatic capture
 delegation-core session mode automatic
 ```
 
-`capture-next` creates a local, single-use marker. The next supported session
-that completes consumes it and is captured; if the session does not start, the
-marker simply remains pending and is visible in `session status`. Restart the
-daemon and begin a new MCP client session after editing `config.json` directly.
-
-When Codex support is added, manual capture should require an explicit client
-target to avoid a Claude Code session consuming an authorization intended for
-Codex:
-
-```powershell
-delegation-core session capture-next --client codex
-delegation-core session capture-next --client claude
-```
-
-Those client-targeted commands are documented design, not available in this
-release yet.
+`capture-next` creates a local, single-use marker for the selected client. The
+next matching session that completes consumes it and is captured; if no matching
+session starts, the marker remains pending and is visible in `session status`.
+Use `--client any` only when either client may safely consume the authorization.
+Restart the daemon and begin a new MCP client session after editing `config.json`
+directly.

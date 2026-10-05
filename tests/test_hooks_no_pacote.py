@@ -59,6 +59,35 @@ def test_evento_desconhecido_e_erro_de_uso():
     assert entrada.main(["session-middle"]) == 2
 
 
+def test_codex_session_end_only_dispatches_a_detached_worker(monkeypatch, tmp_path):
+    import delegation_core.config as config
+    calls = []
+    monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(entrada, "_detached_popen_kwargs", lambda: {})
+    monkeypatch.setattr(entrada.subprocess, "Popen", lambda args, **kwargs: calls.append((args, kwargs)))
+    monkeypatch.setattr("sys.stdin", io.StringIO('{"session_id":"codex-1","transcript_path":"C:/Example/t.jsonl"}'))
+
+    assert entrada.main(["codex-session-end"]) == 0
+    assert len(calls) == 1
+    assert calls[0][0][-2] == "session-end-file"
+    assert Path(calls[0][0][-1]).is_file()
+
+
+def test_register_codex_hook_preserves_other_handlers(tmp_path):
+    hooks = tmp_path / "hooks.json"
+    hooks.write_text(json.dumps({"hooks": {"SessionEnd": [{"hooks": [
+        {"type": "command", "command": "other-tool"}]}]}}), encoding="utf-8")
+    exe = tmp_path / "delegation-core-hook.exe"
+
+    result = clients.register_codex_session_hook(hooks_path=hooks, executable=exe)
+
+    saved = json.loads(hooks.read_text(encoding="utf-8"))
+    commands = [h["command"] for group in saved["hooks"]["SessionEnd"] for h in group["hooks"]]
+    assert result["status"] == "installed"
+    assert "other-tool" in commands
+    assert f'"{exe}" codex-session-end' in commands
+
+
 def test_o_comando_esta_declarado_no_pyproject():
     texto = (Path(__file__).resolve().parents[1] / "pyproject.toml").read_text(encoding="utf-8")
     assert 'delegation-core-hook = "delegation_core.hooks.entrada:main"' in texto

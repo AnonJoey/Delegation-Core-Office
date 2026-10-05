@@ -359,11 +359,13 @@ def finish_update(root: Path) -> list[dict]:
     Kept apart so they can run in the code that pip just installed, not in the
     code that was loaded when `update` started. See `_finish_in_new_code`.
     """
-    from .clients import register_session_hooks
+    from .clients import register_codex_session_hook, register_session_hooks
 
     passos = [{"step": "refresh_docs", "ok": True, **refresh_shipped_files(root)}]
     ganchos = register_session_hooks()
     passos.append({"step": "register_hooks", "ok": ganchos["status"] != "error", **ganchos})
+    codex_hooks = register_codex_session_hook()
+    passos.append({"step": "register_codex_hooks", "ok": codex_hooks["status"] != "error", **codex_hooks})
     passos.append({"step": "register_service", "ok": True, **service.install()})
     return passos
 
@@ -636,9 +638,11 @@ def uninstall(dry_run: bool = False) -> dict:
         )
         return relatorio
 
-    from .clients import unregister_session_hooks
+    from .clients import unregister_codex_session_hook, unregister_session_hooks
     ganchos = unregister_session_hooks()
     _passo("unregister_hooks", ganchos["status"] != "error", **ganchos)
+    codex_hooks = unregister_codex_session_hook()
+    _passo("unregister_codex_hooks", codex_hooks["status"] != "error", **codex_hooks)
     _passo("unregister_daemon", True, **service.uninstall())
     _passo("unregister_llama_autostart", True, **service.uninstall_llama_autostart())
 
@@ -1044,8 +1048,9 @@ def post_install(root: Path) -> dict:
     relatorio: dict = {"root": str(root)}
 
     relatorio["docs"] = refresh_shipped_files(root)
-    from .clients import register_session_hooks
+    from .clients import register_codex_session_hook, register_session_hooks
     relatorio["hooks"] = register_session_hooks()
+    relatorio["codex_hooks"] = register_codex_session_hook()
     relatorio["skills"] = install_skills(root)
     relatorio["agents"] = install_agents(root)
     relatorio["dashboard"] = install_dashboard(root)

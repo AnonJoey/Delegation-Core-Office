@@ -79,14 +79,27 @@ def transcript_mode(config: dict) -> str:
     return mode if mode in {"automatic", "manual", "off"} else "automatic"
 
 
-def _manual_capture_requested() -> bool:
-    try:
-        MANUAL_CAPTURE_FILE.unlink()
-        return True
-    except FileNotFoundError:
-        return False
-    except OSError:
-        return False
+def _manual_capture_requested(client: str = "claude") -> bool:
+    """Consume a single-use request for this client, or the explicit ``any`` one.
+
+    The legacy unqualified marker is treated as ``any`` so an in-flight manual
+    request survives an upgrade. Client-specific markers prevent a Codex session
+    from consuming an authorization made for Claude Code (and vice versa).
+    """
+    client = client if client in {"claude", "codex"} else "any"
+    markers = [MANUAL_CAPTURE_FILE.with_name(f"{MANUAL_CAPTURE_FILE.name}.{client}")]
+    if client != "any":
+        markers.append(MANUAL_CAPTURE_FILE.with_name(f"{MANUAL_CAPTURE_FILE.name}.any"))
+    markers.append(MANUAL_CAPTURE_FILE)
+    for marker in markers:
+        try:
+            marker.unlink()
+            return True
+        except FileNotFoundError:
+            continue
+        except OSError:
+            return False
+    return False
 
 
 def _resolve_sessions_dir(vault: Path, config: dict) -> Path:
@@ -319,7 +332,7 @@ def _format_markdown(
     return "\n".join(lines)
 
 
-def main(raw: str | None = None) -> int:
+def main(raw: str | None = None, client: str = "claude") -> int:
     """Exporta a transcricao da sessao que terminou. `raw` e o JSON do hook;
     sem ele, le da entrada padrao. Devolve 0 sempre: o fim da sessao nunca
     pode falhar por causa do export."""
@@ -348,7 +361,7 @@ def main(raw: str | None = None) -> int:
     if mode == "off":
         sys.stderr.write("session_export: transcript capture is off\n")
         return 0
-    if mode == "manual" and not _manual_capture_requested():
+    if mode == "manual" and not _manual_capture_requested(client):
         sys.stderr.write("session_export: manual capture was not requested\n")
         return 0
     vault_path = config.get("vault_path", "")

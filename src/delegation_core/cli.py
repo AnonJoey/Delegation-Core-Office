@@ -983,16 +983,22 @@ def cmd_session(args):
     mode = section.get("mode", "automatic")
     if mode not in {"automatic", "manual", "off"}:
         mode = "automatic"
-    marker = CONFIG_DIR / "capture_next_session"
+    marker_base = CONFIG_DIR / "capture_next_session"
+    pending = [client for client in ("claude", "codex", "any")
+               if marker_base.with_name(f"{marker_base.name}.{client}").exists()]
+    if marker_base.exists():
+        pending.append("any (legacy)")
 
     if args.session_command == "status":
-        print(json.dumps({"mode": mode, "next_session_requested": marker.exists()}, indent=2))
+        print(json.dumps({"mode": mode, "pending_capture_clients": pending}, indent=2))
         return
     if args.session_command == "mode":
         cfg.session_transcripts = {"mode": args.mode}
         cfg.save()
         if args.mode != "manual":
-            marker.unlink(missing_ok=True)
+            for client in ("claude", "codex", "any"):
+                marker_base.with_name(f"{marker_base.name}.{client}").unlink(missing_ok=True)
+            marker_base.unlink(missing_ok=True)
         print(f"Session transcript capture mode: {args.mode}")
         return
     if args.session_command == "capture-next":
@@ -1000,8 +1006,10 @@ def cmd_session(args):
             print("Session transcript mode is not manual. Set it first with: delegation-core session mode manual")
             sys.exit(2)
         CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        marker = marker_base.with_name(f"{marker_base.name}.{args.client}")
         marker.touch(exist_ok=True)
-        print("The next completed Claude Code session will be saved to the vault.")
+        target = "either supported client" if args.client == "any" else args.client
+        print(f"The next completed {target} session will be saved to the vault.")
 
 
 def cmd_relink(args):
@@ -2114,7 +2122,9 @@ def main():
     session_sub.add_parser("status", help="Show transcript capture mode and pending manual capture")
     p_session_mode = session_sub.add_parser("mode", help="Set automatic, manual, or off transcript capture")
     p_session_mode.add_argument("mode", choices=["automatic", "manual", "off"])
-    session_sub.add_parser("capture-next", help="In manual mode, save the next completed session")
+    p_capture_next = session_sub.add_parser("capture-next", help="In manual mode, save the next completed client session")
+    p_capture_next.add_argument("--client", choices=["claude", "codex", "any"], required=True,
+                                help="Client whose next completed session may be captured")
 
     p_relink = sub.add_parser("relink", help="Add wikilinks to notes in a vault subfolder")
     _add_local_flag(p_relink)

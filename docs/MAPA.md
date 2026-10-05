@@ -120,12 +120,14 @@ processo. A CLI que escreve no índice entrega o trabalho ao daemon
 - `installer.py`, `wizard.py`, `service.py`, `clients.py`, `windows.py`,
   `doctor.py`, `downloader.py` e `config.py`.
 
-**Hooks de sessão do Claude Code** (`hooks/`, dentro do pacote)
-- `entrada.py`: o comando `delegation-core-hook`, um processo por evento. O
-  instalador o registra no `~/.claude/settings.json`.
-- `session_start_brief.py`: resumo do que mudou no vault, no início da sessão.
-- `session_export.py` e `llama_session_stop.py`: no fim da sessão, em sequência,
-  a transcrição com segredos redigidos e a parada do modelo local ocioso.
+**Claude Code and Codex session hooks** (`hooks/`, inside the package)
+- `entrada.py`: the `delegation-core-hook` command, one process per event. The
+  installer registers it in `~/.claude/settings.json` and `~/.codex/hooks.json`.
+- `session_start_brief.py`: a summary of vault activity at session start.
+- `session_export.py` and `llama_session_stop.py`: at session end, in sequence,
+  write a redacted transcript and stop the idle local model.
+- For Codex, `entrada.py` dispatches export to a detached worker because its
+  `SessionEnd` event has a short execution limit.
 
 **Fora do pacote**
 - `dashboard/`: a casca Tauri e a interface.

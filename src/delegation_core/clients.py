@@ -57,6 +57,7 @@ from .windows import SELF, read_client_config, write_client_config
 logger = logging.getLogger("clients")
 
 CODEX_CONFIG = Path.home() / ".codex" / "config.toml"
+CODEX_HOOKS = Path.home() / ".codex" / "hooks.json"
 
 #: Antigravity (the `agy` CLI) and the Gemini CLI share this file. Its own docs
 #: call it the "Global Configuration", applying to all sessions.
@@ -451,3 +452,73 @@ def unregister_session_hooks(settings_path: Path | None = None) -> dict:
     _gravar_settings(path, dados)
     return {"client": "claude-code-hooks", "path": str(path), "status": "removed",
             "removed": removidos}
+
+
+def _e_nosso_codex(comando: str) -> bool:
+    return "delegation-core-hook" in str(comando) and "codex-session-end" in str(comando)
+
+
+def _codex_hook_groups_without_ours(groups: list) -> tuple[list, int]:
+    remaining, removed = [], 0
+    for group in groups:
+        if not isinstance(group, dict) or not isinstance(group.get("hooks"), list):
+            remaining.append(group)
+            continue
+        kept = [hook for hook in group["hooks"] if not (
+            isinstance(hook, dict) and _e_nosso_codex(hook.get("command", "")))]
+        removed += len(group["hooks"]) - len(kept)
+        if kept:
+            remaining.append(dict(group, hooks=kept))
+    return remaining, removed
+
+
+def register_codex_session_hook(hooks_path: Path | None = None,
+                                executable: Path | None = None) -> dict:
+    """Register the small Codex SessionEnd dispatcher without touching TOML.
+
+    Codex discovers ``~/.codex/hooks.json`` independently from config.toml.
+    Keeping the hook in its own JSON document avoids hand-editing the user's
+    TOML and preserves unrelated hook groups.
+    """
+    path = hooks_path or CODEX_HOOKS
+    exe = executable or hook_executable()
+    data, error = _ler_settings(path)
+    if error:
+        return {"client": "codex-hooks", "path": str(path), "status": "error", "detail": error}
+    before = json.dumps(data, sort_keys=True)
+    hooks = data.setdefault("hooks", {})
+    if not isinstance(hooks, dict):
+        return {"client": "codex-hooks", "path": str(path), "status": "error",
+                "detail": "hooks is not an object, not touching it"}
+    groups, replaced = _codex_hook_groups_without_ours(list(hooks.get("SessionEnd") or []))
+    command = f'"{exe}" codex-session-end'
+    groups.append({"hooks": [{"type": "command", "command": command,
+                               "commandWindows": command, "timeout": 3}]})
+    hooks["SessionEnd"] = groups
+    if json.dumps(data, sort_keys=True) != before:
+        _gravar_settings(path, data)
+        status = "updated" if replaced else "installed"
+    else:
+        status = "already-configured"
+    return {"client": "codex-hooks", "path": str(path), "status": status,
+            "executable": str(exe), "replaced": replaced,
+            "trust_review_required": True}
+
+
+def unregister_codex_session_hook(hooks_path: Path | None = None) -> dict:
+    path = hooks_path or CODEX_HOOKS
+    data, error = _ler_settings(path)
+    if error:
+        return {"client": "codex-hooks", "path": str(path), "status": "error", "detail": error}
+    hooks = data.get("hooks")
+    if not isinstance(hooks, dict):
+        return {"client": "codex-hooks", "path": str(path), "status": "absent"}
+    groups, removed = _codex_hook_groups_without_ours(list(hooks.get("SessionEnd") or []))
+    if not removed:
+        return {"client": "codex-hooks", "path": str(path), "status": "absent"}
+    if groups:
+        hooks["SessionEnd"] = groups
+    else:
+        hooks.pop("SessionEnd", None)
+    _gravar_settings(path, data)
+    return {"client": "codex-hooks", "path": str(path), "status": "removed", "removed": removed}

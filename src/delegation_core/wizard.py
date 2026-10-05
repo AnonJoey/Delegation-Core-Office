@@ -1008,7 +1008,11 @@ def _completion(cfg: Config, conexao: dict | None = None):
         f"@{agent_guide}",
         title="[bold]~/.claude/CLAUDE.md[/bold]", border_style="blue"))
     console.print()
-    console.print("  [bold]3. Claude Desktop / Cowork: load the agent protocol[/bold]")
+    console.print("  [bold]3. Codex: review the optional SessionEnd hook[/bold]")
+    console.print("     The installer registers it in [cyan]~/.codex/hooks.json[/cyan]. Restart Codex and")
+    console.print("     accept its trust prompt when shown; review the file before accepting it.")
+    console.print()
+    console.print("  [bold]4. Claude Desktop / Cowork: load the agent protocol[/bold]")
     console.print("     There's no config file for this: open Claude Desktop's")
     console.print("     [cyan]Settings → Custom Instructions[/cyan] (and/or each Cowork project's")
     console.print("     instructions) and paste the contents of:")
