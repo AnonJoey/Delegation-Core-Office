@@ -108,6 +108,11 @@ class Config:
     ])
 
     # ── llama.cpp ────────────────────────────────────────────────────────────
+    #: Qual servidor roda o modelo local. "llamacpp" (llama-server, GGUF) ou
+    #: "mlx" (mlx_lm.server, Apple Silicon). Com "mlx", `llama_binary` aponta
+    #: para o mlx_lm.server e `llama_model` e a pasta do modelo MLX ou o id do
+    #: repositorio no Hugging Face (ex.: mlx-community/Qwen3.8-27B-8bit).
+    motor_local: str = "llamacpp"
     llama_binary: str = ""
     llama_model: str = ""
     llama_port: int = 8181
@@ -357,6 +362,22 @@ class Config:
     ])
 
     # ── derived ──────────────────────────────────────────────────────────────
+
+    @property
+    def motor_e_mlx(self) -> bool:
+        return (getattr(self, "motor_local", "llamacpp") or "").strip().lower() == "mlx"
+
+    @property
+    def modelo_no_pedido(self) -> str:
+        """O campo "model" de cada pedido ao servidor local.
+
+        O llama-server ignora o campo; o mlx_lm.server nao: um nome que ele nao
+        conhece vira um pedido para CARREGAR aquele repositorio. Medido em
+        06/10/2026 com mlx-lm 0.32: "local" falha em toda chamada ("Cannot find
+        an appropriate cached snapshot"), e "default_model" usa o modelo que o
+        servidor subiu com --model.
+        """
+        return "default_model" if self.motor_e_mlx else "local"
 
     @property
     def llama_url(self) -> str:
