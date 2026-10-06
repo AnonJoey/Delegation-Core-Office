@@ -765,6 +765,27 @@ def install_skills(root: Path) -> dict:
     return resultado
 
 
+def install_codex_skills(root: Path) -> dict:
+    """Copy the same open-skill folders to Codex's user discovery location."""
+    origem = root / "skills"
+    resultado: dict = {"installed": [], "kept_yours": [], "available": bool(origem.is_dir())}
+    if not origem.is_dir():
+        return resultado
+    destino_raiz = Path.home() / ".agents" / "skills"
+    destino_raiz.mkdir(parents=True, exist_ok=True)
+    for pasta in sorted(p for p in origem.iterdir() if p.is_dir() and (p / "SKILL.md").is_file()):
+        destino = destino_raiz / pasta.name
+        if destino.exists():
+            resultado["kept_yours"].append(pasta.name)
+            continue
+        try:
+            shutil.copytree(pasta, destino)
+            resultado["installed"].append(pasta.name)
+        except OSError as e:
+            resultado.setdefault("errors", []).append({"skill": pasta.name, "error": str(e)})
+    return resultado
+
+
 def install_agents(root: Path) -> dict:
     """Copy bundled agent definitions into ~/.claude/agents, never clobbering.
 
@@ -1052,6 +1073,7 @@ def post_install(root: Path) -> dict:
     relatorio["hooks"] = register_session_hooks()
     relatorio["codex_hooks"] = register_codex_session_hook()
     relatorio["skills"] = install_skills(root)
+    relatorio["codex_skills"] = install_codex_skills(root)
     relatorio["agents"] = install_agents(root)
     relatorio["dashboard"] = install_dashboard(root)
 

@@ -15,7 +15,7 @@ call remains available while `ingest_sources` is empty.
 
 Edit the runtime `config.json`:
 
-- Windows: `%USERPROFILE%\\.delegation_core\\config.json`
+- Windows: `%USERPROFILE%\.delegation_core\config.json`
 - Linux/macOS: `~/.delegation_core/config.json`
 
 The file is strict JSON: do not add comments or a trailing comma. Back it up
@@ -251,15 +251,26 @@ runs at session end.
 
 ### Client scope
 
-The installer registers SessionEnd hooks for **Claude Code** and **Codex**. Both
-use the same local policy and store only their own session transcripts. Codex
-provides the documented `session_id`, `cwd` and `transcript_path` payload; the
-hook dispatches its export to a local worker so Codex can close within its short
-SessionEnd timeout.
+The installer registers SessionStart and SessionEnd hooks for **Claude Code**
+and **Codex**. At startup, each client receives a short vault-activity brief;
+the Codex brief also directs the agent to the installed delegation-core-office skill.
+At session end, both clients use the same local policy and store only their own
+session transcripts. Codex provides the documented `session_id`, `cwd` and
+`transcript_path` payload; the hook dispatches its export to a local worker so
+Codex can close within its short SessionEnd timeout.
 
-After installation or upgrade, use `/hooks` in Codex to review and trust the
-new local hook before it can run. This is a Codex safety requirement; the
-installer never bypasses that review.
+After installation or upgrade, open the **Codex CLI** in a valid working
+directory and use `/hooks` to review and trust the new local hooks before they
+can run. The VS Code client does not expose this slash command; it uses the
+trust persisted by the CLI. This is a Codex safety requirement; the installer
+never bypasses that review. The installer also copies bundled skills to
+`~/.agents/skills/` without overwriting a same-named skill already owned by
+the user. Restart Codex after installation so it discovers newly installed
+skills.
+
+Open each VS Code session from an existing folder. Codex starts command hooks
+with the session working directory, so a session still associated with a moved
+or deleted folder cannot start a hook.
 
 Use these commands to manage the setting:
 
@@ -288,3 +299,11 @@ session starts, the marker remains pending and is visible in `session status`.
 Use `--client any` only when either client may safely consume the authorization.
 Restart the daemon and begin a new MCP client session after editing `config.json`
 directly.
+
+### Claude Code in VS Code
+
+The Claude Code terminal client emits its session-end event when its session exits.
+The native Claude Code VS Code extension can keep its session active after a chat is
+archived or closed; in practice, its session-end hook runs when the VS Code window
+is closed. Use the integrated terminal and `/exit` when a transcript must be
+captured immediately, or close VS Code to end the extension session.

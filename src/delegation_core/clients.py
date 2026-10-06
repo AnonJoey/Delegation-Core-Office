@@ -49,6 +49,7 @@ import json
 import logging
 import platform
 import shutil
+import sys
 from pathlib import Path
 
 from .config import Config
@@ -455,7 +456,29 @@ def unregister_session_hooks(settings_path: Path | None = None) -> dict:
 
 
 def _e_nosso_codex(comando: str) -> bool:
-    return "delegation-core-hook" in str(comando) and "codex-session-end" in str(comando)
+    comando = str(comando)
+    return (
+        ("delegation-core-hook" in comando or "delegation_core.hooks.entrada" in comando)
+        and ("codex-session-start" in comando or "codex-session-end" in comando)
+    )
+
+
+def _codex_hook_command(argument: str, executable: Path) -> str:
+    """Build a trusted, portable Codex hook command.
+
+    Windows Application Control can allow the virtual-environment interpreter
+    while blocking console-script executable shims. Run the package module
+    through that interpreter there. Force UTF-8 because Codex reads hook output
+    from a pipe, while a Windows console otherwise may use a legacy code page.
+    Unix keeps the normal console command.
+    """
+    if platform.system() == "Windows":
+        python = str(Path(sys.executable))
+        if " " not in python:
+            return f"{python} -X utf8 -m delegation_core.hooks.entrada {argument}"
+        return (f'cmd.exe /d /s /c ""{python}" -X utf8 -m '
+                f'delegation_core.hooks.entrada {argument}"')
+    return f'"{executable}" {argument}'
 
 
 def _codex_hook_groups_without_ours(groups: list) -> tuple[list, int]:
@@ -490,11 +513,14 @@ def register_codex_session_hook(hooks_path: Path | None = None,
     if not isinstance(hooks, dict):
         return {"client": "codex-hooks", "path": str(path), "status": "error",
                 "detail": "hooks is not an object, not touching it"}
-    groups, replaced = _codex_hook_groups_without_ours(list(hooks.get("SessionEnd") or []))
-    command = f'"{exe}" codex-session-end'
-    groups.append({"hooks": [{"type": "command", "command": command,
-                               "commandWindows": command, "timeout": 3}]})
-    hooks["SessionEnd"] = groups
+    replaced = 0
+    for event, argument, timeout in (("SessionStart", "codex-session-start", 30),
+                                     ("SessionEnd", "codex-session-end", 3)):
+        groups, removed = _codex_hook_groups_without_ours(list(hooks.get(event) or []))
+        replaced += removed
+        command = _codex_hook_command(argument, exe)
+        groups.append({"hooks": [{"type": "command", "command": command, "timeout": timeout}]})
+        hooks[event] = groups
     if json.dumps(data, sort_keys=True) != before:
         _gravar_settings(path, data)
         status = "updated" if replaced else "installed"
@@ -513,12 +539,15 @@ def unregister_codex_session_hook(hooks_path: Path | None = None) -> dict:
     hooks = data.get("hooks")
     if not isinstance(hooks, dict):
         return {"client": "codex-hooks", "path": str(path), "status": "absent"}
-    groups, removed = _codex_hook_groups_without_ours(list(hooks.get("SessionEnd") or []))
+    removed = 0
+    for event in ("SessionStart", "SessionEnd"):
+        groups, count = _codex_hook_groups_without_ours(list(hooks.get(event) or []))
+        removed += count
+        if groups:
+            hooks[event] = groups
+        else:
+            hooks.pop(event, None)
     if not removed:
         return {"client": "codex-hooks", "path": str(path), "status": "absent"}
-    if groups:
-        hooks["SessionEnd"] = groups
-    else:
-        hooks.pop("SessionEnd", None)
     _gravar_settings(path, data)
     return {"client": "codex-hooks", "path": str(path), "status": "removed", "removed": removed}

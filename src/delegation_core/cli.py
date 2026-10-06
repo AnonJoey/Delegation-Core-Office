@@ -314,10 +314,17 @@ def cmd_post_install(args):
     ganchos = r["hooks"]
     console.print(f"  session hooks: {ganchos['status']}"
                   + (f" ({ganchos['detail']})" if ganchos.get("detail") else ""))
+    codex_ganchos = r["codex_hooks"]
+    console.print(f"  Codex hooks: {codex_ganchos['status']}"
+                  + (" (review with /hooks)" if codex_ganchos.get("trust_review_required") else ""))
     pele = r["skills"]
     if pele["available"]:
         console.print(f"  skills: {len(pele['installed'])} installed, "
                       f"{len(pele['kept_yours'])} kept yours")
+    codex_pele = r.get("codex_skills", {})
+    if codex_pele.get("available"):
+        console.print(f"  Codex skills: {len(codex_pele['installed'])} installed, "
+                      f"{len(codex_pele['kept_yours'])} kept yours")
     agentes = r.get("agents", {})
     if agentes.get("available"):
         console.print(f"  agents: {len(agentes['installed'])} installed, "

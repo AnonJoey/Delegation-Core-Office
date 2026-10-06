@@ -61,6 +61,30 @@ def test_ignores_non_string_entries_in_vault_folders(hook, tmp_path):
     assert resolved == tmp_path / "Sessions"
 
 
+def test_parses_codex_response_items(hook, tmp_path):
+    transcript = tmp_path / "codex-rollout.jsonl"
+    transcript.write_text(
+        '{"type":"response_item","timestamp":"2026-10-06T12:00:00Z",'
+        '"payload":{"type":"message","role":"user",'
+        '"content":[{"type":"input_text","text":"Hello"}]}}\n'
+        '{"type":"response_item","timestamp":"2026-10-06T12:00:01Z",'
+        '"payload":{"item":{"type":"message","role":"assistant",'
+        '"content":[{"type":"output_text","text":"Hi"}]}}}\n',
+        encoding="utf-8",
+    )
+
+    assert hook._parse_transcript(str(transcript)) == [
+        {"role": "user", "text": "Hello", "ts": "2026-10-06T12:00:00Z"},
+        {"role": "assistant", "text": "Hi", "ts": "2026-10-06T12:00:01Z"},
+    ]
+
+
+def test_reindex_worker_is_hidden_on_windows(hook):
+    flags = hook._detached_popen_kwargs().get("creationflags", 0)
+    assert flags & hook.subprocess.CREATE_NO_WINDOW
+    assert flags & hook.subprocess.CREATE_NEW_PROCESS_GROUP
+
+
 def test_transcript_mode_defaults_to_automatic_and_rejects_unknown_values(hook):
     assert hook.transcript_mode({}) == "automatic"
     assert hook.transcript_mode({"session_transcripts": {"mode": "manual"}}) == "manual"

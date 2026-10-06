@@ -98,7 +98,12 @@ def test_um_link_simbolico_para_fora_tambem_nao(vault, tmp_path):
     alvo = (tmp_path / "segredo.md")
     alvo.write_text("fora\n", encoding="utf-8")
     atalho = tmp_path / "vault" / "atalho.md"
-    atalho.symlink_to(alvo)
+    try:
+        atalho.symlink_to(alvo)
+    except OSError as exc:
+        if getattr(exc, "winerror", None) == 1314:
+            pytest.skip("Windows symlink privilege is not available")
+        raise
 
     graphbridge._clear_previous_filing(vault, ["atalho.md"], "Reference/graphs/meu-grafo")
 

@@ -208,7 +208,12 @@ def test_um_link_simbolico_para_dentro_do_config_dir_e_recusado(monkeypatch, tmp
     monkeypatch.setattr(wizard, "CONFIG_DIR", tmp_path / ".delegation_core")
     (tmp_path / ".delegation_core" / "vault").mkdir(parents=True)
     atalho = tmp_path / "atalho"
-    atalho.symlink_to(tmp_path / ".delegation_core" / "vault")
+    try:
+        atalho.symlink_to(tmp_path / ".delegation_core" / "vault")
+    except OSError as exc:
+        if getattr(exc, "winerror", None) == 1314:
+            pytest.skip("Windows symlink privilege is not available")
+        raise
 
     assert wizard._conflicts_with_config_dir(atalho) is True
 

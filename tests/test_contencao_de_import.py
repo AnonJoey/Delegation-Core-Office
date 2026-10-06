@@ -55,8 +55,13 @@ def test_com_root_separa_dentro_de_fora(arvore):
 def test_root_inalcancavel_nega(tmp_path: Path):
     """Guarda de contencao nega quando nao consegue decidir; nunca levanta."""
     a, b = tmp_path / "a", tmp_path / "b"
-    a.symlink_to(b)
-    b.symlink_to(a)
+    try:
+        a.symlink_to(b)
+        b.symlink_to(a)
+    except OSError as exc:
+        if getattr(exc, "winerror", None) == 1314:
+            pytest.skip("Windows symlink privilege is not available")
+        raise
     assert _dentro_do_root(a / "x", tmp_path / "raiz") is False
 
 

@@ -128,6 +128,9 @@ processo. A CLI que escreve no índice entrega o trabalho ao daemon
   write a redacted transcript and stop the idle local model.
 - For Codex, `entrada.py` dispatches export to a detached worker because its
   `SessionEnd` event has a short execution limit.
+- The Codex registration includes both SessionStart and SessionEnd; its bundled
+  delegation-core-office skill is installed under `~/.agents/skills/` without
+  overwriting a user-owned skill.
 
 **Fora do pacote**
 - `dashboard/`: a casca Tauri e a interface.

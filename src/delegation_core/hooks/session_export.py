@@ -53,14 +53,12 @@ REINDEX_LOG = Path.home() / ".delegation_core" / "reindex.log"
 def _detached_popen_kwargs() -> dict:
     """Platform-appropriate kwargs to fully detach a background process.
 
-    POSIX: ``start_new_session`` (setsid) so the child survives the parent's
-    exit. Windows: ``start_new_session`` is silently ignored by subprocess
-    on that platform, so use DETACHED_PROCESS + CREATE_NEW_PROCESS_GROUP
-    instead, which achieve the equivalent (no console, own process group).
+    POSIX: ``start_new_session`` (setsid). Windows: the child has its own
+    process group and is launched with no visible console window.
     """
     if platform.system() == "Windows":
         return {
-            "creationflags": subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+            "creationflags": subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP
         }
     return {"start_new_session": True}
 
@@ -150,6 +148,46 @@ def _trigger_reindex() -> bool:
         return False
 
 
+def _text_content(content: object) -> str:
+    """Extract text from Claude- and Codex-style message content blocks."""
+    if isinstance(content, str):
+        return content.strip()
+    if not isinstance(content, list):
+        return ""
+    parts = []
+    for block in content:
+        if not isinstance(block, dict):
+            continue
+        # Claude commonly uses ``text``. Codex response items use input_text
+        # and output_text blocks, which expose the same text field.
+        if block.get("type") in {"text", "input_text", "output_text"}:
+            text = block.get("text", "")
+            if isinstance(text, str) and text.strip():
+                parts.append(text.strip())
+    return "\n".join(parts)
+
+
+def _response_item_message(item: object) -> dict | None:
+    """Find the user/assistant message nested in a Codex ``response_item``.
+
+    Codex rollouts wrap response items in a payload (and some versions add an
+    ``item`` wrapper). Restrict the walk to those structural wrappers so tool
+    inputs and unrelated event metadata never become transcript messages.
+    """
+    current = item
+    for _ in range(3):
+        if not isinstance(current, dict):
+            return None
+        role = current.get("role")
+        if role in {"user", "assistant"} and "content" in current:
+            return current
+        next_item = current.get("payload", current.get("item"))
+        if next_item is None or next_item is current:
+            return None
+        current = next_item
+    return None
+
+
 def _parse_transcript(transcript_path: str) -> list[dict]:
     """Extract user and assistant text turns from the JSONL transcript."""
     messages = []
@@ -165,26 +203,20 @@ def _parse_transcript(transcript_path: str) -> list[dict]:
                     continue
 
                 msg_type = obj.get("type")
-                if msg_type not in ("user", "assistant"):
+                if msg_type in ("user", "assistant"):
+                    message = obj.get("message", {})
+                    role = message.get("role", msg_type)
+                elif msg_type == "response_item":
+                    message = _response_item_message(obj)
+                    if message is None:
+                        continue
+                    role = message["role"]
+                else:
                     continue
-
-                message = obj.get("message", {})
-                role = message.get("role", msg_type)
                 content = message.get("content", "")
                 ts = obj.get("timestamp", "")
 
-                if isinstance(content, str):
-                    text = content.strip()
-                elif isinstance(content, list):
-                    # Keep only text blocks; skip thinking, tool_use, tool_result
-                    parts = [
-                        c.get("text", "")
-                        for c in content
-                        if isinstance(c, dict) and c.get("type") == "text"
-                    ]
-                    text = "\n".join(parts).strip()
-                else:
-                    continue
+                text = _text_content(content)
 
                 if not text:
                     continue
@@ -284,6 +316,7 @@ def _topic(messages: list[dict]) -> str:
 
 def _format_markdown(
     messages: list[dict], session_id: str, cwd: str, segredos_removidos: int = 0,
+    client: str = "claude",
 ) -> str:
     date_str = _session_date(messages)
     time_str = datetime.now().strftime("%H:%M")
@@ -291,6 +324,7 @@ def _format_markdown(
 
     topic = _topic(messages)
 
+    client_label = "Codex" if client == "codex" else "Claude Code"
     lines = [
         "---",
         # Hyphen and not an em dash: the vault's writing rule forbids it, and
@@ -313,14 +347,14 @@ def _format_markdown(
         f"*Working directory: `{cwd}`*",
         "",
         "> This is a verbatim raw transcript. For the curated summary, see the",
-        "> `export_session` note written by Claude before ending the session.",
+        f"> `export_session` note written by {client_label} before ending the session.",
         "",
         "---",
         "",
     ])
 
     for msg in messages:
-        role_label = "### You" if msg["role"] == "user" else "### Claude"
+        role_label = "### You" if msg["role"] == "user" else f"### {client_label}"
         ts_label = f" *({msg['ts'][:16].replace('T', ' ')})*" if msg["ts"] else ""
         lines.append(f"{role_label}{ts_label}")
         lines.append("")
@@ -410,7 +444,7 @@ def main(raw: str | None = None, client: str = "claude") -> int:
         redacted_messages.append(m_copy)
 
     content = _format_markdown(
-        redacted_messages, session_id, cwd, segredos_removidos=total_removidos,
+        redacted_messages, session_id, cwd, segredos_removidos=total_removidos, client=client,
     )
     try:
         tmp = dest.with_suffix(".tmp")

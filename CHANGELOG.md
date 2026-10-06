@@ -20,6 +20,10 @@ This changelog is derived directly from the canonical versioning recorded across
   --client claude|codex|any` authorizes only the next session for the selected
   target. The installer registers session-end hooks for Claude Code and Codex;
   Codex dispatches export to a local worker to respect its short hook timeout.
+- **Codex session parity.** Codex now also receives the SessionStart vault
+  briefing and protocol direction. The installer registers both local hooks and
+  places the bundled delegation-core-office skill in `~/.agents/skills/`, preserving
+  a same-named user-owned skill.
 
 ### Fixed
 - **`index-migrate` reprovava uma busca correta quando trechos de nota igual empatavam no 10o lugar.** A verificacao comparava o CONJUNTO de ids do top 10 contra a busca exata; o mesmo texto em duas notas da o mesmo vetor, e qualquer desempate entre eles e valido, mas dois algoritmos corretos escolhem diferente. Uma instalacao reprovou duas vezes ("11 consultas diferem da busca exata", 39 de 50) com as 10.077 linhas identicas em texto, metadados e vetores, e ativou o indice a mao. Reproduzido com quase-duplicatas sinteticas (a verificacao antiga reprova 8 de 50 num indice correto) e medido num indice real (3,6% dos vetores repetidos; 11 de 1.049 consultas divergem, todas com a nota do 10o igual a do 11o). Agora a verificacao compara as NOTAS posicao a posicao (tolerancia 1e-5, float64 contra float32) e confere que a distancia que o indice declara e a do trecho que devolveu; o relatorio ganha `consultas_com_empate`, e uma reprovacao diz a maior diferenca de nota. Uma busca sabotada (sem o melhor resultado, ou com a distancia errada) continua reprovada.

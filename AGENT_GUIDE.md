@@ -530,9 +530,9 @@ How it works in practice:
 - **Desktop/Cowork → vault**: the standing orders above (`export_session()` on goodbye,
   `write_note()` for Decisions/Fixes/Reference as they happen) mean every Desktop or Cowork
   session leaves a curated digest in the vault — not just a wall of raw chat log.
-- **vault → Code**: a `SessionStart` hook (`delegation-core-hook session-start`, registered by the installer) prints a
-  short "what changed since you were last here" brief at the start of every Claude Code session
-  — listing notes added/updated since the last Code session, plus an `_inbox/` count if files
+- **vault → supported client**: a `SessionStart` hook (registered by the installer) prints a
+  short "what changed since you were last here" brief at the start of every Claude Code or Codex session
+  — listing notes added/updated since the last supported-client session, plus an `_inbox/` count if files
   are waiting. This is injected directly into context, so Code is aware of Desktop/Cowork output
   without needing raw transcript access. If `_inbox/` is non-empty and maintenance hasn't fired
   in the last 30 minutes, the hook also launches `delegation-core maintain` in the background
@@ -544,6 +544,11 @@ How it works in practice:
   `search_vault()`/`read_note()`. After writing a transcript, the hook fires a
   detached `delegation-core reindex` (logs to `~/.delegation_core/reindex.log`)
   so it becomes searchable without waiting for the next `vault_reindex_bg()`.
+
+For Codex, the installer also copies the bundled delegation-core-office skill to
+`~/.agents/skills/delegation-core/`. It is an opt-in operational guide: it
+preserves the existing repository workflow while directing long-running work to
+`heartbeat()` and durable, sanitized handoffs to `export_session()`.
 
 Net effect: decisions made in a Desktop chat are visible to Code on its next session, and
 findings from a Code session are searchable from Desktop/Cowork — without any direct API

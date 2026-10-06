@@ -77,7 +77,8 @@ machine configuration. The installer preserves it on upgrades.
 See [docs/INGEST_CONFIGURATION.md](docs/INGEST_CONFIGURATION.md) for the
 `ingest_sources` allow-list, exclusion patterns, safe edits during use, and the
 configured ingestion commands. It also documents the local session-transcript
-capture policy and its currently supported client scope.
+capture policy, the Claude Code/Codex SessionStart and SessionEnd hooks, and the
+globally installed Codex skill.
 
 ## Using it as an MCP server
 

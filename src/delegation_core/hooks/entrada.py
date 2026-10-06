@@ -15,13 +15,14 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
 from typing import Callable
 
-USO = "uso: delegation-core-hook {session-start|session-end|codex-session-end}"
+USO = "uso: delegation-core-hook {session-start|session-end|codex-session-start|codex-session-end}"
 
 
 def _passo(nome: str, fazer: Callable[[], object]) -> None:
@@ -34,6 +35,16 @@ def _passo(nome: str, fazer: Callable[[], object]) -> None:
 def session_start() -> None:
     from . import session_start_brief
     _passo("session_start_brief", session_start_brief.main)
+
+
+def codex_session_start() -> None:
+    """Provide the Delegation Core protocol plus the usual session brief."""
+    print(
+        "Delegation Core is available in this session. Use its MCP tools for "
+        "project context; call heartbeat for lengthy work and export_session "
+        "before handoff when a durable project record is useful."
+    )
+    session_start()
 
 
 def session_end(raw: str, client: str = "claude") -> None:
@@ -49,7 +60,10 @@ def session_end(raw: str, client: str = "claude") -> None:
 
 def _detached_popen_kwargs() -> dict:
     if os.name == "nt":
-        return {"creationflags": subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP}
+        # Do not create a visible console for the short-lived export worker.
+        # A normal child outlives its parent on Windows; CREATE_NO_WINDOW keeps
+        # that child headless while its own process group isolates Ctrl+C.
+        return {"creationflags": subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP}
     return {"start_new_session": True}
 
 
@@ -65,9 +79,23 @@ def codex_session_end(raw: str) -> None:
         data = json.loads(raw)
         if not isinstance(data, dict):
             return
+        transcript = data.get("transcript_path")
+        has_transcript = isinstance(transcript, str) and bool(transcript)
         from ..config import CONFIG_DIR
         payload_dir = CONFIG_DIR / "session_hook_payloads"
         payload_dir.mkdir(parents=True, exist_ok=True)
+        # Codex can move the rollout file as soon as SessionEnd returns. Copy
+        # it while the hook still owns a live path; the detached worker then
+        # reads this private snapshot instead of racing the archive operation.
+        if has_transcript and Path(transcript).is_file():
+            with tempfile.NamedTemporaryFile("wb", suffix=".jsonl", prefix="codex-transcript-",
+                                             dir=payload_dir, delete=False) as snapshot_file:
+                snapshot = Path(snapshot_file.name)
+                with Path(transcript).open("rb") as source_file:
+                    shutil.copyfileobj(source_file, snapshot_file)
+            data = dict(data)
+            data["transcript_path"] = str(snapshot)
+            data["_delegation_core_snapshot_path"] = str(snapshot)
         with tempfile.NamedTemporaryFile("w", suffix=".json", prefix="codex-",
                                          dir=payload_dir, delete=False, encoding="utf-8") as fh:
             json.dump(data, fh)
@@ -93,7 +121,20 @@ def session_end_file(payload: str) -> None:
             path.unlink(missing_ok=True)
         except OSError:
             pass
-    session_end(raw, client="codex")
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return
+    transcript = data.get("transcript_path") if isinstance(data, dict) else None
+    snapshot_path = data.get("_delegation_core_snapshot_path") if isinstance(data, dict) else None
+    try:
+        session_end(raw, client="codex")
+    finally:
+        if isinstance(snapshot_path, str):
+            try:
+                Path(snapshot_path).unlink(missing_ok=True)
+            except OSError:
+                pass
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -108,6 +149,9 @@ def main(argv: list[str] | None = None) -> int:
         except Exception:
             raw = ""
         session_end(raw)
+        return 0
+    if evento == "codex-session-start":
+        codex_session_start()
         return 0
     if evento == "codex-session-end":
         try:

@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import io
 import json
+import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 from delegation_core import clients
 from delegation_core.hooks import entrada
@@ -59,12 +61,27 @@ def test_evento_desconhecido_e_erro_de_uso():
     assert entrada.main(["session-middle"]) == 2
 
 
+def test_codex_session_start_emite_protocolo_e_reutiliza_o_brief(monkeypatch, capsys):
+    from delegation_core.hooks import session_start_brief
+
+    chamadas = []
+    monkeypatch.setattr(session_start_brief, "main", lambda: chamadas.append(True))
+
+    assert entrada.main(["codex-session-start"]) == 0
+    assert chamadas == [True]
+    assert "Delegation Core is available" in capsys.readouterr().out
+
+
 def test_codex_session_end_only_dispatches_a_detached_worker(monkeypatch, tmp_path):
     import delegation_core.config as config
     calls = []
     monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
     monkeypatch.setattr(entrada, "_detached_popen_kwargs", lambda: {})
-    monkeypatch.setattr(entrada.subprocess, "Popen", lambda args, **kwargs: calls.append((args, kwargs)))
+    monkeypatch.setattr(
+        entrada.subprocess,
+        "Popen",
+        lambda args, **kwargs: (calls.append((args, kwargs)) or SimpleNamespace(pid=1234)),
+    )
     monkeypatch.setattr("sys.stdin", io.StringIO('{"session_id":"codex-1","transcript_path":"C:/Example/t.jsonl"}'))
 
     assert entrada.main(["codex-session-end"]) == 0
@@ -72,6 +89,50 @@ def test_codex_session_end_only_dispatches_a_detached_worker(monkeypatch, tmp_pa
     assert calls[0][0][-2] == "session-end-file"
     assert Path(calls[0][0][-1]).is_file()
 
+
+def test_codex_worker_is_hidden_on_windows():
+    flags = entrada._detached_popen_kwargs().get("creationflags", 0)
+    assert flags & entrada.subprocess.CREATE_NO_WINDOW
+    assert flags & entrada.subprocess.CREATE_NEW_PROCESS_GROUP
+
+
+def test_codex_session_end_copies_transcript_before_dispatch(monkeypatch, tmp_path):
+    import delegation_core.config as config
+
+    transcript = tmp_path / "rollout.jsonl"
+    transcript.write_text('{"type":"user"}\n', encoding="utf-8")
+    calls = []
+    monkeypatch.setattr(config, "CONFIG_DIR", tmp_path / "runtime")
+    monkeypatch.setattr(entrada, "_detached_popen_kwargs", lambda: {})
+    monkeypatch.setattr(
+        entrada.subprocess,
+        "Popen",
+        lambda args, **kwargs: (calls.append((args, kwargs)) or SimpleNamespace(pid=1234)),
+    )
+
+    entrada.codex_session_end(json.dumps({"session_id": "codex-1", "transcript_path": str(transcript)}))
+
+    payload = json.loads(Path(calls[0][0][-1]).read_text(encoding="utf-8"))
+    snapshot = Path(payload["transcript_path"])
+    assert snapshot != transcript
+    assert snapshot.read_text(encoding="utf-8") == transcript.read_text(encoding="utf-8")
+    assert payload["_delegation_core_snapshot_path"] == str(snapshot)
+
+
+def test_codex_worker_removes_transcript_snapshot(monkeypatch, tmp_path):
+    snapshot = tmp_path / "snapshot.jsonl"
+    snapshot.write_text('{"type":"user"}\n', encoding="utf-8")
+    payload = tmp_path / "payload.json"
+    payload.write_text(json.dumps({
+        "session_id": "codex-1",
+        "transcript_path": str(snapshot),
+        "_delegation_core_snapshot_path": str(snapshot),
+    }), encoding="utf-8")
+    monkeypatch.setattr(entrada, "session_end", lambda raw, client: None)
+
+    entrada.session_end_file(str(payload))
+
+    assert not snapshot.exists()
 
 def test_register_codex_hook_preserves_other_handlers(tmp_path):
     hooks = tmp_path / "hooks.json"
@@ -83,9 +144,37 @@ def test_register_codex_hook_preserves_other_handlers(tmp_path):
 
     saved = json.loads(hooks.read_text(encoding="utf-8"))
     commands = [h["command"] for group in saved["hooks"]["SessionEnd"] for h in group["hooks"]]
+    start_commands = [h["command"] for group in saved["hooks"]["SessionStart"] for h in group["hooks"]]
     assert result["status"] == "installed"
     assert "other-tool" in commands
-    assert f'"{exe}" codex-session-end' in commands
+    start_command = f'{sys.executable} -X utf8 -m delegation_core.hooks.entrada codex-session-start'
+    end_command = f'{sys.executable} -X utf8 -m delegation_core.hooks.entrada codex-session-end'
+    assert start_command in start_commands
+    assert end_command in commands
+    start_hook = next(h for group in saved["hooks"]["SessionStart"] for h in group["hooks"]
+                      if h["command"] == start_command)
+    end_hook = next(h for group in saved["hooks"]["SessionEnd"] for h in group["hooks"]
+                    if h["command"] == end_command)
+    assert start_hook["timeout"] == 30
+    assert "commandWindows" not in start_hook
+    assert "commandWindows" not in end_hook
+
+
+def test_remove_os_dois_hooks_do_codex_sem_afetar_outros(tmp_path):
+    hooks = tmp_path / "hooks.json"
+    hooks.write_text(json.dumps({"hooks": {
+        "SessionStart": [{"hooks": [{"type": "command", "command": "other-start"},
+                                      {"type": "command", "command": "python -m delegation_core.hooks.entrada codex-session-start"}]}],
+        "SessionEnd": [{"hooks": [{"type": "command", "command": "delegation-core-hook codex-session-end"}]}],
+    }}), encoding="utf-8")
+
+    result = clients.unregister_codex_session_hook(hooks_path=hooks)
+
+    saved = json.loads(hooks.read_text(encoding="utf-8"))
+    assert result["status"] == "removed"
+    assert result["removed"] == 2
+    assert _comandos(hooks, "SessionStart") == ["other-start"]
+    assert "SessionEnd" not in saved["hooks"]
 
 
 def test_o_comando_esta_declarado_no_pyproject():
