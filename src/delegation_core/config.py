@@ -184,6 +184,18 @@ class Config:
     #: 09/09/2026 a unica forma de por o encoder na CPU era esconder a placa do
     #: processo inteiro com CUDA_VISIBLE_DEVICES= num drop-in de systemd.
     embed_device: str = "auto"
+    #: "torch" (sentence-transformers), "llamacpp" (llama-server --embeddings) ou
+    #: "auto". Em "auto" so usa o llama.cpp quando ele esta pronto (binario e
+    #: GGUF existem); sem isso fica no torch, para uma atualizacao nunca deixar
+    #: um indice existente sem embedder. O wizard grava "llamacpp" no Mac Apple
+    #: Silicon, onde o BGE nao deve rodar no torch/MPS ao lado do MLX.
+    embed_backend: str = "auto"
+    #: llama-server dos embeddings. Vazio: o `llama-server` do PATH. Separado de
+    #: `llama_binary` porque no Mac este aponta para o mlx_lm.server.
+    embed_llama_binary: str = ""
+    #: GGUF do BGE (f16: o cosseno com o torch e 0,99999, a colecao e a mesma).
+    embed_gguf: str = ""
+    embed_port: int = 8182
 
     # ── v0.12: default search scope ──────────────────────────────────────────
     # "" means adaptive (decided per vault from how much of it is generated).
@@ -413,6 +425,10 @@ class Config:
     @property
     def log_path(self) -> Path:
         return CONFIG_DIR / "server.log"
+
+    @property
+    def embed_log_path(self) -> Path:
+        return CONFIG_DIR / "embed_llama.log"
 
     @property
     def llama_log_path(self) -> Path:

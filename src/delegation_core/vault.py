@@ -41,9 +41,10 @@ from .index_lock import close_chroma_client, index_lock_of, reads_index, uses_in
 from .embeddings import (
     chunk_text,
     effective_chunk_chars,
+    construir_embedding_function,
     make_bge_embedding_function,
     profile_for,
-    resolver_dispositivo,
+    usa_a_placa,
 )
 
 logger = logging.getLogger("vault")
@@ -193,17 +194,14 @@ class VaultManager:
                 # CPU: search kept working and got an order of magnitude slower
                 # with nothing in the response to say so.
                 if self.ef is None:
-                    # So pede a placa quem vai usa-la: BGE na CPU derrubava o modelo local.
-                    if resolver_dispositivo(getattr(self.cfg, "embed_device", "auto")) == "cuda":
+                    # So pede a placa quem vai usa-la: BGE na CPU derrubava o modelo local
+                    # (e o llama.cpp dos embeddings e outro processo, que nao a disputa por aqui).
+                    if usa_a_placa(self.cfg):
                         gpu.take("embeddings")
                     # The caps are passed here or nowhere: the config fields exist
                     # but stay inert until they reach the embedding function, and
                     # an uncapped encode is what OOM'd a 16GB card mid-reindex.
-                    self.ef = make_bge_embedding_function(
-                        self.cfg.bge_model,
-                        max_seq_length=self.cfg.embed_max_seq_length,
-                        batch_size=self.cfg.embed_batch_size,
-                        device=getattr(self.cfg, "embed_device", "auto"))
+                    self.ef = construir_embedding_function(self.cfg, make_bge_embedding_function)
                 recuperacao.antes_de_abrir(self.cfg)  # pode trocar o indice por um novo
                 client = chromadb.PersistentClient(
                     path=str(self.cfg.chroma_path),

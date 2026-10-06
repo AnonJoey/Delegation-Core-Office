@@ -1328,6 +1328,37 @@ def cmd_graph_extract_sources(args):
     console.print(f"\nAgora: delegation-core graph build {result['out_dir']}")
 
 
+def cmd_embed_llama(args):
+    """Show or set up the llama.cpp backend for the BGE embeddings."""
+    from rich.console import Console
+    from . import embed_llama
+    from .config import Config
+    from .embeddings import resolver_backend
+
+    console = Console()
+    cfg = Config.load()
+    if not cfg.is_configured():
+        console.print("[yellow]Not configured.[/yellow] Run: delegation-core setup")
+        sys.exit(1)
+
+    if args.action == "setup":
+        console.print(f"Preparing {cfg.bge_model} on llama.cpp...")
+        r = embed_llama.preparar(cfg, baixar=not args.no_download)
+        if r["status"] != "ok":
+            console.print(f"[red]Failed[/red] ({r.get('step', '?')}): {r['detail']}")
+            sys.exit(1)
+        console.print(f"[green]✓[/green] llama-server: {r['binary']}\n[green]✓[/green] GGUF: {r['gguf']} "
+                      f"({r['dim']}-dim vectors)\n[green]✓[/green] embed_backend = llamacpp")
+        console.print("Restart the server to apply it: [bold]delegation-core service restart[/bold] "
+                      "(the index is the same: no reindex needed).")
+        return
+
+    console.print(f"backend:     {resolver_backend(cfg)}  (embed_backend = {cfg.embed_backend})")
+    console.print(f"llama-server: {embed_llama.achar_llama_server(cfg) or '[red]not found[/red]'}")
+    console.print(f"GGUF:         {cfg.embed_gguf or '[dim]not set[/dim]'}")
+    console.print(f"port:         {cfg.embed_port}  ({'up' if embed_llama.servidor_para(cfg).healthy() else 'down'})")
+
+
 def cmd_embed_model(args):
     """List the calibrated embedding models, or switch to one."""
     from rich.console import Console
@@ -1918,6 +1949,14 @@ def main():
     p_embed.add_argument("--reindex", action="store_true",
                          help="Reindex the vault into the new model's collection")
 
+    p_embed_llama = sub.add_parser(
+        "embed-llama",
+        help="Run the BGE search model on llama.cpp instead of torch (the Mac setup)")
+    p_embed_llama.add_argument("action", nargs="?", choices=["setup", "status"], default="status",
+                               help="setup: find llama-server, download the GGUF, switch the backend on")
+    p_embed_llama.add_argument("--no-download", action="store_true",
+                               help="do not download anything; use what is already on disk")
+
     p_dashboard_api = sub.add_parser(
         "dashboard-api", help="Run the local JSON API used by the Tauri dashboard (standalone/debug)"
     )
@@ -2074,6 +2113,7 @@ def main():
         "search":   cmd_search,
         "compress": cmd_compress,
         "embed-model": cmd_embed_model,
+        "embed-llama": cmd_embed_llama,
     }
 
     note_dispatch = {
