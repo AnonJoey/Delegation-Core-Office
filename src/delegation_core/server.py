@@ -1136,11 +1136,17 @@ async def _bg_maintenance_wrapper() -> dict:
         await bg_engine.aclose()
 
 
+
+def _estado_job(job_id: str) -> str:
+    """running ou queued: um job exclusivo com outro da familia em curso espera a vez."""
+    j = jobs.get(job_id)
+    return j["status"] if j else "running"
+
 @mcp.tool()
 async def run_maintenance_bg() -> str:
     """Start vault maintenance (inbox + heal pass) in the background. Returns a job_id immediately."""
     job_id = jobs.submit("run_maintenance", asyncio.run, _bg_maintenance_wrapper())
-    return json.dumps({"job_id": job_id, "status": "running",
+    return json.dumps({"job_id": job_id, "status": _estado_job(job_id),
                        "message": "Maintenance + heal pass started. Call task_status(job_id) to check progress."})
 
 
@@ -1159,7 +1165,7 @@ async def vault_reindex_bg(force: bool = False) -> str:
     # function already knew which one it was launching: `mode` is computed on the
     # line above and returned to the caller. It just was not used for the bucket.
     job_id = jobs.submit(f"vault_reindex:{mode}", fn)
-    return json.dumps({"job_id": job_id, "status": "running", "mode": mode,
+    return json.dumps({"job_id": job_id, "status": _estado_job(job_id), "mode": mode,
                        "message": f"{mode.capitalize()} reindex started. Call task_status(job_id) to check progress."})
 
 
@@ -1245,7 +1251,7 @@ async def ingest_folder_bg(source_path: str, recursive: bool = True, force: bool
     force and exclude take the same values as ingest_folder().
     """
     job_id = jobs.submit("ingest_folder", _ingest.ingest, source_path, recursive, force, exclude)
-    return json.dumps({"job_id": job_id, "source": source_path, "status": "running",
+    return json.dumps({"job_id": job_id, "source": source_path, "status": _estado_job(job_id),
                        "message": "Ingestion started. Call task_status(job_id) to check progress."})
 
 
@@ -1266,7 +1272,7 @@ async def ingest_configured(name: str = "", force: bool = False) -> str:
 async def ingest_configured_bg(name: str = "", force: bool = False) -> str:
     """Start configured ingestion in the background; omit name to run all enabled sources."""
     job_id = jobs.submit("ingest_configured", _ingest.ingest_configured, name, force)
-    return json.dumps({"job_id": job_id, "source": name or "all configured sources", "status": "running",
+    return json.dumps({"job_id": job_id, "source": name or "all configured sources", "status": _estado_job(job_id),
                        "message": "Configured ingestion started. Call task_status(job_id) to check progress."})
 
 
