@@ -690,7 +690,7 @@ async def heartbeat(force: bool = False) -> str:
 
 
 @mcp.tool()
-async def window_list() -> str:
+def window_list() -> str:
     """
     List MCP servers registered as windows, which are currently mounted in the
     client, and the active workspace.
@@ -704,7 +704,8 @@ async def window_list() -> str:
 
 
 @mcp.tool()
-async def window_open(name: str) -> str:
+@_serialized
+def window_open(name: str) -> str:
     """
     Mount a registered MCP server into the client configuration.
 
@@ -717,7 +718,8 @@ async def window_open(name: str) -> str:
 
 
 @mcp.tool()
-async def window_close(name: str) -> str:
+@_serialized
+def window_close(name: str) -> str:
     """
     Unmount an MCP server from the client configuration, freeing the context its
     tool schemas occupy. The server's definition is kept, so window_open restores it
@@ -728,7 +730,7 @@ async def window_close(name: str) -> str:
 
 
 @mcp.tool()
-async def workspace_list() -> str:
+def workspace_list() -> str:
     """
     List saved workspaces — named sets of MCP servers — and which one is active.
     """
@@ -736,7 +738,8 @@ async def workspace_list() -> str:
 
 
 @mcp.tool()
-async def workspace_save(name: str) -> str:
+@_serialized
+def workspace_save(name: str) -> str:
     """
     Save the currently mounted set of servers as a named workspace.
 
@@ -747,7 +750,8 @@ async def workspace_save(name: str) -> str:
 
 
 @mcp.tool()
-async def workspace_apply(name: str) -> str:
+@_serialized
+def workspace_apply(name: str) -> str:
     """
     Make the client's mounted servers match a named workspace.
 
@@ -759,7 +763,7 @@ async def workspace_apply(name: str) -> str:
 
 
 @mcp.tool()
-async def list_mcp_clients() -> str:
+def list_mcp_clients() -> str:
     """
     List MCP client surfaces currently connected to this delegation-core daemon
     (Claude Code, Claude Desktop, Codex, etc. — whichever has delegation-core
@@ -772,7 +776,7 @@ async def list_mcp_clients() -> str:
 
 
 @mcp.tool()
-async def local_task_submit(prompt: str, system: str = "", task: str = "default",
+def local_task_submit(prompt: str, system: str = "", task: str = "default",
                             run_after: str = "", note: str = "") -> str:
     """
     Queue work for the LOCAL model (llama.cpp) and return immediately with a task id.
@@ -814,7 +818,7 @@ async def local_task_submit(prompt: str, system: str = "", task: str = "default"
 
 
 @mcp.tool()
-async def local_task_status(task_id: str) -> str:
+def local_task_status(task_id: str) -> str:
     """
     Check one queued local-model task: its state, and its result once finished.
 
@@ -832,7 +836,7 @@ async def local_task_status(task_id: str) -> str:
 
 
 @mcp.tool()
-async def local_task_list(status: str = "", limit: int = 20) -> str:
+def local_task_list(status: str = "", limit: int = 20) -> str:
     """
     List local-model tasks, newest first, with who submitted each one.
 
@@ -847,7 +851,7 @@ async def local_task_list(status: str = "", limit: int = 20) -> str:
 
 
 @mcp.tool()
-async def local_task_cancel(task_id: str) -> str:
+def local_task_cancel(task_id: str) -> str:
     """
     Drop a local-model task that has not started yet.
 
@@ -1016,7 +1020,7 @@ async def relink_folder(
 
 
 @mcp.tool()
-async def relink_folder_bg(
+def relink_folder_bg(
     folder: str,
     days: int | None = None,
     min_similarity: float | None = None,
@@ -1135,7 +1139,7 @@ def _estado_job(job_id: str) -> str:
     return j["status"] if j else "running"
 
 @mcp.tool()
-async def run_maintenance_bg() -> str:
+def run_maintenance_bg() -> str:
     """Start vault maintenance (inbox + heal pass) in the background. Returns a job_id immediately."""
     job_id = jobs.submit("run_maintenance", asyncio.run, _bg_maintenance_wrapper())
     return json.dumps({"job_id": job_id, "status": _estado_job(job_id),
@@ -1143,7 +1147,7 @@ async def run_maintenance_bg() -> str:
 
 
 @mcp.tool()
-async def vault_reindex_bg(force: bool = False) -> str:
+def vault_reindex_bg(force: bool = False) -> str:
     """Rebuild the ChromaDB index in the background. Returns a job_id immediately.
     force=False (default): incremental — only reindexes notes changed since last run.
     force=True: full reindex of every note.
@@ -1162,7 +1166,7 @@ async def vault_reindex_bg(force: bool = False) -> str:
 
 
 @mcp.tool()
-async def task_status(job_id: str) -> str:
+def task_status(job_id: str) -> str:
     """Check the status of a background job.
 
     While running, also reports how long this kind of job usually takes
@@ -1236,7 +1240,7 @@ async def ingest_folder(source_path: str, recursive: bool = True, force: bool = 
 
 
 @mcp.tool()
-async def ingest_folder_bg(source_path: str, recursive: bool = True, force: bool = False,
+def ingest_folder_bg(source_path: str, recursive: bool = True, force: bool = False,
                            exclude: list[str] | None = None) -> str:
     """Index files from an external folder in the background. Returns a job_id immediately.
 
@@ -1261,7 +1265,7 @@ async def ingest_configured(name: str = "", force: bool = False) -> str:
 
 
 @mcp.tool()
-async def ingest_configured_bg(name: str = "", force: bool = False) -> str:
+def ingest_configured_bg(name: str = "", force: bool = False) -> str:
     """Start configured ingestion in the background; omit name to run all enabled sources."""
     job_id = jobs.submit("ingest_configured", _ingest.ingest_configured, name, force)
     return json.dumps({"job_id": job_id, "source": name or "all configured sources", "status": _estado_job(job_id),
@@ -1269,7 +1273,7 @@ async def ingest_configured_bg(name: str = "", force: bool = False) -> str:
 
 
 @mcp.tool()
-async def ingest_status() -> str:
+def ingest_status() -> str:
     """Return the ingestion registry: which external paths have been indexed and when."""
     return json.dumps(_ingest.status())
 
@@ -1371,7 +1375,7 @@ async def graph_export(name: str, format: str) -> str:
 
 
 @mcp.tool()
-async def graph_build_bg(path: str, name: str = "", force: bool = False,
+def graph_build_bg(path: str, name: str = "", force: bool = False,
                          exclude: list[str] | None = None) -> str:
     """
     Build a code knowledge graph in the background. Returns a job_id immediately.
@@ -1499,7 +1503,8 @@ async def graph_affected(name: str, query: str, depth: int = 2) -> str:
 
 
 @mcp.tool()
-async def graph_hook_install(path: str, name: str = "") -> str:
+@_serialized
+def graph_hook_install(path: str, name: str = "") -> str:
     """
     Install a git post-commit hook that rebuilds this repo's code graph
     automatically after every commit (background, code-only, no LLM, no vault
@@ -1510,13 +1515,14 @@ async def graph_hook_install(path: str, name: str = "") -> str:
 
 
 @mcp.tool()
-async def graph_hook_uninstall(path: str) -> str:
+@_serialized
+def graph_hook_uninstall(path: str) -> str:
     """Remove the graph auto-rebuild post-commit hook installed by graph_hook_install."""
     return json.dumps(graph_hook.uninstall(path))
 
 
 @mcp.tool()
-async def graph_hook_status(path: str) -> str:
+def graph_hook_status(path: str) -> str:
     """Check whether the graph auto-rebuild post-commit hook is installed for this repo."""
     return json.dumps(graph_hook.status(path))
 
