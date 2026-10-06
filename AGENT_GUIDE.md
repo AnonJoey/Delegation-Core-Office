@@ -907,7 +907,7 @@ Did research             → write_note(folder="Reference", ...)
 Had a meeting            → write_note(folder="Sessions", ...)
 Found a fix              → write_note(folder="Fixes", ...)
 Adding to existing note  → vault_update_note(<name>, <new content>)
-User asks recall         → search_vault(<query>)   [escopo adaptativo; veja default_search_scope]
+User asks recall         → search_vault(<query>)   [escopo adaptativo: notes+external quando gerados sao maioria, senao all; veja default_search_scope]
 Pergunta sobre um cliente→ search_vault(<query>, client=<nome>)   [combina com scope]
 Que clientes existem     → vault_stats().clients
 Question about a codebase→ search_vault(<query>, graph=<name>) ou scope='generated'

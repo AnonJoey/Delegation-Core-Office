@@ -156,3 +156,47 @@ def test_stats_counts_by_status():
     s = localqueue.stats()
     assert s["total"] == 2
     assert s["by_status"]["done"] == 1
+
+
+# ── custo por chamada (06/10/2026) ───────────────────────────────────────────
+
+def test_worker_ocioso_nao_regrava_o_arquivo():
+    """claim_next sem nada para rodar era um rewrite+fsync do arquivo inteiro a cada 2 s."""
+    localqueue.submit("p", run_after="2999-01-01T00:00:00+00:00")
+    antes = localqueue.STORE_PATH.stat().st_mtime_ns
+    gravacoes = []
+    original = localqueue._write
+    localqueue._write = lambda t: (gravacoes.append(1), original(t))
+    try:
+        for _ in range(5):
+            assert localqueue.claim_next() is None
+    finally:
+        localqueue._write = original
+    assert gravacoes == [] and localqueue.STORE_PATH.stat().st_mtime_ns == antes
+
+
+def test_promocao_de_agendada_ainda_e_gravada():
+    t = localqueue.submit("p", run_after="2000-01-01T00:00:00+00:00")
+    assert localqueue.claim_next()["id"] == t["id"]
+    assert localqueue.get(t["id"])["status"] == "running"
+
+
+def test_mudanca_feita_por_outro_processo_aparece():
+    import json
+    import os
+    t = localqueue.submit("p")
+    assert localqueue.get(t["id"])["status"] == "queued"
+    dados = json.loads(localqueue.STORE_PATH.read_text())
+    dados[0]["status"] = "cancelled"
+    localqueue.STORE_PATH.write_text(json.dumps(dados))
+    st = localqueue.STORE_PATH.stat()
+    os.utime(localqueue.STORE_PATH, ns=(st.st_atime_ns, st.st_mtime_ns + 1_000_000))
+    assert localqueue.get(t["id"])["status"] == "cancelled"
+
+
+def test_quem_chama_nao_mexe_no_cache():
+    t = localqueue.submit("p")
+    localqueue.get(t["id"])["status"] = "estragado"
+    localqueue.list_tasks()[0]["prompt"] = "estragado"
+    assert localqueue.get(t["id"])["status"] == "queued"
+    assert localqueue.get(t["id"])["prompt"] == "p"

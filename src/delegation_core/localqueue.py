@@ -59,18 +59,47 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+#: O ultimo conteudo lido ou gravado, e a assinatura do arquivo que o produziu.
+#: Medido em 06/10/2026 sem isto: com 545 tarefas (2 MB) cada `get` relia e
+#: parseava o arquivo inteiro, 5,9 ms por chamada, e o coletor que consultava
+#: 360 tarefas a cada 10 s passava dois segundos so lendo JSON.
+_cache: tuple[tuple[str, int, int], list[dict]] | None = None
+
+
+def _assinatura() -> tuple[str, int, int] | None:
+    try:
+        st = STORE_PATH.stat()
+    except OSError:
+        return None
+    return (str(STORE_PATH), st.st_mtime_ns, st.st_size)
+
+
 def _read() -> list[dict]:
+    """As tarefas do disco, como copias: quem chama pode mexer sem tocar no cache.
+
+    Relida so quando o arquivo mudou por fora (outro processo, edicao a mao);
+    o que este processo grava vai para o cache em `_write`.
+    """
+    global _cache
+    assinatura = _assinatura()
+    if assinatura is not None and _cache is not None and _cache[0] == assinatura:
+        return [dict(t) for t in _cache[1]]
     try:
         with STORE_PATH.open(encoding="utf-8") as fh:
             data = json.load(fh)
-        return data if isinstance(data, list) else []
+        tarefas = data if isinstance(data, list) else []
+        if assinatura is not None:
+            _cache = (assinatura, tarefas)
+        return [dict(t) for t in tarefas]
     except FileNotFoundError:
+        _cache = None
         return []
     except (json.JSONDecodeError, OSError) as e:
         # A corrupt store must not take the daemon down with it: the queue is an
         # accessory to a server whose real job is the vault. Move it aside so the
         # next write starts clean and the damaged file is still there to look at.
         logger.error("local task store unreadable (%s) — starting a new one", e)
+        _cache = None
         try:
             STORE_PATH.replace(STORE_PATH.with_suffix(".json.corrupt"))
         except OSError:
@@ -88,6 +117,9 @@ def _write(tasks: list[dict]) -> None:
         fh.flush()
         os.fsync(fh.fileno())
     tmp.replace(STORE_PATH)
+    global _cache
+    assinatura = _assinatura()
+    _cache = (assinatura, [dict(t) for t in tasks]) if assinatura is not None else None
 
 
 def _prune(tasks: list[dict]) -> list[dict]:
@@ -181,9 +213,11 @@ def claim_next(now: str = "") -> dict | None:
     now = now or _now()
     with _lock:
         tasks = _read()
+        promovidas = 0
         for t in sorted(tasks, key=lambda t: t["created"]):
             if t["status"] == "scheduled" and t["run_after"] and t["run_after"] <= now:
                 t["status"] = "queued"
+                promovidas += 1
             if t["status"] != "queued":
                 continue
             t["status"] = "running"
@@ -191,8 +225,11 @@ def claim_next(now: str = "") -> dict | None:
             _write(tasks)
             return dict(t)
         # Persist any scheduled -> queued promotions even when nothing was
-        # claimed, so a listing reflects what the worker already knows.
-        _write(tasks)
+        # claimed, so a listing reflects what the worker already knows. ONLY
+        # then: the idle worker calls this every 2 s, and rewriting the whole
+        # store with fsync on every call was 43.200 rewrites a day of nothing.
+        if promovidas:
+            _write(tasks)
     return None
 
 
