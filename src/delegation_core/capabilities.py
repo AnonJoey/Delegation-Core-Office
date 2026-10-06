@@ -151,9 +151,9 @@ def describe(mcp_tools: list[dict], default_scope: dict | None = None) -> dict:
     ``default_scope`` e o escopo que a busca sem argumento REALMENTE usaria nesta
     maquina, mais de onde ele veio. Antes disso o relatorio dizia
     `"all": "everything (default)"`, uma palavra escrita a mao, enquanto
-    `server._default_scope()` decide por vault: 'notes' quando artigo gerado
-    passa de metade, 'all' quando nao passa, e uma chave em config.json vence os
-    dois.
+    `server._default_scope()` decide por vault: 'notes+external' quando artigo
+    gerado passa de metade ('notes' ate 05/10/2026), 'all' quando nao passa, e
+    uma chave em config.json vence os dois.
 
     Medido neste vault: 8.246 gerados de 8.593, entao o padrao resolve para
     'notes' e toda busca sem escopo respondeu `"scope": "notes"`. Um agente que
@@ -178,6 +178,9 @@ def describe(mcp_tools: list[dict], default_scope: dict | None = None) -> dict:
             "notes": "hand-written vault notes",
             "generated": "graph_build wiki articles (filter by graph= to pin one codebase)",
             "external": "ingest_folder'd files, never moved from their source",
+            "notes+external": "everything except graph_build articles: hand-written "
+                              "notes plus ingested files (the default once generated "
+                              "articles are the majority)",
             "all": "everything",
         },
         "default_scope": default_scope or {
