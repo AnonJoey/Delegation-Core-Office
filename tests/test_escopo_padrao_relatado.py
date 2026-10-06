@@ -49,7 +49,8 @@ def test_o_relatorio_nao_fixa_um_escopo_padrao_em_prosa():
 def test_o_relatorio_diz_qual_escopo_ESTA_valendo():
     r = capabilities.describe([{"name":"x","summary":"y"}])
     assert "default_scope" in r
-    assert r["default_scope"]["resolved"] in ("notes", "all", "generated", "external")
+    assert r["default_scope"]["resolved"] in ("notes", "all", "generated", "external",
+                                               "notes+external")
 
 
 def test_o_relatorio_explica_de_onde_o_padrao_veio():
@@ -59,8 +60,9 @@ def test_o_relatorio_explica_de_onde_o_padrao_veio():
     assert r["default_scope"]["source"] in ("config", "vault-composition", "fallback")
 
 
-def test_os_quatro_escopos_continuam_descritos():
-    """Descrever menos nao e a correcao."""
+def test_os_cinco_escopos_continuam_descritos():
+    """Descrever menos nao e a correcao. O quinto, notes+external, e o padrao
+    adaptativo desde 05/10/2026 e precisa estar no relatorio que manda ser lido."""
     s = _scopes(capabilities.describe([{"name":"x","summary":"y"}]))
-    assert set(s) == {"notes", "generated", "external", "all"}
+    assert set(s) == {"notes", "generated", "external", "all", "notes+external"}
     assert all(isinstance(v, str) and v for v in s.values())

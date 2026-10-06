@@ -37,10 +37,11 @@ def _scope_for(total, generated, configured=""):
         server._vault = old
 
 
-def test_a_generated_heavy_vault_defaults_to_notes():
+def test_a_generated_heavy_vault_defaults_to_notes_plus_external():
     """Machine output in the majority: an unscoped search would be answered by
-    it, and the user's own writing loses."""
-    assert _scope_for(total=3662, generated=3432) == "notes"
+    it, and the user's own writing loses. Until 05/10/2026 this was 'notes',
+    which also hid every ingested file; see test_escopo_notas_e_externos.py."""
+    assert _scope_for(total=3662, generated=3432) == "notes+external"
 
 
 def test_an_ingest_heavy_vault_defaults_to_all():

@@ -295,13 +295,19 @@ def _default_scope() -> str:
     """The scope to search when the caller did not name one.
 
     An explicit `default_search_scope` in config.json wins. Otherwise it is
-    decided from the vault's own composition: 'notes' once generated articles
-    are the majority — there, an unscoped search is mostly answered by machine
-    output and the user's own writing loses — and 'all' when they are not, since
-    a vault whose authoritative material was ingested has nothing to gain from a
-    filter that hides exactly that. Anything unreadable falls back to 'notes',
-    the historical behaviour, so a broken health pass narrows the search rather
-    than silently widening it.
+    decided from the vault's own composition: 'notes+external' once generated
+    articles are the majority — there, an unscoped search is mostly answered by
+    machine output and the user's own writing loses — and 'all' when they are
+    not. Anything unreadable falls back to 'notes', the historical behaviour, so
+    a broken health pass narrows the search rather than silently widening it.
+
+    The majority case was 'notes' until 05/10/2026. That removed the generated
+    articles, which was the point, and every ingested file with them, which was
+    not: on a vault with 10,103 generated articles of 10,565 notes and a career
+    project ingested the day before, the default answered "who is the
+    Anthropic contact Jordan met at Dreamforce" with three unrelated meeting
+    transcripts while the documents that answer it sat in the index. On 12
+    questions with known answers: 'notes' 5, 'all' 8, 'notes+external' 9.
     """
     try:
         configured = (getattr(_vault.cfg, "default_search_scope", "") or "").strip()
@@ -313,7 +319,7 @@ def _default_scope() -> str:
         health = _vault.get_health_summary()
         total = health.get("total_notes") or 0
         generated = health.get("generated_notes") or 0
-        return "notes" if total and generated > total * 0.5 else "all"
+        return "notes+external" if total and generated > total * 0.5 else "all"
     except Exception:
         return "notes"
 
@@ -376,7 +382,8 @@ async def search_vault(query: str, limit: int = 5, use_local: bool = False,
 
     scope narrows what is searched — 'notes' (hand-written only),
     'generated' (graph_build wiki articles), 'external' (ingest_folder'd files),
-    'all' (everything). graph='<name>' restricts to one built code graph.
+    'notes+external' (everything except generated articles), 'all' (everything).
+    graph='<name>' restricts to one built code graph.
     Each hit carries its 'kind'.
 
     Leaving scope unset picks it per vault rather than shipping one answer for
@@ -387,8 +394,9 @@ async def search_vault(query: str, limit: int = 5, use_local: bool = False,
     authoritative material is ingested is the mirror image: a fixed 'notes'
     default hid 6,637 external files from the search path every agent uses, and
     3 of 4 probe queries returned a raw transcript where 'all' returned the
-    authoritative document. So the default is 'notes' when generated articles
-    dominate the vault and 'all' when they do not; set default_search_scope in
+    authoritative document. So the default is 'notes+external' when generated
+    articles dominate the vault (their own writing and what they ingested, minus
+    machine output) and 'all' when they do not; set default_search_scope in
     config.json to pin one. Pass scope explicitly to override either way.
     Every response names the scope it used.
 
