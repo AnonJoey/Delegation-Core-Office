@@ -33,7 +33,8 @@ from delegation_core import jobs
 
 
 def _run(coro):
-    return asyncio.run(coro)
+    # A ferramenta virou `def` (roda no threadpool); corrotina so se ainda for async.
+    return asyncio.run(coro) if asyncio.iscoroutine(coro) else coro
 
 
 @pytest.fixture(autouse=True)

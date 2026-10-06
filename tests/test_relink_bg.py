@@ -70,4 +70,5 @@ def test_both_relink_entry_points_share_one_containment_check():
 
 def _run(coro):
     import asyncio
-    return asyncio.run(coro)
+    # A ferramenta virou `def` (roda no threadpool); corrotina so se ainda for async.
+    return asyncio.run(coro) if asyncio.iscoroutine(coro) else coro
