@@ -138,14 +138,17 @@ def check_engine_mode(cfg) -> dict:
     missing = []
     if not Path(cfg.llama_binary).exists():
         missing.append(f"llama_binary {cfg.llama_binary}")
-    if not Path(cfg.llama_model).exists():
+    modelo_ok = Path(cfg.llama_model).expanduser().exists() or (
+        # mlx_lm aceita um id do Hugging Face e baixa na primeira subida.
+        cfg.motor_e_mlx and cfg.llama_model.strip().count("/") == 1)
+    if not modelo_ok:
         missing.append(f"llama_model {cfg.llama_model}")
     if missing:
         return {"check": "engine_mode", "status": "error",
                 "detail": f"engine_mode={cfg.engine_mode} but missing: {', '.join(missing)}",
                 "fix": 'set engine_mode to "agent", or fix the paths in config.json'}
     return {"check": "engine_mode", "status": "ok",
-            "detail": f"{cfg.engine_mode}: binary and model present"}
+            "detail": f"{cfg.engine_mode} ({'mlx' if cfg.motor_e_mlx else 'llama.cpp'}): binary and model present"}
 
 
 def check_ingest_registry() -> dict:

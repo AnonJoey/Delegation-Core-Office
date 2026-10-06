@@ -261,7 +261,7 @@ class DelegationEngine:
         """
         await self.ensure_running()
         payload = {
-            "model": "local",
+            "model": getattr(self.cfg, "modelo_no_pedido", "local"),
             "messages": [{"role": "user", "content": "Write the numbers one to twenty, one per line."}],
             "max_tokens": 100,
             "temperature": 0.0,
@@ -387,8 +387,9 @@ class DelegationEngine:
         """
         if not await self.ensure_running(force=force_local):
             raise RuntimeError(
-                "llama.cpp could not be reached or started. "
-                "Check llama_binary and llama_model in ~/.delegation_core/config.json"
+                f"the local model server ({'mlx_lm.server' if getattr(self.cfg, 'motor_e_mlx', False) else 'llama.cpp'}) "
+                "could not be reached or started. "
+                "Check motor_local, llama_binary and llama_model in ~/.delegation_core/config.json"
             )
 
         effective_tokens = self.budget(task, max_tokens)
@@ -398,7 +399,7 @@ class DelegationEngine:
         messages.append({"role": "user", "content": prompt})
 
         payload = {
-            "model": "local",
+            "model": getattr(self.cfg, "modelo_no_pedido", "local"),
             "messages": messages,
             "max_tokens": effective_tokens,
             "temperature": temperature,
@@ -568,8 +569,10 @@ class DelegationEngine:
         model = Path(self.cfg.llama_model).expanduser()
 
         if not binary.exists():
-            logger.error("llama-server binary not found: %s", binary)
+            logger.error("local model server binary not found: %s", binary)
             return False
+        if getattr(self.cfg, "motor_e_mlx", False):
+            return self._start_mlx(binary)
         if not model.exists():
             logger.error("Model file not found: %s", model)
             return False
@@ -648,6 +651,51 @@ class DelegationEngine:
                 return False
 
         logger.error("llama.cpp did not become healthy within 90s")
+        return False
+
+    def _start_mlx(self, binary) -> bool:
+        """Sobe o mlx_lm.server, com os argumentos dele e nao os do llama.cpp.
+
+        Antes, com o MLX fora do ar, o engine tentava o llama-server com
+        --ctx-size, -fa e -ctk, que o mlx_lm.server recusa: o Mac ficava sem
+        modelo ate alguem subir o servidor a mao. O modelo pode ser uma pasta
+        ou um id do Hugging Face, que o proprio mlx_lm baixa na primeira vez.
+        """
+        from pathlib import Path
+
+        modelo = self.cfg.llama_model.strip()
+        if not modelo:
+            logger.error("motor_local=mlx but llama_model is empty")
+            return False
+        if not Path(modelo).expanduser().exists() and modelo.count("/") != 1:
+            logger.error("MLX model not found: %s (not a folder nor an org/name repo id)", modelo)
+            return False
+        cmd = [str(binary), "--model", str(Path(modelo).expanduser()) if Path(modelo).expanduser().exists() else modelo,
+               "--host", "127.0.0.1", "--port", str(self.cfg.llama_port)]
+        if not getattr(self.cfg, "llama_enable_thinking", False):
+            # Tambem vai em cada pedido; no servidor vale ate para quem chamar
+            # a porta por fora do delegation-core.
+            cmd += ["--chat-template-args", '{"enable_thinking": false}']
+        logger.info("Starting mlx_lm.server: %s", " ".join(cmd))
+        try:
+            log_path = self.cfg.llama_log_path
+            self._log_fh = open(log_path, "a", encoding="utf-8")
+            self._proc = subprocess.Popen(cmd, stdout=self._log_fh, stderr=self._log_fh,
+                                          env=dict(os.environ), **_detached_popen_kwargs())
+            self._we_started_it = True
+        except Exception as e:
+            logger.error("Failed to start mlx_lm.server: %s", e)
+            return False
+        # Um 27B de 8 bits sao ~30 GB lidos do disco: mais que os 90 s do llama.cpp.
+        for i in range(150):
+            time.sleep(2)
+            if self._is_healthy():
+                logger.info("mlx_lm.server ready after %ds", (i + 1) * 2)
+                return True
+            if self._proc.poll() is not None:
+                logger.error("mlx_lm.server exited prematurely: check %s", self.cfg.llama_log_path)
+                return False
+        logger.error("mlx_lm.server did not become healthy within 300s")
         return False
 
     def _shutdown(self):
