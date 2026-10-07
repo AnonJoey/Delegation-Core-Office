@@ -126,6 +126,9 @@ def fontes_do_indice(chroma_dir: Path) -> dict[str, dict[str, str]]:
     """
     import sqlite3
 
+    sqlite_idx = Path(chroma_dir) / "indice.db"
+    if sqlite_idx.exists():
+        return _fontes_do_indice_sqlite(sqlite_idx)
     banco = Path(chroma_dir) / "chroma.sqlite3"
     if not banco.exists():
         return {}
@@ -152,6 +155,27 @@ def fontes_do_indice(chroma_dir: Path) -> dict[str, dict[str, str]]:
         # Um arquivo em chunks tem uma linha por chunk, todas com o mesmo
         # ingested_at; o maior cobre o caso de reingestao parcial.
         arquivos[arquivo] = max(arquivos.get(arquivo, ""), meta.get("ingested_at") or "")
+    return fontes
+
+
+def _fontes_do_indice_sqlite(banco: Path) -> dict[str, dict[str, str]]:
+    """O mesmo que `fontes_do_indice`, para o indice SQLite (indice_sqlite.py)."""
+    import sqlite3
+
+    conexao = sqlite3.connect(f"file:{banco}?mode=ro", uri=True, timeout=30)
+    try:
+        linhas = conexao.execute(
+            "SELECT json_extract(meta,'$.source_folder'), json_extract(meta,'$.path'), "
+            "json_extract(meta,'$.ingested_at') FROM chunks "
+            "WHERE json_extract(meta,'$.is_external')='true'").fetchall()
+    finally:
+        conexao.close()
+    fontes: dict[str, dict[str, str]] = {}
+    for fonte, arquivo, em in linhas:
+        if not fonte or not arquivo:
+            continue
+        arquivos = fontes.setdefault(fonte, {})
+        arquivos[arquivo] = max(arquivos.get(arquivo, ""), em or "")
     return fontes
 
 

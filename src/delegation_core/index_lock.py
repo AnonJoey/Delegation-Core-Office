@@ -122,6 +122,24 @@ def index_lock_of(manager) -> IndexUseLock:
     return lock
 
 
+def abrir_cliente(cfg):
+    """Abre o cliente do indice configurado: o SQLite ou, por padrao, o ChromaDB.
+
+    Mora aqui, ao lado de `close_chroma_client`, para o vault.py nao saber qual
+    dos dois esta em uso.
+    """
+    if cfg.usa_sqlite:
+        from .indice_sqlite import ClienteSqlite
+        return ClienteSqlite(cfg.sqlite_path)
+    import chromadb
+
+    from . import recuperacao
+    recuperacao.antes_de_abrir(cfg)  # pode trocar o indice por um novo
+    return chromadb.PersistentClient(
+        path=str(cfg.chroma_path),
+        settings=chromadb.Settings(anonymized_telemetry=False))
+
+
 def close_chroma_client(client) -> None:
     """Stop the current chromadb client so a reopen starts from a fresh System.
 
@@ -134,6 +152,12 @@ def close_chroma_client(client) -> None:
     close() drops the reference and stops the System once nothing else holds it.
     """
     if client is None:
+        return
+    if hasattr(client, "pasta"):          # ClienteSqlite: so fecha a conexao
+        try:
+            client.close()
+        except Exception as e:
+            logger.warning("Closing the sqlite index client failed: %s", e)
         return
     try:
         from chromadb.api.client import SharedSystemClient

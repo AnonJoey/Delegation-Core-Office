@@ -516,6 +516,15 @@ def _index_row_counts(cfg, timeout: float = 10.0) -> tuple[dict[str, int], str]:
             rows = stats.get("indexed_rows")
             return ({cfg.collection_name: rows} if isinstance(rows, int) else {}), "daemon"
 
+    if cfg.usa_sqlite:
+        # Sem o risco do Chroma: abrir e contar nao escreve, nem muda o mtime.
+        from .indice_sqlite import ClienteSqlite
+        sq = ClienteSqlite(cfg.sqlite_path)
+        try:
+            return {c.name: c.count() for c in sq.list_collections()}, "local"
+        finally:
+            sq.close()
+
     import chromadb
     client = chromadb.PersistentClient(path=str(cfg.chroma_path))
     try:
@@ -756,6 +765,62 @@ def cmd_reindex(args):
     vault = VaultManager(cfg)
     count = vault.reindex_vault(force=force)
     console.print(f"[green]✓[/green]  {count} notes indexed.")
+
+
+def cmd_index_migrate(args):
+    """Chroma -> SQLite, com exportacao neutra e verificacao antes de trocar."""
+    from rich.console import Console
+    from . import migracao_indice
+    from .config import Config
+
+    console = Console()
+    cfg = Config.load()
+    if not cfg.is_configured():
+        console.print("[yellow]Not configured.[/yellow] Run: delegation-core setup")
+        sys.exit(1)
+    origem = Path(args.origem).expanduser() if args.origem else None
+    console.print(f"Migrando o indice de [bold]{origem or cfg.chroma_path}[/bold] "
+                  f"para [bold]{cfg.sqlite_path}[/bold] ...")
+    try:
+        r = migracao_indice.migrar(cfg, origem=origem, amostra=args.amostra,
+                                   forcar=args.force)
+    except RuntimeError as e:
+        console.print(f"[red]✗[/red]  {e}")
+        sys.exit(1)
+    for nome, v in r["verificacao"]["colecoes"].items():
+        console.print(f"[green]✓[/green]  {nome}: {v['linhas_destino']} linhas, "
+                      f"texto, metadados e vetores identicos; "
+                      f"{v.get('consultas_iguais_a_busca_exata', 0)}/{v.get('consultas', 0)} "
+                      f"consultas iguais a busca exata; sobreposicao com o Chroma "
+                      f"{v.get('sobreposicao_media_com_o_chroma', 'n/d')}")
+    console.print(f"Exportacao neutra guardada em [bold]{r['exportacao']}[/bold] "
+                  "(pode apagar depois de validar). O indice do Chroma nao foi tocado.")
+    if args.ativar:
+        cfg.index_backend = "sqlite"
+        cfg.save()
+        console.print("[green]✓[/green]  index_backend = sqlite. Reinicie o daemon.")
+    else:
+        console.print('Para usar: defina "index_backend": "sqlite" no config e reinicie o daemon '
+                      "(ou rode de novo com --ativar). Para voltar: \"chroma\".")
+
+
+def cmd_index_compare(args):
+    """Roda as mesmas consultas nos dois indices e mostra onde divergem."""
+    from rich.console import Console
+    from . import migracao_indice
+    from .config import Config
+
+    console = Console()
+    cfg = Config.load()
+    try:
+        r = migracao_indice.comparar(cfg, amostra=args.amostra,
+                                     origem=Path(args.origem).expanduser() if args.origem else None)
+    except RuntimeError as e:
+        console.print(f"[red]✗[/red]  {e}")
+        sys.exit(1)
+    for nome, v in r["colecoes"].items():
+        console.print(f"{nome}: {v['consultas']} consultas, sobreposicao media "
+                      f"{v['sobreposicao_media']}, {v['consultas_com_menos_de_70pc']} abaixo de 70%")
 
 
 def cmd_dashboard_api(args):
@@ -1898,6 +1963,14 @@ def main():
     p_registry.add_argument("--queue", action="store_true",
                             help="Queue the sources for re-ingestion by the daemon "
                                  "(only with --from pointing to an index no longer in use)")
+    p_mig = sub.add_parser("index-migrate", help="Migrate the ChromaDB index to the SQLite index, verified, without touching the old one")
+    p_mig.add_argument("--from", dest="origem", default=None, help="Chroma index directory (default: the configured one)")
+    p_mig.add_argument("--amostra", type=int, default=50, help="queries used to compare neighbours")
+    p_mig.add_argument("--ativar", action="store_true", help="set index_backend=sqlite after a verified migration")
+    p_mig.add_argument("--force", action="store_true", help="migrate even with the daemon listening (unsafe)")
+    p_cmp = sub.add_parser("index-compare", help="Run the same queries on the Chroma and SQLite indexes")
+    p_cmp.add_argument("--from", dest="origem", default=None)
+    p_cmp.add_argument("--amostra", type=int, default=100)
     p_reindex = sub.add_parser("reindex", help="Rebuild ChromaDB search index from vault folders")
     p_reindex.add_argument("--force", action="store_true",
                            help="Reindex every note, not just those changed since last run "
@@ -2067,6 +2140,8 @@ def main():
         "recover-index": cmd_recover_index,
         "ingest-registry": cmd_ingest_registry,
         "reindex":  cmd_reindex,
+        "index-migrate": cmd_index_migrate,
+        "index-compare": cmd_index_compare,
         "maintain": cmd_maintain,
         "dashboard-api": cmd_dashboard_api,
         "ingest":   cmd_ingest,

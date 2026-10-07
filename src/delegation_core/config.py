@@ -254,6 +254,13 @@ class Config:
     # em quarentena um indice nessa situacao. Ver recuperacao.py.
     index_path: str = ""
 
+    # Qual armazenamento guarda o indice vetorial: "chroma" (padrao, o de sempre)
+    # ou "sqlite" (indice_sqlite.py: um arquivo SQLite em WAL com busca exata em
+    # numpy, sem os defeitos de corrupcao abertos do ChromaDB 1.5.x). Trocar de
+    # um para o outro e feito por `delegation-core index-migrate`, nunca na mao:
+    # os dois indices ficam lado a lado e o antigo nao e tocado.
+    index_backend: str = "chroma"
+
     # ── v0.13.1: guard against a second index writer ─────────────────────────
     # When no daemon answers, index commands do the work in this process. That
     # is what keeps the CLI usable on a machine that never installed the
@@ -397,6 +404,20 @@ class Config:
         if str(self.index_path or "").strip():
             return Path(self.index_path).expanduser()
         return self.vault / ".chroma_bge"
+
+    @property
+    def usa_sqlite(self) -> bool:
+        return str(self.index_backend or "").strip().lower() == "sqlite"
+
+    @property
+    def sqlite_path(self) -> Path:
+        """Pasta do indice SQLite: ao lado do indice do Chroma, nunca por cima dele."""
+        return self.vault / ".indice_sqlite"
+
+    @property
+    def index_dir(self) -> Path:
+        """A pasta do indice que esta em uso, qualquer que seja o backend."""
+        return self.sqlite_path if self.usa_sqlite else self.chroma_path
 
     @property
     def collection_name(self) -> str:
