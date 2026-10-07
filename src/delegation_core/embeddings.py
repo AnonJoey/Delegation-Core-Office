@@ -11,6 +11,7 @@ New in v0.2 (previously embedded in vault.py).
 import logging
 import os
 from pathlib import Path
+from typing import Any
 
 logger = logging.getLogger("embeddings")
 
@@ -250,129 +251,118 @@ def _is_out_of_memory(exc: BaseException) -> bool:
     return any(tag in text for tag in ("cuda", "gpu", "hip", "mps", "device"))
 
 
-#: Cache of the generated subclass, keyed by the base class it was built from.
-_LIMITED_EF_CLASSES: dict[type, type] = {}
+class EmbedderSentenceTransformer:
+    """Embedder do BGE sobre sentence-transformers, sem depender do ChromaDB.
 
+    Existia como subclasse de `chromadb...SentenceTransformerEmbeddingFunction`.
+    O indice SQLite so precisa de um callable que transforme textos em vetores,
+    e herdar do chromadb mantinha a dependencia (e o custo de importa-lo, de
+    segundos por invocacao da CLI) so para isso. O comportamento que o resto do
+    codigo usa foi mantido:
 
-def _limited_embedding_function_class(base: type) -> type:
-    """Subclass SentenceTransformerEmbeddingFunction so the execution limits actually
-    reach the model. Neither limit can be passed through the documented route:
-
-      * STEF forwards **kwargs straight into SentenceTransformer.__init__, which
-        (sentence-transformers 5.5.1) accepts neither `max_seq_length` nor
-        `batch_size` and has no **kwargs of its own: both are a TypeError, not a
-        silent no-op. max_seq_length is a *post-construction* property on the model.
-      * STEF.__call__ never passes batch_size to .encode() at all, so the model's own
-        default of 32 applies no matter what anyone configured.
-
-    Built lazily and cached per base class instead of declared at module scope,
-    because the chromadb import is deliberately inside make_bge_embedding_function
-    (importing chromadb at module import time costs seconds on every CLI invocation)
-    and the base has to be whatever that import returned.
-
-    A subclass rather than a delegating wrapper, so name()/get_config()/
-    default_space()/build_from_config() stay byte-for-byte the base's. chromadb 1.5.9
-    serialises the embedding function into the collection config and validates it
-    against schemas/embedding_functions/sentence_transformer.json, which declares
-    additionalProperties=false: a get_config() carrying two extra keys would raise
-    inside _serialize_config's try, and the except there quietly rewrites the whole
-    entry to {"type": "legacy"}. The cost of inheriting build_from_config unchanged
-    is that an EF chromadb rehydrates from that stored config comes back as a plain
-    STEF without the limits; nothing in this project does that (vault.py always hands
-    get_or_create_collection an EF it built itself), but it is the reason not to
-    depend on the stored config for these values.
+    - `models`: cache de classe, uma instancia do SentenceTransformer por nome de
+      modelo. E a unica referencia que segura os pesos; `gpu.release_embeddings`
+      o esvazia para devolver a placa.
+    - o teto de sequencia e o de lote chegam ao modelo. Nenhum dos dois passa pelo
+      construtor do SentenceTransformer (que nao os aceita): `max_seq_length` e
+      propriedade do modelo, e `batch_size` so entra por `.encode()`.
+    - `name()`, `embed_documents`, `embed_query` e `default_space()` para quem
+      ainda trata isto como uma funcao de embedding no estilo do Chroma.
     """
-    cached = _LIMITED_EF_CLASSES.get(base)
-    if cached is not None:
-        return cached
 
-    import numpy as np
+    #: Um SentenceTransformer por nome de modelo, compartilhado por todos os
+    #: embedders daquele modelo.
+    models: dict[str, Any] = {}
 
-    class LimitedSentenceTransformerEmbeddingFunction(base):  # type: ignore[misc, valid-type]
-        """STEF plus a sequence-length cap and a batch-size cap."""
+    def __init__(self, model_name: str, device: str = "cpu",
+                 normalize_embeddings: bool = True,
+                 max_seq_length: int | None = None, batch_size: int | None = None):
+        from sentence_transformers import SentenceTransformer
 
-        def __init__(self, model_name, device, normalize_embeddings,
-                     max_seq_length=None, batch_size=None, **kwargs):
-            super().__init__(model_name=model_name, device=device,
-                             normalize_embeddings=normalize_embeddings, **kwargs)
-            self.max_seq_length = max_seq_length or None
-            self.batch_size = batch_size or None
-            model = getattr(self, "_model", None) if self.max_seq_length else None
-            if self.max_seq_length and model is None:
-                logger.warning(
-                    "Embedding backend %s exposes no _model: max_seq_length=%d not applied",
-                    type(self).__mro__[1].__name__, self.max_seq_length,
-                )
-            elif model is not None:
-                # STEF caches SentenceTransformer instances in a class-level dict keyed
-                # by model name, so this mutates the one shared model rather than a copy.
-                # That is the behaviour we want: every EF over this model should honour
-                # the cap: but it does mean the last cap constructed wins if two ever
-                # disagree, which is why the value is resolved once, up in the factory.
-                model.max_seq_length = self.max_seq_length
+        self.model_name = model_name
+        self.device = device
+        self.normalize_embeddings = normalize_embeddings
+        self.max_seq_length = max_seq_length or None
+        self.batch_size = batch_size or None
+        if model_name not in self.models:
+            self.models[model_name] = SentenceTransformer(
+                model_name_or_path=model_name, device=device)
+        self._model = self.models[model_name]
+        if self.max_seq_length:
+            # O modelo e compartilhado por nome: isto muda o unico existente.
+            # O teto e reafirmado a cada encode (ver `_encode`) porque quem
+            # construiu por ultimo nao pode decidir sozinho para todos.
+            self._model.max_seq_length = self.max_seq_length
 
-        def _encode(self, documents: list[str]):
-            # Reimplements the base's __call__ body rather than delegating to it: the
-            # EmbeddingFunction protocol's __init_subclass__ wraps every __call__ it
-            # sees in validate/normalize, so super().__call__() would run that wrapper
-            # a second time: and .encode() is the only seam batch_size can enter by.
-            encode_kwargs = {}
-            if self.batch_size:
-                encode_kwargs["batch_size"] = self.batch_size
-            # Re-assert the cap here, not only at construction. STEF keys cached
-            # SentenceTransformer instances by model name in a class-level dict,
-            # so every EF over one model shares an instance: and setting the cap
-            # only in __init__ meant the last EF constructed silently decided the
-            # sequence length for all of them. Applying it per encode makes each
-            # EF get its own cap whoever built last, and costs an attribute
-            # compare on a path that is about to run a transformer.
-            if self.max_seq_length and getattr(self._model, "max_seq_length", None) != self.max_seq_length:
-                self._model.max_seq_length = self.max_seq_length
-            vectors = self._model.encode(
-                documents,
-                convert_to_numpy=True,
-                normalize_embeddings=self.normalize_embeddings,
-                **encode_kwargs,
+    @staticmethod
+    def name() -> str:
+        return "sentence_transformer"
+
+    def default_space(self) -> str:
+        return "cosine"
+
+    def _encode(self, documents: list[str]):
+        import numpy as np
+
+        encode_kwargs = {}
+        if self.batch_size:
+            encode_kwargs["batch_size"] = self.batch_size
+        # Re-assert the cap here, not only at construction. Every embedder over
+        # one model shares its SentenceTransformer instance, so setting the cap
+        # only in __init__ let the last one constructed silently decide the
+        # sequence length for all of them. Applying it per encode makes each get
+        # its own cap whoever built last, and costs an attribute compare on a
+        # path that is about to run a transformer.
+        if self.max_seq_length and getattr(self._model, "max_seq_length", None) != self.max_seq_length:
+            self._model.max_seq_length = self.max_seq_length
+        vectors = self._model.encode(
+            documents,
+            convert_to_numpy=True,
+            normalize_embeddings=self.normalize_embeddings,
+            **encode_kwargs,
+        )
+        return [np.array(v, dtype=np.float32) for v in vectors]
+
+    def __call__(self, input):
+        try:
+            return self._encode(list(input))
+        except Exception as e:
+            # make_bge_embedding_function's fallback only covers OOM while the
+            # weights are being *placed*. The OOM that motivated these limits hit
+            # mid-reindex: inside encode, where nothing caught it and the reindex
+            # died with the vault half indexed. The caps above are the actual fix;
+            # this is the net under them, because how much VRAM is free depends on
+            # what else is running (llama.cpp shares this GPU) and no static cap is
+            # right on every machine. One move to cpu, permanent for this process:
+            # a retry on the same device is the same failure, and a model that
+            # bounces back to the GPU per call would just OOM again on the next one.
+            if self.device == "cpu" or not _is_out_of_memory(e):
+                raise
+            # ERROR, not WARNING, and it says what the consequence is. This
+            # is the one branch that permanently changes how fast the whole
+            # process runs; a line that reads as routine is how a machine
+            # ends up mysteriously an order of magnitude slower with nobody
+            # able to say when it started.
+            logger.error(
+                "Embedding encode ran out of memory on %s (%s). Moving the model to "
+                "cpu PERMANENTLY for this process: embedding will be far slower "
+                "until it restarts. Lower embed_batch_size or embed_max_seq_length, "
+                "or free the accelerator, to avoid this.", self.device, e,
             )
-            return [np.array(v, dtype=np.float32) for v in vectors]
-
-        def __call__(self, input):
+            self._model.to("cpu")
+            self.device = "cpu"
             try:
-                return self._encode(list(input))
-            except Exception as e:
-                # make_bge_embedding_function's fallback only covers OOM while the
-                # weights are being *placed*. The OOM that motivated these limits hit
-                # mid-reindex: inside encode, where nothing caught it and the reindex
-                # died with the vault half indexed. The caps above are the actual fix;
-                # this is the net under them, because how much VRAM is free depends on
-                # what else is running (llama.cpp shares this GPU) and no static cap is
-                # right on every machine. One move to cpu, permanent for this process:
-                # a retry on the same device is the same failure, and a model that
-                # bounces back to the GPU per call would just OOM again on the next one.
-                if self.device == "cpu" or not _is_out_of_memory(e):
-                    raise
-                # ERROR, not WARNING, and it says what the consequence is. This
-                # is the one branch that permanently changes how fast the whole
-                # process runs; a line that reads as routine is how a machine
-                # ends up mysteriously an order of magnitude slower with nobody
-                # able to say when it started.
-                logger.error(
-                    "Embedding encode ran out of memory on %s (%s). Moving the model to "
-                    "cpu PERMANENTLY for this process: embedding will be far slower "
-                    "until it restarts. Lower embed_batch_size or embed_max_seq_length, "
-                    "or free the accelerator, to avoid this.", self.device, e,
-                )
-                self._model.to("cpu")
-                self.device = "cpu"
-                try:
-                    import torch
-                    torch.cuda.empty_cache()
-                except Exception:
-                    pass    # freeing the cache is opportunistic; failing to is not fatal
-                return self._encode(list(input))
+                import torch
+                torch.cuda.empty_cache()
+            except Exception:
+                pass    # freeing the cache is opportunistic; failing to is not fatal
+            return self._encode(list(input))
 
-    _LIMITED_EF_CLASSES[base] = LimitedSentenceTransformerEmbeddingFunction
-    return LimitedSentenceTransformerEmbeddingFunction
+    def embed_documents(self, input):
+        return self(input)
+
+    def embed_query(self, input):
+        return self([input])[0] if isinstance(input, str) else self(list(input))
 
 
 #: Valores aceitos em `embed_device`. "auto" e o comportamento historico:
@@ -443,9 +433,9 @@ def explicar_falha_de_import(e: BaseException) -> str:
 def make_bge_embedding_function(model_name: str, max_seq_length: int | None = None,
                                 batch_size: int | None = None,
                                 device: str | None = "auto"):
-    """Build a chromadb-compatible BGE embedding function.
+    """Build the BGE embedding function (a plain callable over sentence-transformers).
 
-    Uses SentenceTransformerEmbeddingFunction with normalize_embeddings=True,
+    Uses normalize_embeddings=True,
     which is required for BGE models to produce correct cosine similarities.
     Automatically selects CUDA when available.
 
@@ -456,14 +446,12 @@ def make_bge_embedding_function(model_name: str, max_seq_length: int | None = No
     meaning "leave the model's own default alone", so every caller that predates
     them behaves exactly as before.
     """
-    # Importado aqui, antes do chromadb, para a causa real sobreviver: depois
-    # dele, uma DLL bloqueada vira "not installed".
+    # Importado aqui, e com a causa preservada: um ImportError por DLL bloqueada
+    # nao pode virar "not installed" (ver explicar_falha_de_import).
     try:
         _importar_sentence_transformers()
     except Exception as e:
         raise RuntimeError(explicar_falha_de_import(e)) from e
-    from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
-
     max_seq_length = _effective_max_seq_length(model_name, max_seq_length)
     batch_size = batch_size or None
 
@@ -472,19 +460,11 @@ def make_bge_embedding_function(model_name: str, max_seq_length: int | None = No
         cpu fallback cannot drift into loading the model without the limits: an
         unlimited cpu encode is slower than the failure it replaced, not safer."""
         if max_seq_length is None and batch_size is None:
-            return SentenceTransformerEmbeddingFunction(
-                model_name=model_name,
-                device=on_device,
-                normalize_embeddings=True,
-            )
-        limited = _limited_embedding_function_class(SentenceTransformerEmbeddingFunction)
-        return limited(
-            model_name=model_name,
-            device=on_device,
-            normalize_embeddings=True,
-            max_seq_length=max_seq_length,
-            batch_size=batch_size,
-        )
+            return EmbedderSentenceTransformer(
+                model_name=model_name, device=on_device, normalize_embeddings=True)
+        return EmbedderSentenceTransformer(
+            model_name=model_name, device=on_device, normalize_embeddings=True,
+            max_seq_length=max_seq_length, batch_size=batch_size)
 
     device = resolver_dispositivo(device)
     if device == "mps":

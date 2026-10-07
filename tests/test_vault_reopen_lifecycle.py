@@ -24,6 +24,8 @@ from delegation_core.config import Config
 from delegation_core.index_lock import index_lock_of
 from delegation_core.vault import VaultManager
 
+pytestmark = pytest.mark.usefixtures("backend_chroma")  # o assunto deste modulo e o indice do Chroma
+
 
 class _Embedder:
     """Deterministic bag-of-words vectors: no model, no GPU.

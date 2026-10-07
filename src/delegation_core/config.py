@@ -266,6 +266,16 @@ class Config:
     # em quarentena um indice nessa situacao. Ver recuperacao.py.
     index_path: str = ""
 
+    # Qual armazenamento guarda o indice vetorial: "sqlite" (indice_sqlite.py: um
+    # arquivo SQLite em WAL com busca exata em numpy, sem os defeitos de corrupcao
+    # abertos do ChromaDB 1.5.x), "chroma" (o antigo, que exige `pip install
+    # delegation-core[chroma]`) ou vazio, que escolhe pelo que existe em disco:
+    # indice SQLite presente -> sqlite; so indice do Chroma -> chroma (nunca troca
+    # sozinho um indice que ja tem dados); nada -> sqlite, que e o de uma
+    # instalacao nova. Trocar de um para o outro e `delegation-core index-migrate`,
+    # nunca na mao: os dois ficam lado a lado e o antigo nao e tocado.
+    index_backend: str = ""
+
     # ── v0.13.1: guard against a second index writer ─────────────────────────
     # When no daemon answers, index commands do the work in this process. That
     # is what keeps the CLI usable on a machine that never installed the
@@ -409,6 +419,26 @@ class Config:
         if str(self.index_path or "").strip():
             return Path(self.index_path).expanduser()
         return self.vault / ".chroma_bge"
+
+    @property
+    def usa_sqlite(self) -> bool:
+        escolha = str(self.index_backend or "").strip().lower()
+        if escolha in ("sqlite", "chroma"):
+            return escolha == "sqlite"
+        if (self.sqlite_path / "indice.db").exists():
+            return True
+        # Um indice do Chroma com dados nao e trocado por um vazio sem ninguem pedir.
+        return not (self.chroma_path / "chroma.sqlite3").exists()
+
+    @property
+    def sqlite_path(self) -> Path:
+        """Pasta do indice SQLite: ao lado do indice do Chroma, nunca por cima dele."""
+        return self.vault / ".indice_sqlite"
+
+    @property
+    def index_dir(self) -> Path:
+        """A pasta do indice que esta em uso, qualquer que seja o backend."""
+        return self.sqlite_path if self.usa_sqlite else self.chroma_path
 
     @property
     def collection_name(self) -> str:

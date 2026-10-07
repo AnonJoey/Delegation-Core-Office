@@ -150,6 +150,7 @@ def test_vault_manager_refuses_to_index_into_cwd_when_vault_path_unset(tmp_path,
     assert not (tmp_path / ".chroma_bge").exists()
 
 
+@pytest.mark.usefixtures("backend_chroma")
 def test_vault_initialization_labels_collection_rows_as_chunks(tmp_path, monkeypatch, caplog):
     monkeypatch.setattr(
         "delegation_core.vault.make_bge_embedding_function", lambda *_, **__: object()

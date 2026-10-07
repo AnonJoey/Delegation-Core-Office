@@ -425,3 +425,19 @@ def test_contra_o_llama_server_real(tmp_path):
 def test_hashlib_importado_para_o_servidor_falso():
     assert hashlib.sha256(b"x").digest()  # garante que o script gerado importa o que usa
     assert subprocess  # silencia o linter: usado so nos testes de processo
+
+
+def test_embed_llama_funciona_sem_o_chromadb_instalado():
+    """O extra [chroma] e opcional: o BGE pelo llama.cpp nao pode puxa-lo de volta."""
+    import os
+    import subprocess
+    import sys
+    codigo = (
+        "import sys; sys.modules['chromadb'] = None\n"
+        "from delegation_core import embed_llama\n"
+        "assert embed_llama.LlamaCppEmbeddingFunction.__mro__[1] is object\n"
+        "assert embed_llama.LlamaCppEmbeddingFunction.name() == 'sentence_transformer'\n"
+        "print('ok sem chromadb')\n")
+    p = subprocess.run([sys.executable, "-c", codigo], capture_output=True, text=True,
+                       env=dict(os.environ, PYTHONPATH=os.pathsep.join(sys.path)))
+    assert p.returncode == 0 and "ok sem chromadb" in p.stdout, p.stderr[-400:]

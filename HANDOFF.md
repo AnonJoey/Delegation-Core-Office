@@ -10,7 +10,7 @@ load-bearing before acting on it.
 ## What this is
 
 A local MCP server (FastMCP over HTTP, one daemon per machine) over a Markdown vault
-(ChromaDB + BGE embeddings), with an optional local model (llama.cpp, or any server
+(SQLite vector index + BGE embeddings; ChromaDB only as a legacy extra), with an optional local model (llama.cpp, or any server
 that answers `/health` and `/v1/chat/completions`), a vendored code-graph pipeline
 (from Graphify), a full CLI, and a cross-platform Tauri desktop dashboard. For the
 live tool list, call `capabilities()`: it asks the running server rather than
@@ -34,7 +34,7 @@ repeating a number here. `docs/MAPA.md` is the structural map.
 
 - **Tests: run them, do not read a number here.**
   `~/.delegation_core/venv/bin/python -m pytest -q`. Fast and offline (fakes and
-  monkeypatch; no real BGE, ChromaDB, model or network), and `tests/conftest.py`
+  monkeypatch; no real BGE, model or network; tests about the legacy ChromaDB index pin it with the `backend_chroma` fixture), and `tests/conftest.py`
   redirects every state path so a run cannot touch `~/.delegation_core`. Check the
   exit code of pytest itself, not of a pipe after it.
 - **Static analysis is part of the suite.** `tests/test_analise_estatica.py` runs ruff

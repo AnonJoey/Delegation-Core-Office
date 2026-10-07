@@ -39,7 +39,11 @@ from pathlib import Path
 
 import numpy as np
 import requests
-from chromadb.api.types import EmbeddingFunction
+
+try:    # com o chromadb instalado a funcao segue sendo uma EmbeddingFunction do Chroma
+    from chromadb.api.types import EmbeddingFunction as _BaseDaFuncao
+except ImportError:    # sem ele (o extra [chroma] e opcional) basta o contrato, que a classe ja cumpre
+    _BaseDaFuncao = object
 
 logger = logging.getLogger("embed_llama")
 
@@ -229,8 +233,9 @@ def _normalizar(v: np.ndarray) -> np.ndarray:
     return (v / n).astype(np.float32)
 
 
-class LlamaCppEmbeddingFunction(EmbeddingFunction):
-    """Funcao de embedding do ChromaDB que consulta o llama-server de embeddings."""
+class LlamaCppEmbeddingFunction(_BaseDaFuncao):
+    """Funcao de embedding que consulta o llama-server de embeddings (contrato do ChromaDB,
+    que o indice SQLite tambem aceita: so precisa de um callable)."""
 
     def __init__(self, cfg, server: EmbedServer | None = None):
         self.cfg = cfg

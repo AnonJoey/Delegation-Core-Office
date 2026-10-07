@@ -25,6 +25,8 @@ from delegation_core import doctor, gpu, ingest, jobs, notes, recuperacao
 from delegation_core.config import Config
 from delegation_core.vault import VaultManager
 
+pytestmark = pytest.mark.usefixtures("backend_chroma")  # o assunto deste modulo e o indice do Chroma
+
 
 def _pid_morto() -> int:
     p = subprocess.Popen([sys.executable, "-c", "pass"])

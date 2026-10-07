@@ -122,6 +122,41 @@ def index_lock_of(manager) -> IndexUseLock:
     return lock
 
 
+def abrir_cliente(cfg):
+    """Abre o cliente do indice configurado: o SQLite ou, por padrao, o ChromaDB.
+
+    Mora aqui, ao lado de `close_chroma_client`, para o vault.py nao saber qual
+    dos dois esta em uso.
+    """
+    from . import recuperacao
+    if cfg.usa_sqlite:
+        import sqlite3
+
+        from .indice_sqlite import ClienteSqlite
+        try:
+            return ClienteSqlite(cfg.sqlite_path)
+        except sqlite3.DatabaseError as e:
+            if isinstance(e, sqlite3.OperationalError) and "lock" in str(e).lower():
+                raise          # outro processo escrevendo: nao e dano
+            # Arquivo que o SQLite nao le ("not a database", "malformed"): o indice
+            # e derivado dos markdowns. Poe de lado, sem apagar, e o daemon refaz.
+            logger.error("Indice SQLite ilegivel (%s): posto em quarentena para reconstrucao", e)
+            recuperacao.pos_em_quarentena(cfg, motivo=f"indice SQLite ilegivel: {e}")
+            return ClienteSqlite(cfg.sqlite_path)
+    try:
+        import chromadb
+    except ImportError as e:
+        raise RuntimeError(
+            "o indice deste vault e do ChromaDB e o chromadb nao esta instalado. "
+            "Instale com `pip install 'delegation-core[chroma]'` e migre com "
+            "`delegation-core index-migrate`, ou apague o indice antigo para "
+            "reconstruir em SQLite com `delegation-core reindex --force`.") from e
+    recuperacao.antes_de_abrir(cfg)  # pode trocar o indice por um novo
+    return chromadb.PersistentClient(
+        path=str(cfg.chroma_path),
+        settings=chromadb.Settings(anonymized_telemetry=False))
+
+
 def close_chroma_client(client) -> None:
     """Stop the current chromadb client so a reopen starts from a fresh System.
 
@@ -134,6 +169,12 @@ def close_chroma_client(client) -> None:
     close() drops the reference and stops the System once nothing else holds it.
     """
     if client is None:
+        return
+    if hasattr(client, "pasta"):          # ClienteSqlite: so fecha a conexao
+        try:
+            client.close()
+        except Exception as e:
+            logger.warning("Closing the sqlite index client failed: %s", e)
         return
     try:
         from chromadb.api.client import SharedSystemClient
