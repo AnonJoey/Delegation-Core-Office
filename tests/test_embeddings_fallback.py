@@ -7,12 +7,11 @@ permanently broken. The contract: construction failure on a detected
 accelerator retries exactly once on cpu; failure when the device already *was*
 cpu re-raises (a cpu retry would be the same call again).
 
-SentenceTransformerEmbeddingFunction is imported inside the function from
-chromadb.utils.embedding_functions, so it's monkeypatched at that source module
-— no real model loading, no torch device calls, no network.
+O embedder (`EmbedderSentenceTransformer`, de embeddings.py) e trocado por um falso
+no proprio modulo: sem carregar modelo, sem chamadas de dispositivo do torch e sem
+rede. Nao ha mais nada do chromadb no caminho.
 """
 
-import chromadb.utils.embedding_functions as ef_mod
 import pytest
 
 from delegation_core import embeddings
@@ -25,7 +24,9 @@ class FakeSTEF:
     fail_on: tuple = ()
     constructions: list = []
 
-    def __init__(self, model_name, device, normalize_embeddings):
+    def __init__(self, model_name, device, normalize_embeddings, max_seq_length=None, batch_size=None):
+        self.max_seq_length = max_seq_length
+        self.batch_size = batch_size
         FakeSTEF.constructions.append(
             {"model_name": model_name, "device": device,
              "normalize_embeddings": normalize_embeddings}
@@ -39,7 +40,7 @@ class FakeSTEF:
 def fake_stef(monkeypatch):
     FakeSTEF.fail_on = ()
     FakeSTEF.constructions = []
-    monkeypatch.setattr(ef_mod, "SentenceTransformerEmbeddingFunction", FakeSTEF)
+    monkeypatch.setattr(embeddings, "EmbedderSentenceTransformer", FakeSTEF)
     return FakeSTEF
 
 

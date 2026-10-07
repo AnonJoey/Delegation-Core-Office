@@ -203,7 +203,7 @@ def pos_em_quarentena(cfg, motivo: str, novo_caminho: str | None = None) -> dict
     from . import ingest as _ingest
     from . import notes
 
-    antigo = Path(cfg.chroma_path)
+    antigo = Path(cfg.index_dir)
     selo = datetime.now().strftime("%Y%m%d-%H%M%S")
     destino = None
     if antigo.exists():
@@ -214,7 +214,8 @@ def pos_em_quarentena(cfg, motivo: str, novo_caminho: str | None = None) -> dict
     relocado = None
     if novo_caminho:
         relocado = Path(novo_caminho)
-    elif not getattr(cfg, "index_path", "") and em_pasta_sincronizada(antigo):
+    elif (not cfg.usa_sqlite and not getattr(cfg, "index_path", "")
+          and em_pasta_sincronizada(antigo)):
         relocado = caminho_local_do_indice()
     if relocado is not None and relocado != antigo:
         cfg.index_path = str(relocado)
@@ -260,7 +261,7 @@ def pos_em_quarentena(cfg, motivo: str, novo_caminho: str | None = None) -> dict
         "motivo": motivo,
         "pedido_em": datetime.now().isoformat(timespec="seconds"),
         "quarentena": str(destino) if destino else None,
-        "indice_novo": str(cfg.chroma_path),
+        "indice_novo": str(cfg.index_dir),
         "relocado_para_fora_da_nuvem": bool(relocado),
         "notas_feitas": False,
         "fontes": fontes,

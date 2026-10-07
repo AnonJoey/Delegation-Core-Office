@@ -800,8 +800,14 @@ def cmd_index_migrate(args):
         cfg.save()
         console.print("[green]✓[/green]  index_backend = sqlite. Reinicie o daemon.")
     else:
-        console.print('Para usar: defina "index_backend": "sqlite" no config e reinicie o daemon '
-                      "(ou rode de novo com --ativar). Para voltar: \"chroma\".")
+        # Com index_backend vazio o indice SQLite recem-criado passaria a ser o
+        # usado na proxima partida. Quem nao pediu para trocar fica onde estava.
+        if not str(cfg.index_backend or "").strip():
+            cfg.index_backend = "chroma"
+            cfg.save()
+        console.print('O daemon continua no Chroma ate voce ativar: rode de novo com --ativar '
+                      'ou defina "index_backend": "sqlite" no config e reinicie o daemon. '
+                      'Para voltar: "chroma".')
 
 
 def cmd_index_compare(args):
@@ -1616,7 +1622,7 @@ def cmd_recover_index(args):
 
     novo = str(Path(args.index_path).expanduser().resolve()) if args.index_path else None
     if not args.yes:
-        console.print(f"Index at [bold]{cfg.chroma_path}[/bold] will be moved aside "
+        console.print(f"Index at [bold]{cfg.index_dir}[/bold] will be moved aside "
                       "(renamed, not deleted), and the daemon will rebuild it from the "
                       "vault and every ingest source on its next start.")
         if novo:
@@ -1659,8 +1665,8 @@ def cmd_ingest_registry(args):
         console.print("[yellow]Not configured.[/yellow] Run: delegation-core setup")
         sys.exit(1)
 
-    origem = Path(args.from_index).expanduser() if args.from_index else cfg.chroma_path
-    em_uso = origem.resolve() == Path(cfg.chroma_path).resolve()
+    origem = Path(args.from_index).expanduser() if args.from_index else cfg.index_dir
+    em_uso = origem.resolve() == Path(cfg.index_dir).resolve()
     if args.queue:
         if em_uso:
             console.print("[red]✗[/red] --queue is for an index that is no longer in use "

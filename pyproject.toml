@@ -19,7 +19,10 @@ dependencies = [
     # the auth= parameter this server now depends on. The old floor-only range
     # let a resolver pick either major.
     "fastmcp>=3.4,<4",
-    "chromadb>=0.5.0",
+    # Indice vetorial: SQLite (stdlib) + numpy, em indice_sqlite.py. O ChromaDB saiu
+    # das dependencias obrigatorias: so e preciso para ler um indice antigo e migrar
+    # (extra "chroma"), porque a 1.5.9 tem defeitos de corrupcao abertos.
+    "numpy>=1.21",
     "sentence-transformers>=3.0.0",
     "requests>=2.32.0",
     "httpx>=0.27.0",
@@ -52,6 +55,7 @@ dependencies = [
 # C toolchain to compile, unlike every other language binding here, so it stays
 # in its own graph-dm extra rather than breaking a plain [graph] install.
 [project.optional-dependencies]
+chroma = ["chromadb>=0.5.0"]
 web = ["ddgs>=6.0.0"]
 graph = [
     "networkx>=3.4",
@@ -88,7 +92,7 @@ graph = [
     "tree-sitter-hcl",
 ]
 graph-dm = ["tree-sitter-dm"]
-dev = ["pytest>=8.0", "ruff>=0.6"]
+dev = ["pytest>=8.0", "ruff>=0.6", "chromadb>=0.5.0"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
