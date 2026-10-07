@@ -16,6 +16,19 @@ from delegation_core.indice_sqlite import ClienteSqlite, IndiceSqliteErro  # noq
 D = 16
 
 
+def _tem_fts() -> bool:
+    import sqlite3
+    c = sqlite3.connect(":memory:")
+    try:
+        c.execute("create virtual table t using fts5(x, tokenize='trigram')")
+        return True
+    except sqlite3.OperationalError:
+        return False
+
+
+precisa_fts = pytest.mark.skipif(not _tem_fts(), reason="este sqlite nao tem FTS5 com trigram")
+
+
 @pytest.fixture
 def par(tmp_path):
     c = chromadb.PersistentClient(path=str(tmp_path / "chroma"),
@@ -175,6 +188,7 @@ def _povoar(par):
                  documents=DOCS, metadatas=[{"i": i} for i in range(len(DOCS))])
 
 
+@precisa_fts
 def test_where_document_igual_ao_chroma(par):
     _povoar(par)
     casos = [{"$contains": "estouro"}, {"$contains": "ESTOURO"}, {"$contains": "ab"},
@@ -189,6 +203,7 @@ def test_where_document_igual_ao_chroma(par):
     assert sorted(a[0]) == sorted(b[0])
 
 
+@precisa_fts
 def test_delete_por_where_document(par):
     _povoar(par)
     for c in par:
@@ -197,6 +212,7 @@ def test_delete_por_where_document(par):
     assert a == b
 
 
+@precisa_fts
 def test_buscar_texto_e_hibrida_so_existem_na_fachada(par):
     _povoar(par)
     novo = par[1]

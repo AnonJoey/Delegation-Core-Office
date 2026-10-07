@@ -139,5 +139,13 @@ def test_com_o_daemon_no_ar_recusa_migrar_o_indice_em_uso(tmp_path, cfg, monkeyp
 def test_comparar_mede_a_sobreposicao_entre_os_dois_indices(tmp_path, cfg):
     origem = _chroma(tmp_path)
     mig.migrar(cfg, origem=origem, destino=cfg.sqlite_path, amostra=5, pasta_de_trabalho=tmp_path / "t")
-    r = mig.comparar(cfg, amostra=10, origem=origem)
+    r = mig.comparar(cfg, amostra=10, origem=origem, pasta_de_trabalho=tmp_path / "cmp")
     assert r["colecoes"]["vault_x"]["sobreposicao_media"] >= 0.9
+
+
+def test_o_estado_padrao_da_migracao_segue_o_redirecionamento_da_suite(tmp_path, cfg, monkeypatch):
+    """Sem pasta de trabalho explicita, a exportacao vai para o estado do projeto, que a
+    suite redireciona: um teste nunca escreve em ~/.delegation_core de verdade."""
+    from delegation_core import config as config_mod
+    monkeypatch.setattr(config_mod, "CONFIG_DIR", tmp_path / "estado")
+    assert mig._pasta_de_estado() == tmp_path / "estado"

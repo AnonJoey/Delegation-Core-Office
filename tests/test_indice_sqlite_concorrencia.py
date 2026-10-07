@@ -1,7 +1,6 @@
 """Varios processos, kill -9 e um leitor de vida longa: o que o Chroma nao aguenta."""
 import os
 import random
-import signal
 import subprocess
 import sys
 import time
@@ -63,11 +62,11 @@ def test_escritores_mortos_com_kill9_nao_deixam_lote_pela_metade(tmp_path):
         assert leitor.query(query_embeddings=[[1.0] * D], n_results=3)["ids"][0]
         if rng.random() < 0.6 and proximo < 120:
             w = rng.choice(list(vivos))
-            vivos.pop(w).send_signal(signal.SIGKILL)
+            vivos.pop(w).kill()
             mortes += 1
             lanca(proximo); proximo += 1
     for p in vivos.values():
-        p.send_signal(signal.SIGKILL)
+        p.kill()
     for p in list(vivos.values()):
         p.wait()
     assert mortes >= 3, "o teste nao matou ninguem"

@@ -93,6 +93,13 @@ def exportar_chroma(chroma_dir: str, destino: str, amostra: int = 50) -> dict:
     return resumo
 
 
+def _pasta_de_estado() -> Path:
+    """`~/.delegation_core`, lido de `config` na hora da chamada para que a suite
+    consiga redireciona-lo (tests/conftest.py): um teste nao pode escrever no real."""
+    from . import config
+    return Path(config.CONFIG_DIR)
+
+
 def _principal_do_filho(argv: list[str]) -> int:
     if len(argv) >= 3 and argv[0] == "exportar":
         r = exportar_chroma(argv[1], argv[2], int(argv[3]) if len(argv) > 3 else 50)
@@ -281,7 +288,7 @@ def migrar(cfg, *, origem: Path | None = None, destino: Path | None = None,
             "indice por um segundo processo e exatamente o cenario que o corrompe. "
             "Pare o daemon (`delegation-core service stop`) ou aponte --from para uma copia.")
     marca = datetime.now().strftime("%Y%m%d-%H%M%S")
-    trabalho = Path(pasta_de_trabalho or (Path.home() / ".delegation_core" / "migracao" / marca))
+    trabalho = Path(pasta_de_trabalho or (_pasta_de_estado() / "migracao" / marca))
     export_dir = trabalho / "export"
     tmp = destino.parent / f"{destino.name}.novo-{marca}"
     if tmp.exists():
@@ -311,7 +318,8 @@ def migrar(cfg, *, origem: Path | None = None, destino: Path | None = None,
     return relatorio
 
 
-def comparar(cfg, *, amostra: int = 100, prazo: float = 600, origem: Path | None = None) -> dict:
+def comparar(cfg, *, amostra: int = 100, prazo: float = 600, origem: Path | None = None,
+             pasta_de_trabalho: Path | None = None) -> dict:
     """Roda as mesmas consultas no Chroma e no SQLite e diz onde divergem.
 
     As consultas sao vetores reais de chunks do proprio indice SQLite. O Chroma
@@ -323,7 +331,7 @@ def comparar(cfg, *, amostra: int = 100, prazo: float = 600, origem: Path | None
     origem = Path(origem or cfg.chroma_path)
     cliente = ClienteSqlite(cfg.sqlite_path)
     try:
-        trabalho = Path.home() / ".delegation_core" / "migracao" / "comparar"
+        trabalho = Path(pasta_de_trabalho or (_pasta_de_estado() / "migracao" / "comparar"))
         trabalho.mkdir(parents=True, exist_ok=True)
         pedido: dict[str, str] = {}
         consultas: dict[str, np.ndarray] = {}

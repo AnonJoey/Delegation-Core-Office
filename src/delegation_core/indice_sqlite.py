@@ -155,22 +155,29 @@ class _Conexao(sqlite3.Connection):
 def _conectar(caminho: Path) -> sqlite3.Connection:
     c = sqlite3.connect(str(caminho), timeout=ESPERA_DO_BANCO_MS / 1000,
                         isolation_level=None, factory=_Conexao)
-    c.execute(f"PRAGMA busy_timeout={ESPERA_DO_BANCO_MS}")
-    c.execute("PRAGMA journal_mode=WAL")
-    # NORMAL em WAL: um kill -9 do processo nunca perde nem corrompe; so uma
-    # queda de energia pode perder as ultimas transacoes, e o indice e
-    # derivado dos markdowns, que continuam sendo a fonte da verdade.
-    c.execute("PRAGMA synchronous=NORMAL")
-    c.executescript(_ESQUEMA)
     try:
-        c.executescript(_FTS)
-        c.tem_fts = True
-    except sqlite3.OperationalError as e:
-        # Um sqlite sem FTS5 ou sem o tokenizador trigram (anterior a 3.34):
-        # a busca por conteudo fica desligada, o resto funciona.
-        logger.warning("FTS5 trigram indisponivel (%s): where_document e busca de texto desligados", e)
-        c.tem_fts = False
-    c.execute("INSERT OR IGNORE INTO esquema VALUES ('versao', ?)", (str(VERSAO_DO_ESQUEMA),))
+        c.execute(f"PRAGMA busy_timeout={ESPERA_DO_BANCO_MS}")
+        c.execute("PRAGMA journal_mode=WAL")
+        # NORMAL em WAL: um kill -9 do processo nunca perde nem corrompe; so uma
+        # queda de energia pode perder as ultimas transacoes, e o indice e
+        # derivado dos markdowns, que continuam sendo a fonte da verdade.
+        c.execute("PRAGMA synchronous=NORMAL")
+        c.executescript(_ESQUEMA)
+        try:
+            c.executescript(_FTS)
+            c.tem_fts = True
+        except sqlite3.OperationalError as e:
+            # Um sqlite sem FTS5 ou sem o tokenizador trigram (anterior a 3.34):
+            # a busca por conteudo fica desligada, o resto funciona.
+            logger.warning("FTS5 trigram indisponivel (%s): where_document e busca de texto desligados", e)
+            c.tem_fts = False
+        c.execute("INSERT OR IGNORE INTO esquema VALUES ('versao', ?)", (str(VERSAO_DO_ESQUEMA),))
+    except BaseException:
+        # Um arquivo ilegivel falha aqui. A conexao tem que ser fechada antes de
+        # propagar: no Windows um arquivo aberto nao pode ser renomeado, e o
+        # reparo (quarentena) e justamente renomear a pasta.
+        c.close()
+        raise
     return c
 
 
