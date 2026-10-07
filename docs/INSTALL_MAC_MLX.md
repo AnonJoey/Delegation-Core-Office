@@ -71,7 +71,7 @@ precisa de porta diferente e não há dois lugares para manter sincronizados.
 ## 4. Limite de memória da GPU, persistente
 
 Orçamento: pesos 8-bit de um 27B ocupam perto de 28 a 30 GB. O BGE-M3 do
-delegation-core roda no mesmo chip (via `mps`) e ocupa mais uns 2 GB. Por isso o alvo
+delegation-core roda ao lado, pelo llama.cpp (etapa 8), e ocupa mais uns 2 GB. Por isso o alvo
 de 40 GB para a GPU, deixando cerca de 8 GB para o macOS.
 
 - Crie `/Library/LaunchDaemons/com.local.gpu-wired-limit.plist` que rode
@@ -157,10 +157,16 @@ Edite `~/.delegation_core/config.json` (faça backup antes:
   "llama_port": 8181,
   "llama_binary": "/Users/<usuario>/mlx-server/.venv/bin/mlx_lm.server",
   "llama_model": "/Users/<usuario>/.cache/huggingface/hub/models--<...>/snapshots/<hash>",
-  "embed_device": "mps",
+  "embed_backend": "llamacpp",
+  "embed_llama_binary": "/opt/homebrew/bin/llama-server",
+  "embed_gguf": "/Users/<usuario>/.delegation_core/models/bge-m3-f16.gguf",
+  "embed_port": 8182,
   "budget_mode": "auto"
 }
 ```
+
+Os campos `embed_*` não precisam ser escritos à mão: `delegation-core embed-llama setup`
+acha ou baixa o `llama-server`, baixa o GGUF e grava tudo (o wizard faz o mesmo no Mac).
 
 Por que cada campo:
 
@@ -169,7 +175,15 @@ Por que cada campo:
 - `llama_binary` aponta para o `mlx_lm.server` do venv. `llama_model` pode ser a pasta
   do snapshot ou o id do repositorio (`mlx-community/...`); com o id, o `doctor` aceita
   e o `mlx_lm` baixa na primeira subida.
-- `embed_device: mps` coloca o BGE no chip. Se der erro de memória, troque por `cpu`.
+- `embed_backend: "llamacpp"`: o BGE roda num `llama-server --embeddings` (porta
+  `embed_port`), ao lado do `mlx_lm.server`, em vez de rodar no torch/MPS, que é o caminho
+  que já derrubou o daemon por alocação de buffer na memória unificada. O GGUF f16 dá o
+  mesmo vetor do torch (cosseno 0,99999 medido com o bge-m3), então a coleção é a mesma e
+  um índice já feito continua valendo, sem reindexar. O `llama-server` sobe sozinho na
+  primeira busca e sai junto com o processo que o subiu.
+- Num Mac que já tinha `embed_device: mps` e foi só atualizado, `embed_backend` fica em
+  `auto` e o BGE segue no torch até você rodar `delegation-core embed-llama setup`; o
+  `delegation-core doctor` avisa isso.
 - `budget_mode: auto` usa a velocidade medida (`tok_sec`) para limitar tokens por
   tarefa. Rode a calibração depois da etapa 9 para preencher `tok_sec`.
 - Não mexa em `server_token`, `vault_path` nem nas pastas do vault.

@@ -497,6 +497,44 @@ def make_bge_embedding_function(model_name: str, max_seq_length: int | None = No
         return build("cpu")
 
 
+BACKENDS = ("auto", "torch", "llamacpp")
+
+
+def resolver_backend(cfg) -> str:
+    """"torch" ou "llamacpp": o que o config pede, com "auto" resolvido.
+
+    "auto" escolhe o llama.cpp so quando binario e GGUF existem de verdade. Um
+    valor desconhecido cai em "auto" com aviso, como `resolver_dispositivo`.
+    """
+    escolha = (getattr(cfg, "embed_backend", "auto") or "auto").strip().lower()
+    if escolha not in BACKENDS:
+        logger.warning("embed_backend=%r nao e um valor conhecido %s; usando auto",
+                       escolha, list(BACKENDS))
+        escolha = "auto"
+    if escolha != "auto":
+        return escolha
+    from . import embed_llama
+    return "llamacpp" if embed_llama.configurado(cfg) else "torch"
+
+
+def usa_a_placa(cfg) -> bool:
+    """O BGE vai carregar na CUDA neste processo (o llama.cpp e outro processo e nao disputa)."""
+    return resolver_backend(cfg) == "torch" and resolver_dispositivo(getattr(cfg, "embed_device", "auto")) == "cuda"
+
+
+def construir_embedding_function(cfg, torch_builder):
+    """A funcao de embedding do backend configurado.
+
+    `torch_builder` e o `make_bge_embedding_function` que o chamador usa: o vault
+    passa o dele, e os testes que o substituem la continuam valendo.
+    """
+    if resolver_backend(cfg) == "llamacpp":
+        from .embed_llama import LlamaCppEmbeddingFunction
+        return LlamaCppEmbeddingFunction(cfg)
+    return torch_builder(cfg.bge_model, max_seq_length=cfg.embed_max_seq_length,
+                         batch_size=cfg.embed_batch_size, device=getattr(cfg, "embed_device", "auto"))
+
+
 def chunk_text(text: str, max_chars: int = 4000, overlap: int = 200) -> list[str]:
     """Split text into overlapping chunks for better embedding coverage of long documents.
 

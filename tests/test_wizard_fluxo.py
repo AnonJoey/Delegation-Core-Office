@@ -145,3 +145,45 @@ def test_o_token_existe_antes_de_qualquer_cliente_ser_escrito(casa, chamadas, mo
     assert cfg.server_token == ""
     wizard._step_connect(cfg, auto_start=False)
     assert vistos and vistos[0] and vistos[0] == cfg.server_token
+
+
+# ── Apple Silicon: o BGE pelo llama.cpp ──────────────────────────────────────
+
+def test_passo_do_bge_prepara_o_llamacpp_quando_o_usuario_aceita(monkeypatch, tmp_path):
+    from delegation_core import embed_llama
+    visto = []
+    monkeypatch.setattr(embed_llama, "preparar",
+                        lambda cfg, **k: visto.append(cfg.bge_model) or {"status": "ok", "dim": 1024})
+    _respostas(monkeypatch, "")
+    cfg = Config(vault_path=str(tmp_path / "v"))
+    cfg.bge_model = "BAAI/bge-m3"
+    wizard._step_embed_llama(cfg)
+    assert visto == ["BAAI/bge-m3"]
+
+
+def test_passo_do_bge_respeita_o_nao(monkeypatch, tmp_path):
+    from delegation_core import embed_llama
+    monkeypatch.setattr(embed_llama, "preparar", lambda *a, **k: pytest.fail("baixou sem permissao"))
+    _respostas(monkeypatch, "n")
+    wizard._step_embed_llama(Config(vault_path=str(tmp_path / "v")))
+
+
+def test_passo_do_bge_que_falha_nao_derruba_o_wizard_e_diz_o_comando(monkeypatch, tmp_path):
+    from delegation_core import embed_llama
+    monkeypatch.setattr(embed_llama, "preparar",
+                        lambda *a, **k: {"status": "error", "step": "binary", "detail": "no llama-server"})
+    _respostas(monkeypatch, "")
+    with wizard.console.capture() as cap:
+        wizard._step_embed_llama(Config(vault_path=str(tmp_path / "v")))
+    saida = " ".join(cap.get().split())  # o Rich quebra linha no meio do comando
+    assert "embed-llama setup" in saida and "stays on torch" in saida
+
+
+def test_passo_do_bge_com_modelo_sem_gguf_fica_no_torch_sem_perguntar(monkeypatch, tmp_path):
+    cfg = Config(vault_path=str(tmp_path / "v"))
+    cfg.bge_model = "meu/modelo-proprio"
+    _respostas(monkeypatch)  # qualquer pergunta esvaziaria a fila e devolveria ""; nao deve haver pergunta
+    perguntou = []
+    monkeypatch.setattr(wizard.console, "input", lambda *a, **k: perguntou.append(a) or "")
+    wizard._step_embed_llama(cfg)
+    assert perguntou == []

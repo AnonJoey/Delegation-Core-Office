@@ -88,6 +88,8 @@ def run_wizard():
         _header(f"Step 6 of {TOTAL_DE_PASSOS}", "Embedding Model")
         _step_embedding_model(cfg)
         cfg.save()
+        if _apple_silicon():
+            _step_embed_llama(cfg)
 
         _header(f"Step 7 of {TOTAL_DE_PASSOS}", "Building Search Index")
         _step_index(cfg)
@@ -625,6 +627,39 @@ def _step_embedding_model(cfg: Config) -> None:
     cfg.save()   # antes do download: interromper aqui nao pode perder as respostas
     tamanho = next((t for m, t, _ in MODELOS_DE_BUSCA if m == cfg.bge_model), "")
     _step_bge(cfg.bge_model, tamanho)
+
+
+def _step_embed_llama(cfg: Config) -> None:
+    """Apple Silicon: o BGE roda pelo llama.cpp, ao lado do modelo (MLX), nunca no torch/MPS.
+
+    O torch em MPS e o caminho que ja derrubou o daemon por alocacao de buffer na
+    memoria unificada. O GGUF f16 da o mesmo vetor do torch (cosseno 0,99999),
+    entao nada precisa ser reindexado. Se a preparacao falhar, o BGE segue no
+    torch e o `doctor` diz o comando que falta.
+    """
+    from . import embed_llama
+
+    item = embed_llama.GGUF_CATALOGO.get(cfg.bge_model)
+    if item is None:
+        console.print(f"  [yellow]No llama.cpp build is known for {cfg.bge_model}:[/yellow] "
+                      "it stays on torch.\n")
+        return
+    tamanho = f"{item[2] / 1e9:.1f} GB" if item[2] >= 1e9 else f"{item[2] / 1e6:.0f} MB"
+    console.print("  On a Mac the search model runs on llama.cpp, next to the MLX model, "
+                  "instead of on torch.")
+    console.print(f"  [dim]Download: {tamanho} (GGUF f16: the same vectors as torch, so an existing "
+                  "index stays valid).[/dim]\n")
+    raw = console.input("  Set it up now? [Y/n]: ").strip().lower()
+    if raw in ("n", "no"):
+        console.print("  Skipped. Run [bold]delegation-core embed-llama setup[/bold] later.\n")
+        return
+    r = embed_llama.preparar(cfg)
+    if r["status"] == "ok":
+        console.print(f"  [green]✓[/green] Search model on llama.cpp ({r['dim']}-dim vectors).\n")
+    else:
+        console.print(f"  [yellow]Could not set it up[/yellow] ({r.get('step', '?')}): {r['detail']}")
+        console.print("  Search stays on torch. Fix the cause and run "
+                      "[bold]delegation-core embed-llama setup[/bold].\n")
 
 
 def _step_bge(model_name: str, tamanho: str = ""):

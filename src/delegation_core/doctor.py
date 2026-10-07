@@ -665,11 +665,39 @@ def check_devices(cfg, tem_cuda=None) -> dict:
     return {"check": "devices", "status": "ok", "detail": detail}
 
 
+def check_embed_backend(cfg) -> dict:
+    """Em que o BGE roda, e se o Mac Apple Silicon esta no caminho certo.
+
+    No Apple Silicon o BGE deve rodar pelo llama.cpp, ao lado do MLX: o torch em
+    MPS e o caminho que ja derrubou o daemon (DC-47). "auto" so escolhe o
+    llama.cpp quando ele esta pronto, entao um Mac atualizado sem o preparo
+    continua no torch; este check diz isso em vez de deixar passar.
+    """
+    import platform
+
+    from . import embed_llama
+    from .embeddings import resolver_backend
+
+    pedido = (getattr(cfg, "embed_backend", "auto") or "auto").strip().lower()
+    efetivo = resolver_backend(cfg)
+    detail = f"embeddings: {efetivo} (embed_backend={pedido})"
+    if efetivo == "llamacpp" and not embed_llama.configurado(cfg):
+        return {"check": "embed_backend", "status": "error",
+                "detail": detail + "; llama-server ou GGUF nao encontrado",
+                "fix": "delegation-core embed-llama setup"}
+    if efetivo == "torch" and platform.system() == "Darwin" and platform.machine() == "arm64":
+        return {"check": "embed_backend", "status": "warn",
+                "detail": detail + "; o BGE esta no torch/MPS, ao lado do modelo local",
+                "fix": "delegation-core embed-llama setup (o indice e o mesmo, sem reindexar)"}
+    return {"check": "embed_backend", "status": "ok", "detail": detail}
+
+
 def run_all(cfg) -> dict:
     """Run every check. Returns {status, counts, checks[]} with the worst status on top."""
     checks = [
         check_engine_mode(cfg),
         check_devices(cfg),
+        check_embed_backend(cfg),
         check_vault_folders(cfg),
         check_hooks(),
         check_graph_extra(),
