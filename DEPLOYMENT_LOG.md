@@ -196,6 +196,20 @@ Verify the reload succeeded by checking `heartbeat` now reports `engine_mode`.
 
 ---
 
+## Indice SQLite em producao: troca do ChromaDB (2026-10-07)
+
+**Action.** O daemon de producao passou a usar o indice SQLite com busca exata em numpy, no lugar do ChromaDB 1.5.9, que tem defeitos de corrupcao abertos no upstream (7510, 7238, 7678) e nenhuma correcao publicada.
+
+**Details.**
+- **Codigo:** branch `feat/indice-sqlite`, feita sobre a `master` de producao (`2c4204d`). O instalado era identico a `master` antes da troca, entao o indice foi a unica mudanca de comportamento. Instalado de `/home/joey/Projects/delegation-core-sqlite` (nao editavel).
+- **Passos:** daemon parado e confirmado sem nada segurando o indice; backup consistente do Chroma em `.chroma_bge-backup-20261007-pre-sqlite` e copia do `config.json`; instalacao do codigo; `delegation-core index-migrate --ativar`; daemon no ar em 4 s.
+- **Migracao:** 41.314 chunks de 16.956 documentos, texto, metadados e vetores identicos bit a bit, 50 de 50 consultas iguais a busca exata, 28 s. O indice do Chroma ficou intocado em `.chroma_bge`.
+- **Verificacao no ambiente vivo:** o daemon tem os arquivos do `indice.db` abertos e nenhum do Chroma; heartbeat saudavel; buscas em 0,11 a 0,14 s; escrita pelo daemon e por um segundo processo escrevendo direto no indice com o daemon vivo (o cenario que corrompia o Chroma), vistos sem reiniciar; `doctor` sem avisos nem erros.
+- **Rollback:** `index_backend: chroma` no config, reinstalar a `master` de `/home/joey/Projects/delegation-core` e subir o daemon. O que for escrito depois da troca so volta com `reindex --force`.
+- **Efeito colateral:** as conexoes MCP das sessoes abertas durante a parada perdem as ferramentas e precisam ser reconectadas (`/mcp`) ou a sessao reiniciada.
+
+---
+
 <!-- Next deployment: append your entry above this line, newest first under its own
      "## <NAME> deployment — <action> — <date>" header. -->
 

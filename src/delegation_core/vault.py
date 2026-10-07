@@ -1,8 +1,8 @@
 """
-vault.py — ChromaDB semantic search core.
+vault.py: semantic search core over the vector index (SQLite; ChromaDB only as a legacy backend).
 
 Delegates embedding setup to embeddings.py (new in v0.2).
-VaultManager owns: ChromaDB lifecycle, search, index, reindex, maintenance helpers.
+VaultManager owns: index lifecycle, search, index, reindex, maintenance helpers.
 
 v0.2 improvements:
   - Lazy init with double-checked lock (field deployment C) + warm_up() for background pre-loading
@@ -221,7 +221,7 @@ class VaultManager:
                 # Guardado para o heartbeat: sem isto o servidor dizia "healthy"
                 # com a busca fora do ar, e o erro so existia no log.
                 self.init_error = str(e)
-                logger.error("ChromaDB/BGE init failed: %s; vault will retry on next call",
+                logger.error("Index/BGE init failed: %s; vault will retry on next call",
                              e, exc_info=True)
                 return  # do NOT set _initialized; leave it False so _ensure_ready() retries
             self.init_error = None
@@ -230,10 +230,10 @@ class VaultManager:
             self._initialized = True  # only reached on successful init
             stats = self.get_stats()
             recuperacao.depois_de_abrir(self.cfg)
-            logger.info("ChromaDB ready — %d chunks across, %d indexed documents; "
-                        "%d Markdown notes in vault (%s)", stats["indexed_rows"],
-                        stats["indexed_notes"], stats["vault_markdown_files"],
-                        self.cfg.collection_name)
+            logger.info("Index ready (%s): %d chunks across, %d indexed documents; "
+                        "%d Markdown notes in vault (%s)", "sqlite" if self.cfg.usa_sqlite else "chroma",
+                        stats["indexed_rows"], stats["indexed_notes"],
+                        stats["vault_markdown_files"], self.cfg.collection_name)
 
     def _adopt_legacy_collection(self, client) -> None:
         """Rename a pre-derivation collection to the model-derived name, if compatible.

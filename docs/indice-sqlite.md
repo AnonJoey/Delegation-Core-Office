@@ -11,6 +11,14 @@ guarda texto, metadados e vetor na mesma transacao, e a busca e exata em numpy.
 
 Medicoes completas em `docs/substituto-do-chromadb.md` (branch `feat/fila-operacoes`).
 
+## Qual indice esta em uso
+
+`index_backend` no `config.json`: `sqlite`, `chroma` ou vazio. Vazio decide pelo que existe
+em disco: indice SQLite presente -> sqlite; so indice do Chroma -> chroma (um indice com
+dados nunca e trocado sozinho por um vazio); nada -> sqlite, que e o de uma instalacao nova.
+O `chromadb` e um extra (`pip install 'delegation-core[chroma]'`), necessario so para ler um
+indice antigo e migrar; o caminho de busca e escrita do SQLite funciona sem ele.
+
 ## Como usar
 
 ```
@@ -29,6 +37,10 @@ delegation-core service start
   apagar depois de validar.
 - Se o Chroma nem abrir, `index-migrate` falha com a causa e nada muda; o caminho e
   `index_backend: sqlite` e `reindex --force`, que reconstroi o indice dos markdowns.
+- Um indice SQLite ilegivel vai para quarentena (`.indice_sqlite-danificado-*`, nunca apagado)
+  e o daemon o reconstroi dos markdowns e das fontes ingeridas.
+- `index-migrate` sem `--ativar` fixa `index_backend: chroma`, para o indice novo nao ser
+  assumido sem ninguem pedir.
 
 ## O que a migracao garante
 
@@ -48,7 +60,7 @@ busca exata sobre a matriz exportada. Qualquer diferenca aborta antes de trocar 
 
 - A matriz fica em memoria no processo que consulta (170 MB com 41 mil chunks). A busca
   exata cresce linearmente; com ordem de 10 vezes o corpus, quantizar ou usar sqlite-vec.
-- O embedder continua vindo de `chromadb.utils.embedding_functions`; so o cliente do
-  Chroma sai do caminho. Tirar a dependencia e um passo a parte.
+- O embedder (`EmbedderSentenceTransformer`) e proprio e gera vetores identicos aos do
+  antigo; nada do caminho de busca e escrita importa o `chromadb`.
 - Um sqlite sem FTS5 trigram (antes da 3.34) desliga `where_document` e a busca de texto;
   o resto funciona.
