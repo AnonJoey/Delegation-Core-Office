@@ -291,11 +291,11 @@ def check_index_location(cfg) -> dict:
     abertos e causa conhecida de dano, e nada avisava.
     """
     from .config import caminho_local_do_indice, em_pasta_sincronizada
-    if not em_pasta_sincronizada(cfg.chroma_path):
+    if not em_pasta_sincronizada(cfg.index_dir):
         return {"check": "index_location", "status": "ok",
-                "detail": f"index at {cfg.chroma_path}, outside any synced folder"}
+                "detail": f"index at {cfg.index_dir}, outside any synced folder"}
     return {"check": "index_location", "status": "warn",
-            "detail": f"index at {cfg.chroma_path} is inside a cloud-synced folder; "
+            "detail": f"index at {cfg.index_dir} is inside a cloud-synced folder; "
                       "sync touching the database under an open process damages it",
             "fix": "with the daemon stopped: delegation-core recover-index "
                    f"--index-path {caminho_local_do_indice()} (the index is rebuilt "
