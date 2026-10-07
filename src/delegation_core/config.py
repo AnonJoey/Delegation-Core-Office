@@ -179,6 +179,10 @@ class Config:
     # 0 means "leave the model's own default alone".
     embed_max_seq_length: int = 2048
     embed_batch_size: int = 8
+    # Prazo, em segundos, para carregar o modelo de embeddings (BGE). Estourado, a busca
+    # responde com o motivo no `heartbeat` em vez de ficar pendurada, e a carga
+    # segue em segundo plano. 0 desliga o prazo.
+    embed_load_timeout_sec: float = 600.0
     #: "auto" (o acelerador que existir), "cpu", "cuda" ou "mps". Existe porque
     #: o BGE-m3 e o llama-server nao cabem juntos numa placa de 16 GB, e ate
     #: 09/09/2026 a unica forma de por o encoder na CPU era esconder a placa do

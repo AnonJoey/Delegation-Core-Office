@@ -49,6 +49,10 @@ class FakeVault:
 
     def index_note(self, content, metadata, doc_id=""):
         self.indexed.append({"content": content, "metadata": metadata, "doc_id": doc_id})
+        # Fiel ao indice real: o que e indexado passa a existir na colecao. Sem isto o
+        # duble diz "o indice nao tem esta linha" e a conferencia da ingestao (que
+        # reembute o arquivo carimbado cujas linhas sumiram do indice) o reingere.
+        self.collection.rows[doc_id or str(len(self.collection.rows))] = dict(metadata)
 
 
     def stamp_indexed(self, rel_paths):

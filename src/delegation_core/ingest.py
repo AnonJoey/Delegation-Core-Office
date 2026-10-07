@@ -310,6 +310,24 @@ class IngestManager:
         self._vault = vault_manager
         self._cfg = vault_manager.cfg
 
+    def _arquivos_no_indice(self, source_key: str) -> set[str] | None:
+        """Os arquivos desta fonte que o indice tem de fato, ou None se nao der para saber.
+
+        None mantem o comportamento antigo (confiar no carimbo): uma consulta que
+        falha nao pode ser o motivo de uma ingestao nao rodar.
+        """
+        try:
+            self._vault._ensure_ready()
+            collection = getattr(self._vault, "collection", None)
+            if collection is None:
+                return None
+            linhas = _paged_get(collection, where={"source_folder": source_key},
+                                include=["metadatas"])
+            return {m.get("path") for m in (linhas.get("metadatas") or []) if isinstance(m, dict)}
+        except Exception as e:
+            logger.warning("Nao consegui conferir o indice para %s (%s); confiando no carimbo", source_key, e)
+            return None
+
     def _configured_source_for(self, source: Path) -> dict | None:
         """Find the configured source that exactly authorizes ``source``."""
         for entry in _configured_sources(self._cfg):
@@ -424,6 +442,12 @@ class IngestManager:
         source_meta = registry.get(source_key, {})
         cached_files = source_meta.get("files", {})
         new_cached_files = {}
+        # O carimbo do registro diz que o ARQUIVO nao mudou, nao que o INDICE tem
+        # as linhas dele. Com o indice recriado, esvaziado ou trocado, pular so pelo
+        # carimbo devolve "0 files" sem reembutir nada, e o proximo passo e achar
+        # que a ingestao rodou. Por isso o indice e consultado uma vez por fonte.
+        presentes = None if force else self._arquivos_no_indice(source_key)
+        reingeridos_sem_linhas: list[str] = []
 
         for f in candidates:
             f_str = str(f)
@@ -441,7 +465,9 @@ class IngestManager:
             if not force and f_str in cached_files:
                 c_info = cached_files[f_str]
                 if isinstance(c_info, (list, tuple)) and len(c_info) >= 2:
-                    if c_info[0] == f_mtime and c_info[1] == f_size:
+                    if c_info[0] == f_mtime and c_info[1] == f_size and presentes is not None and f_str not in presentes:
+                        reingeridos_sem_linhas.append(f_str)
+                    elif c_info[0] == f_mtime and c_info[1] == f_size:
                         # Counted as unchanged, NOT as indexed. Reporting a skip
                         # as an index made "N arquivos reingeridos" indistinguishable
                         # from "N arquivos already present": the number stayed
@@ -530,6 +556,7 @@ class IngestManager:
             "skipped_unreadable": len(skipped_unreadable),
             "skipped_dataless":   len(skipped_dataless),
             "skipped_unchanged":  len(skipped_unchanged),
+            "reindexed_missing_from_index": len(reingeridos_sem_linhas),
             "errors":             errors,
         }
         if configured_source is not None:

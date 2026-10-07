@@ -10,6 +10,7 @@ New in v0.2 (previously embedded in vault.py).
 
 import logging
 import os
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -522,6 +523,58 @@ def usa_a_placa(cfg) -> bool:
     return resolver_backend(cfg) == "torch" and resolver_dispositivo(getattr(cfg, "embed_device", "auto")) == "cuda"
 
 
+class _Carga:
+    """Uma carga de embedder em andamento, numa thread propria.
+
+    A carga do SentenceTransformer nao tem prazo: num disco lento, com os pesos
+    num OneDrive "so na nuvem" ou com a rede da Hugging Face pendurada, ela nunca
+    volta, e tudo que precisa do indice espera atras dela (o `heartbeat`
+    inclusive, que e quem deveria dizer o que esta acontecendo). Uma thread nao se
+    mata, entao o prazo nao cancela a carga: ele solta quem espera, e a proxima
+    chamada continua esperando ESTA carga em vez de iniciar outra, que dobraria a
+    memoria do modelo.
+    """
+
+    def __init__(self, fabrica):
+        self.resultado = None
+        self.erro: BaseException | None = None
+        self.pronta = threading.Event()
+        threading.Thread(target=self._rodar, args=(fabrica,), daemon=True,
+                         name="carga-do-embedder").start()
+
+    def _rodar(self, fabrica):
+        try:
+            self.resultado = fabrica()
+        except BaseException as e:    # entregue a quem espera, qualquer que seja
+            self.erro = e
+        finally:
+            self.pronta.set()
+
+
+_CARGAS: dict[tuple, _Carga] = {}
+_CARGAS_LOCK = threading.Lock()
+
+
+def carregar_com_prazo(chave: tuple, fabrica, prazo_s: float | None):
+    """Roda `fabrica()` com prazo. Sem prazo (0 ou None), e a chamada direta de sempre."""
+    if not prazo_s or prazo_s <= 0:
+        return fabrica()
+    with _CARGAS_LOCK:
+        carga = _CARGAS.get(chave)
+        if carga is None:
+            carga = _CARGAS[chave] = _Carga(fabrica)
+    if not carga.pronta.wait(prazo_s):
+        raise TimeoutError(
+            f"a carga do modelo de embeddings passou de {prazo_s:g} s e segue em andamento; "
+            "a proxima chamada continua esperando por ela (embed_load_timeout_sec muda o prazo)")
+    with _CARGAS_LOCK:
+        if _CARGAS.get(chave) is carga:
+            del _CARGAS[chave]
+    if carga.erro is not None:
+        raise carga.erro
+    return carga.resultado
+
+
 def construir_embedding_function(cfg, torch_builder):
     """A funcao de embedding do backend configurado.
 
@@ -531,8 +584,13 @@ def construir_embedding_function(cfg, torch_builder):
     if resolver_backend(cfg) == "llamacpp":
         from .embed_llama import LlamaCppEmbeddingFunction
         return LlamaCppEmbeddingFunction(cfg)
-    return torch_builder(cfg.bge_model, max_seq_length=cfg.embed_max_seq_length,
-                         batch_size=cfg.embed_batch_size, device=getattr(cfg, "embed_device", "auto"))
+    chave = ("torch", cfg.bge_model, getattr(cfg, "embed_device", "auto"))
+    return carregar_com_prazo(
+        chave,
+        lambda: torch_builder(cfg.bge_model, max_seq_length=cfg.embed_max_seq_length,
+                              batch_size=cfg.embed_batch_size,
+                              device=getattr(cfg, "embed_device", "auto")),
+        getattr(cfg, "embed_load_timeout_sec", 600))
 
 
 def chunk_text(text: str, max_chars: int = 4000, overlap: int = 200) -> list[str]:
