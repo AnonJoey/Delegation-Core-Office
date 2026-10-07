@@ -51,12 +51,10 @@ class FakeEngine:
 
 
 def _stub_stef(monkeypatch, models: dict):
-    """Install a fake chromadb STEF whose class-level `models` dict is `models`."""
-    stef = type("SentenceTransformerEmbeddingFunction", (), {"models": models})
-    mod = types.ModuleType("chromadb.utils.embedding_functions")
-    mod.SentenceTransformerEmbeddingFunction = stef
-    monkeypatch.setitem(sys.modules, "chromadb.utils.embedding_functions", mod)
-    return stef
+    """Aponta o cache de classe do embedder (`models`) para o dict do teste."""
+    from delegation_core import embeddings
+    monkeypatch.setattr(embeddings.EmbedderSentenceTransformer, "models", models)
+    return embeddings.EmbedderSentenceTransformer
 
 
 def _cuda_model():

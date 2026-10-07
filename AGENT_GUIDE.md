@@ -52,7 +52,7 @@ tool is right and this file is stale.
 ---
 
 ### `heartbeat()`
-Check that llama.cpp and ChromaDB are online.  
+Check that llama.cpp and the vector index are online.  
 Call this after `capabilities()`. If status is `degraded`, warn the user before proceeding.
 
 ```json
@@ -95,7 +95,7 @@ The note is searchable in the same session as soon as it is written.
 `ai_generated` stamps the frontmatter and defaults to true, which is right for
 you: you are an agent, and you wrote it. Leave it alone. It exists because the
 CLI's `delegation-core note write` carries a person's text from stdin, and that
-command now routes through this tool instead of opening ChromaDB as a second
+command now routes through this tool instead of opening the index as a second
 writer beside the daemon.
 
 Valid folders are the `heartbeat()` → `vault.folder_counts` keys, and are matched
@@ -127,7 +127,7 @@ yourself — compress it first, then reason over the result.
 ---
 
 ### `vault_stats()`
-Returns physical Markdown-file counts, distinct indexed documents, and ChromaDB
+Returns physical Markdown-file counts, distinct indexed documents, and index
 chunk rows. Use to orient the user or confirm that a write was persisted.
 
 `vault_markdown_files` counts files in the vault. `indexed_notes` counts distinct
@@ -306,7 +306,7 @@ by `run_maintenance` for each processed folder.
 ---
 
 ### `ingest_folder(source_path, recursive=True, exclude=None)`
-Index an external directory into ChromaDB **without moving files**.
+Index an external directory into the vector index **without moving files**.
 Use to make an existing folder (project directory, external vault, document archive)
 searchable via `search_vault`. The source folder is not modified.
 
@@ -380,7 +380,7 @@ to block the conversation while files are being processed.
 ---
 
 ### `vault_reindex_bg()`
-Rebuild the entire ChromaDB index from vault folders in the background.
+Rebuild the entire vector index from vault folders in the background.
 Use after the user has bulk-added notes to the vault outside of delegation-core,
 or after running `delegation-core reindex` from the terminal has been requested.
 

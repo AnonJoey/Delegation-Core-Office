@@ -20,6 +20,8 @@ from delegation_core import gpu, ingest, recuperacao
 from delegation_core.config import Config
 from delegation_core.vault import VaultManager
 
+pytestmark = pytest.mark.usefixtures("backend_chroma")  # o assunto deste modulo e o indice do Chroma
+
 
 class _Embedder:
     def __call__(self, input):

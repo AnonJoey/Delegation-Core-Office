@@ -94,6 +94,7 @@ def test_a_missing_index_file_does_not_trigger_reopens(vm):
     assert len(vm.opens) == 1, "an unreadable fingerprint is unknown, not changed"
 
 
+@pytest.mark.usefixtures("backend_chroma")
 def test_the_embedding_function_survives_a_reopen(tmp_path, monkeypatch):
     """Rebuilding it reloads BGE onto the GPU. A reload caused by someone else's
     write must not pay that, and on a full GPU the rebuild can fail outright."""

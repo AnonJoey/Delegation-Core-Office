@@ -255,6 +255,33 @@ def sondar_indice(cfg, timeout: int = 120) -> dict:
 _NTSTATUS_DE_CRASH = frozenset({0xC0000005, 0xC00000FD, -1073741819, -1073741571})
 
 
+def _check_indice_sqlite(cfg, nome: str) -> dict:
+    """Com o indice SQLite, o dano que o Chroma tem (segmentos HNSW sem linha,
+    FTS divergente) nao existe; o que se verifica e a integridade do SQLite."""
+    arquivo = cfg.sqlite_path / "indice.db"
+    if not arquivo.exists():
+        return {"check": nome, "status": "ok", "detail": "no sqlite index built yet"}
+    if nome != "index_integrity":
+        return {"check": nome, "status": "skip",
+                "detail": "does not apply to the sqlite index (single transactional store)"}
+    try:
+        from .indice_sqlite import ClienteSqlite
+        cliente = ClienteSqlite(cfg.sqlite_path)
+        try:
+            veredito = cliente.verificar()
+            linhas = sum(c.count() for c in cliente.list_collections())
+        finally:
+            cliente.close()
+    except Exception as e:
+        return {"check": nome, "status": "warn", "detail": f"sqlite index unreadable ({e})",
+                "fix": "delegation-core reindex --force"}
+    if veredito != "ok":
+        return {"check": nome, "status": "warn",
+                "detail": f"PRAGMA integrity_check: {veredito[:200]}",
+                "fix": "delegation-core reindex --force"}
+    return {"check": nome, "status": "ok", "detail": f"sqlite index ok, {linhas} chunks"}
+
+
 def check_index_location(cfg) -> dict:
     """O indice mora numa pasta que um cliente de nuvem sincroniza?
 
@@ -264,11 +291,11 @@ def check_index_location(cfg) -> dict:
     abertos e causa conhecida de dano, e nada avisava.
     """
     from .config import caminho_local_do_indice, em_pasta_sincronizada
-    if not em_pasta_sincronizada(cfg.chroma_path):
+    if not em_pasta_sincronizada(cfg.index_dir):
         return {"check": "index_location", "status": "ok",
-                "detail": f"index at {cfg.chroma_path}, outside any synced folder"}
+                "detail": f"index at {cfg.index_dir}, outside any synced folder"}
     return {"check": "index_location", "status": "warn",
-            "detail": f"index at {cfg.chroma_path} is inside a cloud-synced folder; "
+            "detail": f"index at {cfg.index_dir} is inside a cloud-synced folder; "
                       "sync touching the database under an open process damages it",
             "fix": "with the daemon stopped: delegation-core recover-index "
                    f"--index-path {caminho_local_do_indice()} (the index is rebuilt "
@@ -299,6 +326,8 @@ def check_index_integrity(cfg) -> dict:
     loading data, which is when the condition appeared. In a child process the
     same crash becomes an answer.
     """
+    if cfg.usa_sqlite:
+        return _check_indice_sqlite(cfg, 'index_integrity')
     if not (cfg.chroma_path / "chroma.sqlite3").exists():
         return {"check": "index_integrity", "status": "ok", "detail": "no index built yet"}
 
@@ -356,6 +385,8 @@ def check_index_integrity(cfg) -> dict:
 
 def check_orphan_segments(cfg) -> dict:
     """Detect segment directories left behind on disk when collections were recreated."""
+    if cfg.usa_sqlite:
+        return _check_indice_sqlite(cfg, 'orphan_segments')
     chroma_dir = cfg.chroma_path
     db_path = chroma_dir / "chroma.sqlite3"
 
@@ -464,6 +495,8 @@ def clean_orphan_segments(cfg) -> int:
 
 def check_fts_integrity(cfg) -> dict:
     """Check whether Chroma SQLite FTS5 fulltext search table is healthy or malformed."""
+    if cfg.usa_sqlite:
+        return _check_indice_sqlite(cfg, 'fts_integrity')
     db_path = cfg.chroma_path / "chroma.sqlite3"
     if not db_path.exists():
         return {"check": "fts_integrity", "status": "ok", "detail": "no chroma database found"}

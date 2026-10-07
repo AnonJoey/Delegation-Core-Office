@@ -1,8 +1,8 @@
 """
-vault.py — ChromaDB semantic search core.
+vault.py: semantic search core over the vector index (SQLite; ChromaDB only as a legacy backend).
 
 Delegates embedding setup to embeddings.py (new in v0.2).
-VaultManager owns: ChromaDB lifecycle, search, index, reindex, maintenance helpers.
+VaultManager owns: index lifecycle, search, index, reindex, maintenance helpers.
 
 v0.2 improvements:
   - Lazy init with double-checked lock (field deployment C) + warm_up() for background pre-loading
@@ -37,7 +37,7 @@ from pathlib import Path, PurePosixPath, PureWindowsPath
 
 from . import gpu, recuperacao
 from .config import Config
-from .index_lock import close_chroma_client, index_lock_of, reads_index, uses_index
+from .index_lock import abrir_cliente, close_chroma_client, index_lock_of, reads_index, uses_index
 from .embeddings import (
     chunk_text,
     effective_chunk_chars,
@@ -117,6 +117,8 @@ class VaultManager:
 
     def _read_disk_state(self) -> tuple | None:
         """Cheap fingerprint of the index on disk: one stat of Chroma's sqlite."""
+        if self.cfg.usa_sqlite:       # o indice SQLite se atualiza sozinho (ver indice_sqlite)
+            return None
         try:
             st = (self.cfg.chroma_path / "chroma.sqlite3").stat()
         except OSError:
@@ -180,8 +182,7 @@ class VaultManager:
                     "build the Config with Config.load()."
                 )
             try:
-                import chromadb
-                self.cfg.chroma_path.mkdir(parents=True, exist_ok=True)
+                self.cfg.index_dir.mkdir(parents=True, exist_ok=True)
                 # Reuse the embedding function across reopens. Rebuilding it
                 # reloads BGE onto the GPU, which a reload triggered by someone
                 # else's write must not pay for — and on this machine the GPU is
@@ -204,11 +205,7 @@ class VaultManager:
                         max_seq_length=self.cfg.embed_max_seq_length,
                         batch_size=self.cfg.embed_batch_size,
                         device=getattr(self.cfg, "embed_device", "auto"))
-                recuperacao.antes_de_abrir(self.cfg)  # pode trocar o indice por um novo
-                client = chromadb.PersistentClient(
-                    path=str(self.cfg.chroma_path),
-                    settings=chromadb.Settings(anonymized_telemetry=False),
-                )
+                client = abrir_cliente(self.cfg)
                 try:
                     self._adopt_legacy_collection(client)
                 except Exception as e:
@@ -224,7 +221,7 @@ class VaultManager:
                 # Guardado para o heartbeat: sem isto o servidor dizia "healthy"
                 # com a busca fora do ar, e o erro so existia no log.
                 self.init_error = str(e)
-                logger.error("ChromaDB/BGE init failed: %s; vault will retry on next call",
+                logger.error("Index/BGE init failed: %s; vault will retry on next call",
                              e, exc_info=True)
                 return  # do NOT set _initialized; leave it False so _ensure_ready() retries
             self.init_error = None
@@ -233,10 +230,10 @@ class VaultManager:
             self._initialized = True  # only reached on successful init
             stats = self.get_stats()
             recuperacao.depois_de_abrir(self.cfg)
-            logger.info("ChromaDB ready — %d chunks across, %d indexed documents; "
-                        "%d Markdown notes in vault (%s)", stats["indexed_rows"],
-                        stats["indexed_notes"], stats["vault_markdown_files"],
-                        self.cfg.collection_name)
+            logger.info("Index ready (%s): %d chunks across, %d indexed documents; "
+                        "%d Markdown notes in vault (%s)", "sqlite" if self.cfg.usa_sqlite else "chroma",
+                        stats["indexed_rows"], stats["indexed_notes"],
+                        stats["vault_markdown_files"], self.cfg.collection_name)
 
     def _adopt_legacy_collection(self, client) -> None:
         """Rename a pre-derivation collection to the model-derived name, if compatible.
@@ -1761,7 +1758,7 @@ class VaultManager:
             "indexed_rows": rows,
             "vault_markdown_files": sum(
                 1 for path in self.cfg.vault.rglob("*.md")
-                if self.cfg.chroma_path not in path.parents
+                if self.cfg.index_dir not in path.parents
             ),
             # The clients actually present in the index, as the filter sees
             # them. This is the verification surface for client_path_roots: a

@@ -84,9 +84,7 @@ def embeddings_resident() -> bool:
     enough to free the weights.
     """
     try:
-        from chromadb.utils.embedding_functions import (
-            SentenceTransformerEmbeddingFunction as _STEF,
-        )
+        from .embeddings import EmbedderSentenceTransformer as _STEF
     except Exception:
         return False
     for model in list(getattr(_STEF, "models", {}).values()):
@@ -128,9 +126,7 @@ def release_embeddings() -> int:
                 logger.warning("could not clear embedding owner %r: %s", owner, e)
 
         try:
-            from chromadb.utils.embedding_functions import (
-                SentenceTransformerEmbeddingFunction as _STEF,
-            )
+            from .embeddings import EmbedderSentenceTransformer as _STEF
             getattr(_STEF, "models", {}).clear()
         except Exception as e:
             logger.warning("could not clear the SentenceTransformer cache: %s", e)

@@ -266,3 +266,16 @@ def _config_real_intacta():
             "da maquina: use o tmp_path que conftest._sem_escrita_no_estado_real "
             "ja instalou. O arquivo foi restaurado."
         )
+
+
+
+@pytest.fixture
+def backend_chroma(monkeypatch):
+    """Fixa o indice do Chroma, o padrao ate a migracao para SQLite.
+
+    Para os testes cujo assunto E o Chroma: reabertura de cliente, quarentena da
+    pasta `.chroma_bge`, leitura de `chroma.sqlite3` e a recuperacao desse indice.
+    Os demais usam o padrao (SQLite num vault novo).
+    """
+    from delegation_core.config import Config
+    monkeypatch.setattr(Config, "usa_sqlite", property(lambda self: False))
