@@ -1,0 +1,246 @@
+{
+ "notas": {
+  "n01": "Decision: migrate authentication to OAuth2 with PKCE for the mobile app. Reason: refresh tokens in the browser were leaking through logs.",
+  "n02": "Fix: the nightly backup job failed because the disk was full; added a retention policy of seven days and an alert at 80 percent usage.",
+  "n03": "Procedure: rotate the database credentials every ninety days using the secrets manager, then restart the workers one at a time.",
+  "n04": "Research: comparison of three vector databases for semantic search; chose SQLite with exact search because the corpus has under fifty thousand chunks.",
+  "n05": "Meeting: sprint planning agreed to freeze the release on Thursday and move the payment refactor to the next sprint.",
+  "n06": "Fix: Windows paths with backslashes broke the file indexer; normalized every path to forward slashes before hashing.",
+  "n07": "Decision: use feature flags for the new billing page so we can roll back without a deploy.",
+  "n08": "Tool: shell script that exports the issue tracker to markdown every Friday and files it in the vault.",
+  "n09": "Incident: the API returned 502 errors for twenty minutes after the load balancer certificate expired; added certificate expiry monitoring.",
+  "n10": "Reference: coding standards for Python services: type hints required, black formatting, pytest for tests, no wildcard imports.",
+  "n11": "Decision: adopt trunk-based development with short-lived branches and required code review from one teammate.",
+  "n12": "Fix: the embedding model was loaded four times, once per client; a single shared daemon now keeps one copy in memory.",
+  "n13": "Procedure: onboarding checklist for new engineers: laptop setup, repository access, first pull request within the first week.",
+  "n14": "Research: latency of the speech to text service dropped from nine seconds to two after switching to streaming transcription.",
+  "n15": "Decision: keep customer data in the European region only to meet the data residency clause in the contract.",
+  "n16": "Fix: memory leak in the image resizing worker; the thumbnails buffer was never released after upload.",
+  "n17": "Meeting: retrospective found that flaky tests wasted about four hours per week; quarantined the five worst tests.",
+  "n18": "Reference: glossary of billing terms: invoice, credit note, proration, dunning, and write-off.",
+  "n19": "Tool: command line script that anonymizes a production database dump for use in staging.",
+  "n20": "Incident: duplicate emails were sent to customers because the queue consumer retried without an idempotency key.",
+  "n21": "Decision: pick PostgreSQL over MongoDB for the orders service because we need transactions across several tables.",
+  "n22": "Fix: dark mode contrast failed accessibility checks; raised text contrast to a ratio of 4.5 to 1.",
+  "n23": "Procedure: how to roll back a bad release: revert the tag, redeploy the previous image, and announce in the incident channel.",
+  "n24": "Research: user interviews showed customers abandon the signup form at the phone number field.",
+  "n25": "Decision: sunset the legacy XML API on the first of March and give partners ninety days notice.",
+  "n26": "Fix: the cron job ran twice after daylight saving time changed; schedule now uses UTC.",
+  "n27": "Reference: on-call handbook with escalation contacts, severity levels, and the first-response checklist.",
+  "n28": "Tool: Grafana dashboard that shows error rate, p95 latency and queue depth for every service.",
+  "n29": "Incident: the search index became corrupted after two processes wrote at the same time; moved to a single writer.",
+  "n30": "Decision: limit file uploads to twenty megabytes and scan every file for malware before storing.",
+  "n31": "Meeting: quarterly planning chose reliability work over new features for the next six weeks.",
+  "n32": "Fix: timezone bug showed meetings one hour early for users in Brazil; store timestamps in UTC and convert on display.",
+  "n33": "Procedure: monthly cost review of cloud spending: tag every resource, delete unattached volumes, right-size instances.",
+  "n34": "Research: benchmark of three static site generators; build time was ten times faster with the Rust-based one.",
+  "n35": "Reference: API rate limits are one hundred requests per minute per token, with a burst of twenty.",
+  "n36": "Decision: write the mobile app with React Native instead of two native codebases to ship on both platforms.",
+  "n37": "Fix: password reset links stayed valid forever; they now expire after thirty minutes and work once.",
+  "n38": "Tool: pre-commit hook that blocks commits containing API keys or private keys.",
+  "n39": "Incident: a migration locked the users table for eleven minutes; large migrations now run in batches outside business hours.",
+  "n40": "Meeting: design review approved the new onboarding flow with three steps instead of seven."
+ },
+ "perguntas": [
+  {
+   "id": "q01",
+   "pergunta": "why did we choose OAuth2 for the mobile login?",
+   "esperada": "n01"
+  },
+  {
+   "id": "q02",
+   "pergunta": "backup failed because the disk was full",
+   "esperada": "n02"
+  },
+  {
+   "id": "q03",
+   "pergunta": "how often should database credentials be rotated?",
+   "esperada": "n03"
+  },
+  {
+   "id": "q04",
+   "pergunta": "which database did we pick for semantic search and why?",
+   "esperada": "n04"
+  },
+  {
+   "id": "q05",
+   "pergunta": "what was decided about the release freeze?",
+   "esperada": "n05"
+  },
+  {
+   "id": "q06",
+   "pergunta": "files with backslashes broke the indexer on Windows",
+   "esperada": "n06"
+  },
+  {
+   "id": "q07",
+   "pergunta": "how can we roll out the billing page without risk?",
+   "esperada": "n07"
+  },
+  {
+   "id": "q08",
+   "pergunta": "weekly export of tickets into markdown",
+   "esperada": "n08"
+  },
+  {
+   "id": "q09",
+   "pergunta": "outage caused by an expired certificate",
+   "esperada": "n09"
+  },
+  {
+   "id": "q10",
+   "pergunta": "what are our Python style rules?",
+   "esperada": "n10"
+  },
+  {
+   "id": "q11",
+   "pergunta": "branching strategy and code review policy",
+   "esperada": "n11"
+  },
+  {
+   "id": "q12",
+   "pergunta": "why is the model loaded only once now?",
+   "esperada": "n12"
+  },
+  {
+   "id": "q13",
+   "pergunta": "what should a new hire do in the first week?",
+   "esperada": "n13"
+  },
+  {
+   "id": "q14",
+   "pergunta": "how much faster did transcription get with streaming?",
+   "esperada": "n14"
+  },
+  {
+   "id": "q15",
+   "pergunta": "where must customer data be stored?",
+   "esperada": "n15"
+  },
+  {
+   "id": "q16",
+   "pergunta": "thumbnail memory leak",
+   "esperada": "n16"
+  },
+  {
+   "id": "q17",
+   "pergunta": "tests that fail randomly cost us time",
+   "esperada": "n17"
+  },
+  {
+   "id": "q18",
+   "pergunta": "what does proration mean?",
+   "esperada": "n18"
+  },
+  {
+   "id": "q19",
+   "pergunta": "how do we get safe production data for staging?",
+   "esperada": "n19"
+  },
+  {
+   "id": "q20",
+   "pergunta": "customers received the same email twice",
+   "esperada": "n20"
+  },
+  {
+   "id": "q21",
+   "pergunta": "why PostgreSQL for orders?",
+   "esperada": "n21"
+  },
+  {
+   "id": "q22",
+   "pergunta": "accessibility problem with dark theme",
+   "esperada": "n22"
+  },
+  {
+   "id": "q23",
+   "pergunta": "steps to undo a faulty deploy",
+   "esperada": "n23"
+  },
+  {
+   "id": "q24",
+   "pergunta": "where do users drop off in registration?",
+   "esperada": "n24"
+  },
+  {
+   "id": "q25",
+   "pergunta": "when does the old XML interface go away?",
+   "esperada": "n25"
+  },
+  {
+   "id": "q26",
+   "pergunta": "scheduled job executed twice in autumn",
+   "esperada": "n26"
+  },
+  {
+   "id": "q27",
+   "pergunta": "who do I call when the pager goes off?",
+   "esperada": "n27"
+  },
+  {
+   "id": "q28",
+   "pergunta": "dashboard with latency and error rate",
+   "esperada": "n28"
+  },
+  {
+   "id": "q29",
+   "pergunta": "index damaged by concurrent writes",
+   "esperada": "n29"
+  },
+  {
+   "id": "q30",
+   "pergunta": "maximum upload size and malware scanning",
+   "esperada": "n30"
+  },
+  {
+   "id": "q31",
+   "pergunta": "should we build features or fix reliability this quarter?",
+   "esperada": "n31"
+  },
+  {
+   "id": "q32",
+   "pergunta": "meetings appear an hour early in Brazil",
+   "esperada": "n32"
+  },
+  {
+   "id": "q33",
+   "pergunta": "how do we reduce the cloud bill?",
+   "esperada": "n33"
+  },
+  {
+   "id": "q34",
+   "pergunta": "fastest static site generator",
+   "esperada": "n34"
+  },
+  {
+   "id": "q35",
+   "pergunta": "how many requests per minute are allowed?",
+   "esperada": "n35"
+  },
+  {
+   "id": "q36",
+   "pergunta": "why not write two native apps?",
+   "esperada": "n36"
+  },
+  {
+   "id": "q37",
+   "pergunta": "reset link never expired",
+   "esperada": "n37"
+  },
+  {
+   "id": "q38",
+   "pergunta": "prevent leaking secrets in commits",
+   "esperada": "n38"
+  },
+  {
+   "id": "q39",
+   "pergunta": "database migration that locked users for minutes",
+   "esperada": "n39"
+  },
+  {
+   "id": "q40",
+   "pergunta": "how many steps does the new onboarding have?",
+   "esperada": "n40"
+  }
+ ]
+}
