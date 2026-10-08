@@ -54,6 +54,21 @@ Um teste de sensibilidade também garante que inverter a ordem de qualquer modo 
 
 A primeira versão deste conjunto tinha três perguntas em que a nota esperada empatava em pontuação com outra. Empate se desfaz pela ordem em que as notas entraram no índice, e isso pode mudar de sistema operacional para sistema operacional: o CI do macOS ou do Windows falharia sem regressão nenhuma. Foi achado embaralhando a ordem de inserção. Duas causas: colisões de hash no embedder de teste (512 dimensões, hoje 8.192) e perguntas com pouca sobreposição de palavras. Hoje `test_o_resultado_nao_depende_da_ordem_de_insercao` embaralha a ordem com cinco sementes e exige o mesmo resultado; ao acrescentar perguntas, esse teste avisa se alguma criar empate.
 
+## Relação com `delegation-core eval-search`
+
+Já existia `delegation-core eval-search ARQUIVO`, que mede a busca **de verdade**: pergunta ao daemon em execução, com o BGE real e o vault real, por escopo, e imprime acertos em k e MRR. O arquivo de perguntas fica fora do repositório (ver `delegation_core.avaliacao`) porque as perguntas e as respostas esperadas vêm de notas privadas.
+
+Os dois se complementam e não se substituem:
+
+| | `eval-search` | Evals deste arquivo |
+|---|---|---|
+| Quando roda | Quando a pessoa pede, na máquina dela | A cada `pytest`, no CI |
+| Modelo de embeddings | O real (BGE-M3) | Um saco de palavras determinístico |
+| Corpus | O vault real, privado | 40 notas sintéticas, públicas |
+| O que pega | Piora da qualidade para o uso real, troca de modelo, índice errado | Regressão do índice, do filtro, da fusão RRF e do BM25 |
+
+Para medir um modelo novo de embeddings, use o `eval-search` sobre o mesmo conjunto de perguntas antes e depois.
+
 ## Para ampliar
 
 - Acrescentar notas e perguntas em `tests/evals_busca/corpus.json` (uma pergunta por nota, para uma regressão não se esconder atrás de outra). Regravar a linha de base.
