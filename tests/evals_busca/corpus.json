@@ -154,12 +154,12 @@
   },
   {
    "id": "q23",
-   "pergunta": "steps to undo a faulty deploy",
+   "pergunta": "steps to undo a bad release and redeploy",
    "esperada": "n23"
   },
   {
    "id": "q24",
-   "pergunta": "where do users drop off in registration?",
+   "pergunta": "where do users abandon registration?",
    "esperada": "n24"
   },
   {

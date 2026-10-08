@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import random
 import re
 from pathlib import Path
 
@@ -47,7 +48,7 @@ N = 5
 MODOS = ("vetorial", "lexical", "hibrida")
 METRICAS = ("hit@1", "hit@3", "hit@5", "mrr")
 
-DIM = 512
+DIM = 8192
 _PARADAS = frozenset(
     "the and for with that this from are was were has have had not but how what why when who where "
     "does did can could should would our out any all one two into than then they them their its "
@@ -67,7 +68,7 @@ def _tokens(texto: str) -> list[str]:
 
 
 class EmbedderLexico:
-    """Saco de palavras com hash em 512 dimensoes: deterministico e sem rede."""
+    """Saco de palavras com hash em 8192 dimensoes (poucas colisoes de hash, para nao criar empates falsos): deterministico e sem rede."""
 
     def __call__(self, input: list[str]) -> list[list[float]]:  # noqa: A002 (nome do protocolo)
         saida = []
@@ -80,10 +81,12 @@ class EmbedderLexico:
         return saida
 
 
-def _construir(tmp_path):
+def _construir(tmp_path, semente: int | None = None):
     cliente = ClienteSqlite(tmp_path / "indice")
     col = cliente.get_or_create_collection("evals", embedding_function=EmbedderLexico())
     ids = list(CORPUS["notas"])
+    if semente is not None:
+        random.Random(semente).shuffle(ids)
     col.add(ids=ids, documents=[CORPUS["notas"][i] for i in ids],
             metadatas=[{"nota": i} for i in ids])
     return cliente, col
@@ -168,3 +171,19 @@ def test_a_hibrida_nao_e_pior_que_o_melhor_dos_dois_por_mais_de_uma_margem(medid
     melhor = max(medidas["vetorial"]["mrr"], medidas["lexical"]["mrr"])
     assert medidas["hibrida"]["mrr"] >= melhor - 0.05, (
         "a fusao RRF ficou claramente pior que o melhor dos dois modos sozinhos")
+
+
+@pytest.mark.parametrize("semente", [1, 2, 3, 4, 5])
+def test_o_resultado_nao_depende_da_ordem_de_insercao(tmp_path, medidas, semente):
+    """Empate de pontuacao se desfaz pela ordem em que as notas entraram, e isso muda de
+    sistema para sistema. Um corpus com empate na nota esperada faria o CI do macOS ou do
+    Windows falhar sem regressao nenhuma. Foi o que a primeira versao deste conjunto tinha
+    (q22, q23 e q24), achado ao embaralhar a ordem de insercao."""
+    cliente, col = _construir(tmp_path, semente)
+    try:
+        for modo in MODOS:
+            assert avaliar(col, modo) == pytest.approx(medidas[modo]), (
+                f"{modo}: a ordem de insercao (semente {semente}) mudou o resultado; "
+                "ha empate de pontuacao na nota esperada de alguma pergunta")
+    finally:
+        cliente.close()
