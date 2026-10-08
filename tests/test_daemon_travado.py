@@ -46,6 +46,25 @@ def test_conexao_recusada_continua_sendo_daemon_que_saiu(monkeypatch):
         daemon._run(_levanta(httpx.ConnectError("recusada")), "vault_stats", _cfg(1))
 
 
+def test_inicializacao_estourada_sem_timeouterror_na_cadeia_tambem_e_daemon_travado(monkeypatch):
+    # Forma medida no CI e sob CPU disputada: o fastmcp devolve a falha de
+    # inicializacao dentro de grupos aninhados com so um cancelamento, sem
+    # nenhum TimeoutError. A mensagem e o unico sinal de que foi tempo esgotado.
+    import asyncio
+    monkeypatch.setattr(daemon, "is_listening", lambda *a, **k: True)
+
+    async def sem_timeout():
+        try:
+            raise BaseExceptionGroup("externo", [BaseExceptionGroup("interno", [asyncio.CancelledError("cancelado")])])
+        except BaseExceptionGroup as g:
+            try:
+                raise RuntimeError("Failed to initialize server session") from g
+            except RuntimeError as r:
+                raise RuntimeError("Client failed to connect: Failed to initialize server session") from r
+    with pytest.raises(daemon.DaemonUnresponsive):
+        daemon._run(sem_timeout(), "vault_stats", _cfg(1))
+
+
 def test_timeout_embrulhado_em_grupo_e_em_runtimeerror_tambem_e_reconhecido(monkeypatch):
     monkeypatch.setattr(daemon, "is_listening", lambda *a, **k: True)
 

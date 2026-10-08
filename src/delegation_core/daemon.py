@@ -213,6 +213,11 @@ def _is_timeout(exc: BaseException) -> bool:
             vistos.add(id(atual))
             if isinstance(atual, TimeoutError) or type(atual).__name__ in nomes:
                 return True
+            # O fastmcp levanta isto quando a inicializacao da sessao estoura o
+            # tempo. Sob carga a cadeia chega sem nenhum TimeoutError dentro (so
+            # grupos aninhados com cancelamentos), e a mensagem e o unico rastro.
+            if "Failed to initialize server session" in str(atual):
+                return True
             if isinstance(atual, ExceptionGroup):
                 pendentes.extend(atual.exceptions)
             atual = atual.__cause__ or atual.__context__
