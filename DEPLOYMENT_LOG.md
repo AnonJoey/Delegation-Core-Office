@@ -208,6 +208,29 @@ Verify the reload succeeded by checking `heartbeat` now reports `engine_mode`.
 - **Rollback:** `index_backend: chroma` no config, reinstalar a `master` de `/home/joey/Projects/delegation-core` e subir o daemon. O que for escrito depois da troca so volta com `reindex --force`.
 - **Efeito colateral:** as conexoes MCP das sessoes abertas durante a parada perdem as ferramentas e precisam ser reconectadas (`/mcp`) ou a sessao reiniciada.
 
+
+---
+
+## v0.16.0 em producao (2026-10-09)
+
+**Action.** O daemon de producao passou do commit `1d9855a` (versao 0.15.0 no codigo, indice SQLite desde 07/10) para a **v0.16.0** (merge `be206bf`, tag anotada `v0.16.0`). Sequencia: PRs 30, 31, 32 e 33 mesclados, cada um com a suite verde em Linux, Windows e macOS; `git pull --ff-only`; `pip install --no-deps --force-reinstall`; `systemctl --user restart delegation-core`.
+
+**O que entrou desde a v0.15.0.** Indice SQLite no lugar do ChromaDB (migracao opt-in e verificada), wizard revisado, fila local sem regravacao ociosa, ferramentas fora do laco, motor MLX, `service stop|start|restart` (que o README ja mandava usar e nao existiam), secundarios do relato de campo e evals da busca no CI. O BGE pelo llama.cpp esta marcado como experimental e opt-in.
+
+**Verificacao feita em 09/10, depois do restart.**
+- Versao instalada: `0.16.0`.
+- `delegation-core doctor`: 12 ok, 0 avisos, 0 erros, 2 puladas (as checagens do ChromaDB, que nao se aplicam ao indice SQLite).
+- `delegation-core status`: 41.622 linhas indexadas, lidas pelo daemon; `index_integrity`: indice SQLite ok, 41.622 chunks.
+- Servico ativo desde 10:29:59, sem reinicios (`NRestarts=0`); o log mostra so as linhas informativas do watchdog.
+
+**Nao verificado.**
+- A migracao do indice (`index-migrate`) em macOS e em Windows: so rodou em Linux e nos testes de CI.
+- O BGE pelo llama.cpp com Metal: validado apenas em CPU no Linux.
+- `delegation-core update` de uma instalacao em 0.15.0 para a 0.16.0 nas outras maquinas.
+- O `heartbeat()` por uma sessao MCP depois do restart.
+
+**Efeito colateral.** As conexoes MCP das sessoes abertas durante o restart perdem as ferramentas e precisam ser reconectadas (`/mcp`) ou a sessao reiniciada.
+
 ---
 
 <!-- Next deployment: append your entry above this line, newest first under its own
