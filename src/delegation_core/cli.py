@@ -658,7 +658,7 @@ def cmd_status(_args):
     # costs hours on a real vault.
     rows = counts.get(cfg.collection_name)
     if source.startswith("daemon-unresponsive"):
-        table.add_row("ChromaDB", f"[red]✗[/red]  daemon on {cfg.server_host}:{cfg.server_port} "
+        table.add_row("Index", f"[red]✗[/red]  daemon on {cfg.server_host}:{cfg.server_port} "
                                   f"accepts connections but does not answer "
                                   f"({source.split(': ', 1)[1]}). Restart it.")
     elif rows:
@@ -666,9 +666,9 @@ def cmd_status(_args):
         # number runs well ahead of the note count and calling it notes invites
         # exactly the wrong conclusion about the size of the vault.
         via = "  [dim](via daemon)[/dim]" if source == "daemon" else ""
-        table.add_row("ChromaDB", f"[green]✓[/green]  {rows} rows indexed{via}")
+        table.add_row("Index", f"[green]✓[/green]  {rows} rows indexed{via}")
     else:
-        table.add_row("ChromaDB", "[dim]not initialized: run: delegation-core reindex[/dim]")
+        table.add_row("Index", "[dim]not initialized: run: delegation-core reindex[/dim]")
 
     # v0.2 feature flags
     table.add_row("budget_mode",  cfg.budget_mode)

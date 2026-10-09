@@ -87,6 +87,17 @@ class DaemonCallFailed(RuntimeError):
     """A daemon answered and the call failed. Do not fall back to local work."""
 
 
+class DaemonUnresponsive(DaemonCallFailed):
+    """The daemon accepts connections but does not answer. Do not fall back.
+
+    Um daemon vivo e travado ainda aceita a conexao (quem aceita e o sistema
+    operacional, nao o processo): so a inicializacao da sessao estoura o tempo.
+    Tratar isso como "o daemon saiu" mandava a CLI contar o indice sozinha e dizer
+    "not initialized: run: delegation-core reindex", culpando o indice, que estava
+    bom, por um problema do daemon e recomendando horas de reindexacao.
+    """
+
+
 def is_listening(cfg, timeout: float = PROBE_TIMEOUT_SEC) -> bool:
     """True if something accepts connections on the configured host/port.
 
@@ -146,18 +157,25 @@ def _build_client(cfg, timeout: float):
     )
 
 
-def _run(coro, what: str):
-    """Run a daemon coroutine, mapping transport failures onto the two errors.
+def _run(coro, what: str, cfg=None):
+    """Run a daemon coroutine, mapping transport failures onto the errors.
 
-    The port was open a moment ago, so a connection failure here means the
-    daemon went away between the probe and the call (a restart, most likely):
-    that is still "no daemon", and the caller may proceed alone.
+    The port was open a moment ago, so a connection failure here usually means
+    the daemon went away between the probe and the call (a restart, most
+    likely): that is still "no daemon", and the caller may proceed alone.
+
+    The exception is a timeout while the port STILL accepts connections: that is a
+    live daemon that does not answer, and the caller must not proceed alone.
     """
     try:
         return asyncio.run(coro)
     except (DaemonUnavailable, DaemonCallFailed):
         raise
     except Exception as exc:
+        if cfg is not None and _is_timeout(exc) and is_listening(cfg, 2.0):
+            raise DaemonUnresponsive(
+                f"daemon on {cfg.server_host}:{cfg.server_port} accepts connections "
+                f"but did not answer {what} in time") from exc
         if _is_connection_error(exc):
             raise DaemonUnavailable(f"daemon went away during {what}: {exc}") from exc
         raise DaemonCallFailed(f"{what} failed on the daemon: {exc}") from exc
@@ -177,7 +195,33 @@ def call_tool(cfg, tool: str, arguments: dict | None = None,
         async with _build_client(cfg, timeout) as client:
             return _payload(await client.call_tool(tool, arguments or {}))
 
-    return _run(_once(), tool)
+    return _run(_once(), tool, cfg)
+
+
+def _is_timeout(exc: BaseException) -> bool:
+    """True se a falha, ou algo que ela embrulha, foi um tempo esgotado.
+
+    Uma conexao recusada traz ConnectError; uma conexao aceita que nao responde
+    traz ReadTimeout/TimeoutError. O que separa os dois casos e esta cadeia.
+    """
+    nomes = {"ConnectTimeout", "ReadTimeout", "WriteTimeout", "PoolTimeout", "TimeoutException"}
+    vistos: set[int] = set()
+    pendentes: list[BaseException] = [exc]
+    while pendentes:
+        atual: BaseException | None = pendentes.pop()
+        while atual is not None and id(atual) not in vistos:
+            vistos.add(id(atual))
+            if isinstance(atual, TimeoutError) or type(atual).__name__ in nomes:
+                return True
+            # O fastmcp levanta isto quando a inicializacao da sessao estoura o
+            # tempo. Sob carga a cadeia chega sem nenhum TimeoutError dentro (so
+            # grupos aninhados com cancelamentos), e a mensagem e o unico rastro.
+            if "Failed to initialize server session" in str(atual):
+                return True
+            if isinstance(atual, ExceptionGroup):
+                pendentes.extend(atual.exceptions)
+            atual = atual.__cause__ or atual.__context__
+    return False
 
 
 def _is_connection_error(exc: BaseException) -> bool:
@@ -323,5 +367,5 @@ def submit_and_wait(cfg, tool: str, arguments: dict | None = None, *,
                     on_wait(wait, status)
                 await asyncio.sleep(wait)
 
-    return _run(_session(), tool)
+    return _run(_session(), tool, cfg)
 
