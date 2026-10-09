@@ -158,6 +158,37 @@ def test_um_segundo_gerente_usa_o_servidor_que_ja_esta_no_ar(servidor):
 
 
 @NAO_WINDOWS
+def test_dois_pedidos_ao_mesmo_tempo_sobem_um_servidor_so(falso):
+    """Dois processos (aqui, dois gerentes com travas de thread distintas) veem a
+    porta livre juntos. Medido em 09/10/2026 com um servidor que demora a ligar:
+    antes da trava de arquivo, dois pedidos subiam dois llama-server."""
+    import threading
+    cfg, registro = falso
+    registro.parent.joinpath("llama-server-falso").write_text(
+        registro.parent.joinpath("llama-server-falso").read_text(encoding="utf-8")
+        .replace("HTTPServer((", "__import__('time').sleep(1.5); HTTPServer(("), encoding="utf-8")
+    gerentes = [embed_llama.EmbedServer(cfg) for _ in range(2)]
+    erros = []
+
+    def pedir(g):
+        try:
+            g.ensure()
+        except Exception as e:  # noqa: BLE001 - o teste so quer saber se algum falhou
+            erros.append(e)
+
+    fios = [threading.Thread(target=pedir, args=(g,)) for g in gerentes]
+    try:
+        [f.start() for f in fios]
+        [f.join() for f in fios]
+        assert erros == []
+        assert len(registro.read_text().splitlines()) == 1
+        assert sum(g._we_started_it for g in gerentes) == 1
+    finally:
+        for g in gerentes:
+            g.shutdown()
+
+
+@NAO_WINDOWS
 def test_shutdown_encerra_so_o_que_este_processo_subiu(servidor):
     srv, cfg, _ = servidor
     srv.ensure()
