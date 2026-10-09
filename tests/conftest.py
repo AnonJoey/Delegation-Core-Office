@@ -279,3 +279,8 @@ def backend_chroma(monkeypatch):
     """
     from delegation_core.config import Config
     monkeypatch.setattr(Config, "usa_sqlite", property(lambda self: False))
+
+
+def pytest_addoption(parser):
+    parser.addoption("--atualizar-baseline-evals", action="store_true", default=False,
+                     help="regrava tests/evals_busca/baseline.json com as metricas medidas agora")
