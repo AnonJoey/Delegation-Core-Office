@@ -58,9 +58,27 @@ busca exata sobre a matriz exportada. Qualquer diferenca aborta antes de trocar 
 
 ## Limites
 
-- A matriz fica em memoria no processo que consulta (170 MB com 41 mil chunks). A busca
-  exata cresce linearmente; com ordem de 10 vezes o corpus, quantizar ou usar sqlite-vec.
-- O embedder (`EmbedderSentenceTransformer`) e proprio e gera vetores identicos aos do
-  antigo; nada do caminho de busca e escrita importa o `chromadb`.
-- Um sqlite sem FTS5 trigram (antes da 3.34) desliga `where_document` e a busca de texto;
-  o resto funciona.
+### Escala: o que foi medido
+
+A busca exata guarda a matriz inteira de vetores em memoria, no daemon e em todo processo que abre o indice. Medido em 09/10/2026 numa maquina de 24 nucleos, vetores de 1024 dimensoes (os do BGE-M3), trechos com cerca de 600 caracteres de texto, 200 consultas por modo, v0.16.0 com a correcao de copia descrita abaixo:
+
+| Trechos | Disco | Abertura a frio | Memoria depois de abrir | Busca vetorial p50 / p95 | Busca lexical (BM25) p50 / p95 | Hibrida p50 / p95 |
+|---:|---:|---:|---:|---:|---:|---:|
+| 41 mil | 0,33 GB | 0,3 s | 0,28 GB | 3,0 / 5,7 ms | 22 / 56 ms | 43 / 81 ms |
+| 400 mil | 2,9 GB | 4,4 s | 1,9 GB | 26,6 / 26,9 ms | 206 / 521 ms | 283 / 596 ms |
+
+(Com 100 mil e 200 mil trechos, medidos antes da correcao, a memoria foi de 0,50 e 0,95 GB e a abertura a frio de 1,7 e 3,1 s: cresce em linha reta.)
+
+- **O indice de producao desta maquina (41,6 mil trechos) esta muito abaixo de qualquer limite.**
+- **A busca lexical e a que mais pesa em escala:** com 400 mil trechos leva 206 ms no p50, contra 27 ms da vetorial. A hibrida soma as duas.
+- O `doctor` avisa a partir de 500 mil trechos (cerca de 2 GB de matriz por processo), com estes numeros. Alem de mais ou menos 1 milhao, as saidas sao quantizar os vetores ou usar sqlite-vec.
+- Os numeros dependem da maquina: a medida de memoria e de abertura vale para qualquer uma; a de latencia, nao.
+
+### A copia da matriz a cada consulta (corrigida)
+
+Ate a v0.16.0 a consulta fazia `matriz[idx] @ q`, e indexar uma matriz com um vetor de indices **copia as linhas escolhidas**. Com 41 mil trechos eram cerca de 170 MB copiados por busca; com 400 mil, 1,6 GB, e a busca sem filtro (que escolhe todas as linhas) era mais lenta que a com filtro. Agora a pontuacao e calculada sobre a matriz inteira, sem copia, e so depois se escolhem as linhas permitidas. Mesmo resultado em 900 consultas (0 ids e 0 distancias diferentes); busca vetorial de 180 ms para 27 ms no p50 com 400 mil trechos, e pico de memoria de 3,4 para 2,3 GB. O teste `tests/test_indice_sqlite_escala.py` falha se a consulta voltar a alocar uma fracao relevante da matriz.
+
+### Outros limites
+
+- O embedder (`EmbedderSentenceTransformer`) e proprio e gera vetores identicos aos do antigo; nada do caminho de busca e escrita importa o `chromadb`.
+- Um sqlite sem FTS5 trigram (antes da 3.34) desliga `where_document` e a busca de texto; o resto funciona.
