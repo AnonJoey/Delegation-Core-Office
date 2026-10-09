@@ -40,6 +40,8 @@ from pathlib import Path
 import numpy as np
 import requests
 
+from .locking import arquivo_travado
+
 try:    # com o chromadb instalado a funcao segue sendo uma EmbeddingFunction do Chroma
     from chromadb.api.types import EmbeddingFunction as _BaseDaFuncao
 except ImportError:    # sem ele (o extra [chroma] e opcional) basta o contrato, que a classe ja cumpre
@@ -162,9 +164,17 @@ class EmbedServer:
         if self.healthy():
             return
         with self._lock:
-            if self.healthy():
-                return
-            self._start()
+            # A trava de thread nao cobre outro PROCESSO. Sem esta, o daemon e o
+            # `reindex` do hook que acordam juntos veem a porta livre ao mesmo
+            # tempo e os dois sobem um llama-server: o segundo nao consegue a
+            # porta, mas carregou o modelo antes de descobrir (medido com um
+            # servidor falso lento: dois processos subidos para dois pedidos).
+            # Quem espera a trava confere de novo e acha o servidor do primeiro.
+            with arquivo_travado(self.cfg.embed_log_path.with_name(
+                    f"embed_llama.{self.cfg.embed_port}.start"), espera=ESPERA_DE_PARTIDA_S + 30):
+                if self.healthy():
+                    return
+                self._start()
 
     def _start(self) -> None:
         cfg = self.cfg
