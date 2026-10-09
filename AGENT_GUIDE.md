@@ -35,7 +35,7 @@ reaches it, the ones deliberately unexposed and why, capabilities that exist in
 the code but are still unwired, and the search scopes.
 
 ```json
-→ { "tool_count": 45,
+→ { "tool_count": 55,
     "tools": [{ "name": "search_vault", "summary": "..." }, ...],
     "graph_exports": { "wired": {...}, "not_exposed": {...} },
     "known_unwired": {...},
