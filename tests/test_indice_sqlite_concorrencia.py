@@ -53,10 +53,19 @@ def test_escritores_mortos_com_kill9_nao_deixam_lote_pela_metade(tmp_path):
     for _ in range(4):
         lanca(proximo); proximo += 1
     rng = random.Random(4)
-    fim = time.time() + 8
+    # O laco termina pelo que o teste precisa ver, nao pelo relogio. Com 8 s fixos e
+    # as mortes sorteadas a cada volta, um runner lento (o Windows do CI: subir um
+    # processo Python com numpy leva segundos) dava menos de tres voltas e o teste
+    # falhava com "o teste nao matou ninguem" sem defeito nenhum no indice. O teto
+    # existe so para nao pendurar o CI se algo travar de verdade.
+    teto = time.time() + 90
     mortes = 0
     leituras = 0
-    while time.time() < fim:
+
+    def confirmados_ate_agora() -> int:
+        return sum(len(lg.read_text().split()) for lg in logs.values() if lg.exists())
+
+    while time.time() < teto:
         time.sleep(0.4)
         leituras += leitor.count()                    # o leitor segue sincronizando
         assert leitor.query(query_embeddings=[[1.0] * D], n_results=3)["ids"][0]
@@ -65,11 +74,13 @@ def test_escritores_mortos_com_kill9_nao_deixam_lote_pela_metade(tmp_path):
             vivos.pop(w).kill()
             mortes += 1
             lanca(proximo); proximo += 1
+        if mortes >= 6 and confirmados_ate_agora() > 40:
+            break
     for p in vivos.values():
         p.kill()
     for p in list(vivos.values()):
         p.wait()
-    assert mortes >= 3, "o teste nao matou ninguem"
+    assert mortes >= 3, f"o teste nao matou ninguem ({mortes} mortes em 90 s)"
 
     novo = ClienteSqlite(pasta)
     assert novo.verificar() == "ok"
