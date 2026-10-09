@@ -255,6 +255,24 @@ def sondar_indice(cfg, timeout: int = 120) -> dict:
 _NTSTATUS_DE_CRASH = frozenset({0xC0000005, 0xC00000FD, -1073741819, -1073741571})
 
 
+#: A busca exata guarda a matriz inteira de vetores em memoria, no daemon e em todo processo
+#: que abre o indice. Medido em 09/10/2026 (vetores de 1024 dimensoes, esta maquina, v0.16.0+):
+#: com 400 mil trechos a abertura a frio leva 4,4 s, o processo ocupa 1,9 GB e a busca leva
+#: 27 ms; a memoria cresce em linha reta com o numero de trechos. Acima deste numero o
+#: custo deixa de ser desprezivel, e o aviso diz isso antes de virar surpresa.
+LIMITE_DE_LINHAS_PARA_AVISO = 500_000
+
+
+def aviso_de_escala_do_indice(linhas: int, dim: int = 1024) -> str:
+    """Texto do aviso quando o indice e grande o bastante para a busca exata pesar, ou ''."""
+    if linhas < LIMITE_DE_LINHAS_PARA_AVISO:
+        return ""
+    gb = linhas * dim * 4 / 1e9
+    return (f"A busca exata guarda a matriz de vetores inteira em memoria (cerca de {gb:.1f} GB aqui, "
+            f"por processo que abre o indice). Medido: com 400 mil trechos, abertura a frio de 4 s, "
+            f"1,9 GB e 27 ms por busca; cresce em linha reta.")
+
+
 def _check_indice_sqlite(cfg, nome: str) -> dict:
     """Com o indice SQLite, o dano que o Chroma tem (segmentos HNSW sem linha,
     FTS divergente) nao existe; o que se verifica e a integridade do SQLite."""
@@ -270,6 +288,8 @@ def _check_indice_sqlite(cfg, nome: str) -> dict:
         try:
             veredito = cliente.verificar()
             linhas = sum(c.count() for c in cliente.list_collections())
+            dims = [int(d) for (d,) in cliente._conexao().execute("SELECT dim FROM colecoes") if d]
+            dim_media = max(dims) if dims else 1024
         finally:
             cliente.close()
     except Exception as e:
@@ -279,6 +299,10 @@ def _check_indice_sqlite(cfg, nome: str) -> dict:
         return {"check": nome, "status": "warn",
                 "detail": f"PRAGMA integrity_check: {veredito[:200]}",
                 "fix": "delegation-core reindex --force"}
+    aviso = aviso_de_escala_do_indice(linhas, dim_media)
+    if aviso:
+        return {"check": nome, "status": "warn", "detail": f"sqlite index ok, {linhas} chunks. {aviso}",
+                "fix": "docs/indice-sqlite.md, secao Limites: quantizar os vetores ou usar sqlite-vec"}
     return {"check": nome, "status": "ok", "detail": f"sqlite index ok, {linhas} chunks"}
 
 

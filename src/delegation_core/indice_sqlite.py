@@ -671,7 +671,13 @@ class ColecaoSqlite:
                     if k == 0:
                         ordem, dist = np.zeros(0, dtype=np.int64), np.zeros(0, dtype=np.float32)
                     else:
-                        sc = cache.matriz[idx] @ qn
+                        # A pontuacao e calculada sobre a matriz INTEIRA, sem copia, e so
+                        # depois se escolhem as linhas permitidas. `cache.matriz[idx] @ qn`
+                        # indexava a matriz com um vetor de indices, o que COPIA todas as
+                        # linhas escolhidas a cada consulta: 170 MB por busca com 41 mil
+                        # trechos e 1,6 GB com 400 mil, e a busca sem filtro (todas as
+                        # linhas) era a mais lenta. Medido em 09/10/2026.
+                        sc = (cache.matriz[:cache.n] @ qn)[idx]
                         top = np.argpartition(-sc, k - 1)[:k] if k < len(idx) else np.arange(len(idx))
                         top = top[np.argsort(-sc[top], kind="stable")]
                         ordem, dist = idx[top], 1.0 - sc[top]
