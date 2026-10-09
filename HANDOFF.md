@@ -1,6 +1,6 @@
 # delegation-core: Project Handoff
 
-_Last updated: 2026-10-09 (core v0.16.0). The sections "What this is", "Repos and
+_Last updated: 2026-10-09 (core v0.16.1). The sections "What this is", "Repos and
 remotes", "Current state" and "Architecture notes" were re-verified on 2026-10-03
 against the working tree and the running daemon, and updated on 2026-10-07 for the
 SQLite index (not re-verified against the daemon since). Older sections say their
