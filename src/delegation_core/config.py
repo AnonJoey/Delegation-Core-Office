@@ -312,7 +312,7 @@ class Config:
     #            oversized interactive inputs are NOT auto-run: the tool returns
     #            a token-cost estimate plus an explicit offer to run locally
     #            (pass use_local=true) so the choice is surfaced, never silent.
-    # BGE embeddings + ChromaDB search always run locally in every mode.
+    # BGE embeddings + the vector index search always run locally in every mode.
     engine_mode: str = "local"
 
     # ── v0.5.1: hybrid routing ───────────────────────────────────────────────
