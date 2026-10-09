@@ -238,7 +238,6 @@ def _install_xcode():
 def _verify_python_packages():
     checks = [
         ("fastmcp",             "fastmcp"),
-        ("chromadb",            "chromadb"),
         ("sentence_transformers","sentence-transformers"),
         ("requests",            "requests"),
         ("rich",                "rich"),
