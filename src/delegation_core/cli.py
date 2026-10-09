@@ -5,7 +5,7 @@ Commands:
   setup          Interactive setup wizard (run once per machine).
   run            Start the MCP server (used in Claude Desktop config).
   status         Check vault, binary, model, llama.cpp health, and feature config.
-  reindex        Rebuild the ChromaDB search index from vault folders.
+  reindex        Rebuild the search index from vault folders.
   maintain       Run inbox maintenance once and exit (used by the SessionStart hook).
   dashboard-api  Run the local JSON API used by the Tauri dashboard (standalone/debug).
   ingest         Index files from an external folder without moving them.
@@ -1909,7 +1909,7 @@ def cmd_process_get(args):
 def main():
     parser = argparse.ArgumentParser(
         prog="delegation-core",
-        description="Local MCP delegation server: llama.cpp + BGE + ChromaDB + Obsidian vault",
+        description="Local MCP delegation server: llama.cpp + BGE + SQLite vector index + Obsidian vault",
     )
     sub = parser.add_subparsers(dest="command", metavar="command")
 
@@ -2015,7 +2015,7 @@ def main():
     p_cmp = sub.add_parser("index-compare", help="Run the same queries on the Chroma and SQLite indexes")
     p_cmp.add_argument("--from", dest="origem", default=None)
     p_cmp.add_argument("--amostra", type=int, default=100)
-    p_reindex = sub.add_parser("reindex", help="Rebuild ChromaDB search index from vault folders")
+    p_reindex = sub.add_parser("reindex", help="Rebuild the search index from vault folders")
     p_reindex.add_argument("--force", action="store_true",
                            help="Reindex every note, not just those changed since last run "
                                 "(needed to backfill new metadata fields)")

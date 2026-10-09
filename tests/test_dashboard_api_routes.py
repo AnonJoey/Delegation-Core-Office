@@ -123,7 +123,8 @@ def test_status_reports_vault_and_engine_state(server, monkeypatch):
     assert status == 200
     assert body["vault_ok"] is True  # tmp_path vault dir exists
     assert body["binary_ok"] is False  # no llama_binary configured
-    assert body["chroma_indexed_notes"] == 3
+    assert body["indexed_notes"] == 3
+    assert body["chroma_indexed_notes"] == 3, "o nome antigo fica para o painel ja instalado"
     assert body["llama_state"] == "online"
 
 

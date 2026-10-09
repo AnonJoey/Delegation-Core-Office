@@ -164,7 +164,7 @@ async function refreshStatus() {
       stat("Binary", `${dot(s.binary_ok)}${s.binary_ok ? "ok" : "missing"}`),
       stat("Model", `${dot(s.model_ok)}${s.model_ok ? "ok" : "missing"}`),
       stat("llama.cpp", `${dot(s.llama_state === "online")}${escapeHtml(s.llama_state)}`),
-      stat("Indexed notes", escapeHtml(s.chroma_indexed_notes ?? "—")),
+      stat("Indexed notes", escapeHtml(s.indexed_notes ?? s.chroma_indexed_notes ?? "—")),
       stat("Engine mode", escapeHtml(s.engine_mode)),
       stat("Synthesis", s.synthesis_enabled ? "on" : "off"),
     ].join("");
@@ -177,7 +177,8 @@ async function refreshStatus() {
 
     // Sync Obsidian Statusbar
     const sbNotes = document.getElementById("sb-notes-val");
-    if (sbNotes && s.chroma_indexed_notes !== undefined) sbNotes.textContent = `${s.chroma_indexed_notes} notes`;
+    const nIndexed = s.indexed_notes ?? s.chroma_indexed_notes;
+    if (sbNotes && nIndexed !== undefined) sbNotes.textContent = `${nIndexed} notes`;
     const sbModel = document.getElementById("sb-model-val");
     if (sbModel && s.bge_model) sbModel.textContent = s.bge_model.rsplit ? s.bge_model.rsplit('/', 1).pop() : s.bge_model;
     const sbEngine = document.getElementById("sb-engine-val");

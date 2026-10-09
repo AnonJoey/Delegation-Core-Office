@@ -299,7 +299,7 @@ def _merge_patterns(*groups) -> list[str]:
 
 
 class IngestManager:
-    """Index external files into the vault's ChromaDB without touching them on disk.
+    """Index external files into the vault's search index without touching them on disk.
 
     External results are tagged folder='_external' so search_vault can distinguish
     them from vault notes. Each file's absolute path is the ChromaDB document ID,

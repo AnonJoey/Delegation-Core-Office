@@ -5,6 +5,12 @@ This changelog is derived directly from the canonical versioning recorded across
 
 ---
 
+## Nao lancado
+
+### Fixed
+- **As descricoes das ferramentas MCP e o `--help` do CLI ainda falavam em ChromaDB depois da troca do indice.** `vault_stats` dizia "ChromaDB index size", `vault_reindex_bg` dizia "Rebuild the ChromaDB index", `write_note` explicava um detalhe de implementacao com o nome do Chroma, e o titulo do CLI e o `reindex` repetiam o nome. A descricao de uma ferramenta e o que um agente le para decidir o que ela faz, e o texto errado o faz raciocinar sobre o indice errado. Corrigido, com `tests/test_textos_do_indice.py`: nenhuma ferramenta MCP descreve o indice como ChromaDB, e o `--help` so o nomeia nos comandos cujo assunto e o indice antigo (migracao, comparacao, segmentos orfaos). O teste achou a `write_note`, que a busca por texto tinha deixado passar.
+- **O painel passa a ler `indexed_notes`.** A API de status trazia a contagem de notas indexadas como `chroma_indexed_notes`, nome de quando o indice era o Chroma. O nome neutro entra, e o antigo continua na resposta para o painel ja instalado.
+
 ## v0.16.0 (2026-10-09) - Indice SQLite no lugar do ChromaDB, wizard revisado, fila local sem regravacao e o servico com stop, start e restart
 
 ### Changed

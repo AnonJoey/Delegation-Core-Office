@@ -514,7 +514,7 @@ def write_note(folder: str, title: str, content: str,
     ai_generated stamps the note's frontmatter and defaults to true, which is
     right for you: you are an agent, and you wrote it. It exists because the CLI
     `note write` carries a person's text from stdin and has to say so, and
-    because that command now routes here instead of opening ChromaDB as a
+    because that command now routes here instead of opening the index as a
     second writer alongside this daemon.
     """
     result = _notewriter.create_note(_vault, folder, title, content,
@@ -611,7 +611,7 @@ async def vault_health_detail(limit: int = 50) -> str:
 
 @mcp.tool()
 def vault_stats() -> str:
-    """Return note counts per vault folder, ChromaDB index size, and embedding model info."""
+    """Return note counts per vault folder, search index size, and embedding model info."""
     return json.dumps(_vault.get_stats())
 
 
@@ -1156,7 +1156,7 @@ def run_maintenance_bg() -> str:
 
 @mcp.tool()
 def vault_reindex_bg(force: bool = False) -> str:
-    """Rebuild the ChromaDB index in the background. Returns a job_id immediately.
+    """Rebuild the search index in the background. Returns a job_id immediately.
     force=False (default): incremental — only reindexes notes changed since last run.
     force=True: full reindex of every note.
     """

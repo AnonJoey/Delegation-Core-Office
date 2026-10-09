@@ -263,7 +263,7 @@ def _status(cfg, vault) -> dict:
     except Exception:
         llama_state = "offline"
 
-    chroma_count = vault.get_stats().get("indexed_notes") if vault else None
+    indexed_count = vault.get_stats().get("indexed_notes") if vault else None
 
     # The header used to hardcode this in index.html, where it read v0.9.0
     # against a source tree at 0.10.0 — a copy of the version nothing could keep
@@ -282,7 +282,10 @@ def _status(cfg, vault) -> dict:
         "vault_folders": cfg.vault_folders,
         "llama_url": cfg.llama_url,
         "llama_state": llama_state,
-        "chroma_indexed_notes": chroma_count,
+        "indexed_notes": indexed_count,
+        # Nome antigo, de quando o indice era o ChromaDB. Um painel ja instalado ainda le
+        # esta chave; sai quando nao houver mais painel anterior a v0.16.0 em uso.
+        "chroma_indexed_notes": indexed_count,
         "budget_mode": cfg.budget_mode,
         "engine_mode": cfg.engine_mode,
         "synthesis_enabled": cfg.synthesis_enabled,
