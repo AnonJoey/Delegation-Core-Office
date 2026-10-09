@@ -417,12 +417,19 @@ def cmd_service(args):
     console = Console()
     result = {"install": _service.install,
               "uninstall": _service.uninstall,
-              "status": _service.status}[args.action]()
+              "status": _service.status,
+              "stop": _service.stop,
+              "start": _service.start,
+              "restart": _service.restart}[args.action]()
 
     for key, value in result.items():
         console.print(f"[bold]{key}[/bold]: {value}")
-    if result.get("status") == "unsupported":
-        return 1
+    # main() descarta o valor de retorno dos comandos, entao um `return 1` aqui
+    # nunca virava codigo de saida. As instrucoes da migracao do indice encadeiam
+    # estes comandos: sair com 0 depois de falhar faria o passo seguinte rodar
+    # com o daemon ainda no ar.
+    if result.get("status") in ("unsupported", "failed"):
+        sys.exit(1)
     return 0
 
 
@@ -1964,8 +1971,8 @@ def main():
                              help="Print exactly what would be removed; touch nothing")
 
     p_service = sub.add_parser(
-        "service", help="Install/remove the daemon as a per-user background service")
-    p_service.add_argument("action", choices=["install", "uninstall", "status"])
+        "service", help="Install/remove/stop/start the daemon as a per-user background service")
+    p_service.add_argument("action", choices=["install", "uninstall", "status", "stop", "start", "restart"])
 
     p_clients = sub.add_parser(
         "clients", help="Point MCP clients at the HTTP daemon (migrates from stdio)")
