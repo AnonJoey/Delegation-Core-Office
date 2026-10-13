@@ -233,6 +233,28 @@ Verify the reload succeeded by checking `heartbeat` now reports `engine_mode`.
 
 ---
 
+## v0.16.1 em producao (2026-10-13)
+
+**Action.** O daemon de producao passou da **v0.16.0** para a **v0.16.1** (merge `01136c1`, PR 40, tag anotada `v0.16.1`) com `delegation-core update` (etapas locate_source, stop_service, git_pull, pip_install, finish_in_new_code, refresh_docs, register_hooks, register_service e start_service, todas OK). Servico no ar desde 14:55:29, `NRestarts=0`.
+
+**O que entrou desde a v0.16.0.** BGE com uma partida so do `llama-server` entre processos (C15), instalador sem `chromadb` obrigatorio (PR 39, Luiz Capelin), busca exata sem copiar a matriz a cada consulta (180 ms para 27 ms com 400 mil trechos), teste do kill -9 que deixa de decidir pelo relogio, textos do servidor sem ChromaDB e o guia `docs/ATUALIZAR.md`.
+
+**Verificacao feita em 13/10, depois do restart.**
+- Versao instalada: `0.16.1` (`pip show`).
+- `delegation-core doctor`: 12 ok, 0 avisos, 0 erros, 2 puladas (as checagens do ChromaDB, que nao se aplicam ao indice SQLite).
+- `delegation-core status`: 41.703 linhas indexadas, lidas pelo daemon; `index_integrity`: indice SQLite ok, 41.703 chunks.
+- `heartbeat()` e `search_vault` por uma sessao MCP reconectada: `healthy`, sem jobs em segundo plano, e a busca achou uma nota escrita minutos antes.
+- O indice nao foi tocado pela atualizacao (nenhuma migracao, nenhum reindex).
+
+**Nao verificado.**
+- A migracao do indice (`index-migrate`) em macOS e em Windows: so rodou em Linux e nos testes de CI.
+- O BGE pelo llama.cpp com Metal: validado apenas em CPU no Linux.
+- `delegation-core update` das outras maquinas (Max, Luan, William) para a 0.16.1.
+
+**Efeito colateral.** As conexoes MCP das sessoes abertas durante o restart perdem as ferramentas e precisam ser reconectadas (`/mcp`) ou a sessao reiniciada.
+
+---
+
 <!-- Next deployment: append your entry above this line, newest first under its own
      "## <NAME> deployment — <action> — <date>" header. -->
 
