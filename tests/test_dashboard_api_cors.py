@@ -17,6 +17,8 @@ from http.server import ThreadingHTTPServer
 
 import pytest
 
+from tests._dashboard_auth import AUTH
+
 from delegation_core import dashboard_api
 from delegation_core.tracker import ProcessTracker
 
@@ -35,7 +37,7 @@ def server(monkeypatch, tmp_path):
 
 def _get_with_origin(port, origin):
     conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
-    headers = {"Origin": origin} if origin else {}
+    headers = {**AUTH, **({"Origin": origin} if origin else {})}
     conn.request("GET", "/api/processes", headers=headers)
     res = conn.getresponse()
     res.read()

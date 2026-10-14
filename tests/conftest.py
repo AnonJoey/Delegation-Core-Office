@@ -284,3 +284,20 @@ def backend_chroma(monkeypatch):
 def pytest_addoption(parser):
     parser.addoption("--atualizar-baseline-evals", action="store_true", default=False,
                      help="regrava tests/evals_busca/baseline.json com as metricas medidas agora")
+
+
+@pytest.fixture(autouse=True)
+def _token_do_dashboard(request, monkeypatch):
+    """Instala o bearer token que a API do dashboard exige, so nos testes dela.
+
+    O servidor falha fechado sem token, entao sem isto todo teste de rota levaria
+    401. Os testes mandam `tests._dashboard_auth.AUTH` de forma explicita em cada
+    chamada: este fixture so decide o que o servidor aceita, nao o que o cliente
+    envia, e por isso nao deixa passar um teste que esqueceu a cabecalho.
+    """
+    if "dashboard" not in request.module.__name__:
+        return
+    from delegation_core import dashboard_api
+    from tests._dashboard_auth import TOKEN
+
+    monkeypatch.setattr(dashboard_api, "_token", TOKEN)

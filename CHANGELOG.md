@@ -5,6 +5,14 @@ This changelog is derived directly from the canonical versioning recorded across
 
 ---
 
+## Nao lancado - A API do dashboard na 8788 passa a exigir o bearer token, e a sondagem do daemon deixa de depender de uma unica leitura
+
+### Security
+- **Toda requisicao a API do dashboard exige `Authorization: Bearer <server_token>`, o mesmo segredo da porta MCP.** Medido em 14/10/2026 contra o daemon real: `GET /api/status`, `/api/processes` e `/api/vault/tree` responderam 200 sem credencial, e as rotas POST (`/api/vault/note/save`, `/api/llama/start`, `/api/config/update`) so tinham como defesa o loopback e a lista de Origin. Isso nao protege de um processo local qualquer, e nao protege de nada quando `server_host` deixa de ser `127.0.0.1`, que e o caso do daemon num servidor. O preflight CORS continua isento (o navegador o envia sem credencial e ele nao concede nada), a comparacao e em tempo constante e sobre bytes (um cabecalho nao ASCII dava `TypeError` com `str`), e um `_token` vazio rejeita tudo em vez de admitir tudo. O 401 leva o cabecalho CORS para o webview conseguir ler o erro. `tests/test_dashboard_api_auth.py` cobre sem credencial, errada, malformada, esquema em minuscula, token vazio e o preflight, e com a checagem desligada 9 dos 12 testes falham. O app Tauri le o token do `config.json` e o entrega ao webview pelo comando `get_api_token`.
+
+### Fixed
+- **A sondagem do daemon no dashboard lia 64 bytes numa unica chamada `read()`.** Uma leitura devolve o que ja chegou, nao o que foi pedido: um short read legitimo ("HTTP/1.") reprovava o `starts_with("HTTP/1.x 200")`, o daemon era dado como ausente e o app subia o proprio sidecar, uma segunda copia do BGE-m3 (2314 MiB de VRAM) para responder o que o daemon ja respondia. Agora le ate o fim da linha de status, com teto de 256 bytes. Os testes de `lib.rs` dividem a resposta em todos os tamanhos de leitura e usam um socket que responde em pedacos com pausas; com a leitura unica restaurada, 3 dos 5 falham. Quando nao ha token para apresentar ao daemon, o app cai no sidecar, que gera um, em vez de tratar um 401 como "respondeu".
+
 ## v0.16.1 (2026-10-12) - Busca exata sem copiar a matriz, textos do servidor sem ChromaDB, uma so partida do llama-server de embeddings e um teste que deixa de decidir pelo relogio
 
 ### Changed

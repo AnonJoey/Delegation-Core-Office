@@ -20,6 +20,8 @@ from http.server import ThreadingHTTPServer
 import psutil
 import pytest
 
+from tests._dashboard_auth import AUTH
+
 from delegation_core import dashboard_api
 from delegation_core.config import Config
 
@@ -38,7 +40,7 @@ def server():
 def _post(port, path):
     # Neither llama endpoint reads a request body.
     conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
-    conn.request("POST", path)
+    conn.request("POST", path, headers=AUTH)
     res = conn.getresponse()
     body = json.loads(res.read())
     conn.close()

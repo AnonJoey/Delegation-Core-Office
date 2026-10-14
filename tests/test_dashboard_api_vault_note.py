@@ -23,6 +23,8 @@ from http.server import ThreadingHTTPServer
 
 import pytest
 
+from tests._dashboard_auth import AUTH
+
 from delegation_core import dashboard_api
 from delegation_core.config import Config
 
@@ -43,7 +45,7 @@ def server(monkeypatch, tmp_path):
 
 def _get(port, path):
     conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
-    conn.request("GET", path)
+    conn.request("GET", path, headers=AUTH)
     res = conn.getresponse()
     body = json.loads(res.read())
     conn.close()
