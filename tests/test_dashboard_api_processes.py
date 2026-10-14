@@ -13,6 +13,8 @@ from http.server import ThreadingHTTPServer
 
 import pytest
 
+from tests._dashboard_auth import AUTH
+
 from delegation_core import dashboard_api
 from delegation_core.tracker import ProcessTracker
 
@@ -32,7 +34,7 @@ def server(monkeypatch, tmp_path):
 
 def _get(port, path):
     conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
-    conn.request("GET", path)
+    conn.request("GET", path, headers=AUTH)
     res = conn.getresponse()
     body = json.loads(res.read())
     conn.close()
@@ -42,7 +44,7 @@ def _get(port, path):
 def _post(port, path, payload):
     conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
     body = json.dumps(payload).encode("utf-8")
-    conn.request("POST", path, body=body, headers={"Content-Type": "application/json"})
+    conn.request("POST", path, body=body, headers={**AUTH, "Content-Type": "application/json"})
     res = conn.getresponse()
     result = json.loads(res.read())
     conn.close()
@@ -51,7 +53,7 @@ def _post(port, path, payload):
 
 def _post_raw(port, path, raw_bytes, headers=None):
     conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
-    conn.request("POST", path, body=raw_bytes, headers=headers or {})
+    conn.request("POST", path, body=raw_bytes, headers={**AUTH, **(headers or {})})
     res = conn.getresponse()
     body = res.read()
     conn.close()

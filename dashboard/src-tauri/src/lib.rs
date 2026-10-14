@@ -29,7 +29,27 @@ use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 
 struct SidecarState {
     port: u16,
+    /// Bearer token the API demands. Read from config.json, never baked in: the
+    /// daemon or the sidecar generates it on first start.
+    token: String,
     child: Mutex<Option<Child>>,
+}
+
+/// `server_token` from ~/.delegation_core/config.json, or empty when there is
+/// none yet. Empty is not an error here: the sidecar generates the token when
+/// it starts, so the caller re-reads after spawning it.
+fn read_server_token() -> String {
+    let Ok(home) = std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE")) else {
+        return String::new();
+    };
+    let mut cfg_path = PathBuf::from(home);
+    cfg_path.push(".delegation_core");
+    cfg_path.push("config.json");
+    std::fs::read_to_string(&cfg_path)
+        .ok()
+        .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
+        .and_then(|cfg| cfg.get("server_token").and_then(|v| v.as_str()).map(str::to_owned))
+        .unwrap_or_default()
 }
 
 fn venv_python() -> Result<PathBuf, SidecarError> {
@@ -82,15 +102,23 @@ fn daemon_dashboard_port() -> Option<u16> {
     }
     let port = port as u16;
 
-    if daemon_answers(port) {
+    // The API rejects every request without the bearer token, so a daemon we
+    // hold no token for cannot be used: fall back to the sidecar, which mints
+    // one, instead of treating a 401 as "answering" and showing empty panels.
+    let token = cfg.get("server_token").and_then(|v| v.as_str()).unwrap_or("");
+    if token.is_empty() {
+        return None;
+    }
+
+    if daemon_answers(port, token) {
         Some(port)
     } else {
         None
     }
 }
 
-fn daemon_answers(port: u16) -> bool {
-    use std::io::{Read, Write};
+fn daemon_answers(port: u16, token: &str) -> bool {
+    use std::io::Write;
     use std::net::{SocketAddr, TcpStream};
 
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
@@ -101,19 +129,43 @@ fn daemon_answers(port: u16) -> bool {
     let _ = stream.set_write_timeout(Some(DAEMON_PROBE_TIMEOUT));
 
     let req = format!(
-        "GET /api/status HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n"
+        "GET /api/status HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\
+         Authorization: Bearer {token}\r\nConnection: close\r\n\r\n"
     );
     if stream.write_all(req.as_bytes()).is_err() {
         return false;
     }
-    // Only the status line is needed, and the body is the whole vault status —
-    // read a bounded prefix instead of to_end().
-    let mut buf = [0u8; 64];
-    let Ok(n) = stream.read(&mut buf) else {
-        return false;
-    };
-    String::from_utf8_lossy(&buf[..n]).starts_with("HTTP/1.0 200")
-        || String::from_utf8_lossy(&buf[..n]).starts_with("HTTP/1.1 200")
+    read_status_line(&mut stream).is_some_and(|line| status_line_is_200(&line))
+}
+
+/// Longest status line worth waiting for. A real one is ~15 bytes
+/// ("HTTP/1.0 200 OK"); anything that long without a newline is not HTTP.
+const MAX_STATUS_LINE: usize = 256;
+
+/// Reads until the status line is complete, however TCP chose to split it.
+///
+/// This used to be one `read()` into a 64-byte buffer. A read returns whatever
+/// has arrived, not what was asked for, so a legitimate short read ("HTTP/1.")
+/// failed the `starts_with("HTTP/1.x 200")` check, the daemon was judged absent,
+/// and the dashboard spawned its own sidecar: a second copy of BGE-m3, 2314 MiB
+/// of VRAM, to answer questions the daemon was already answering.
+fn read_status_line(stream: &mut impl std::io::Read) -> Option<String> {
+    let mut buf: Vec<u8> = Vec::with_capacity(64);
+    let mut chunk = [0u8; 64];
+    while buf.len() < MAX_STATUS_LINE && !buf.contains(&b'\n') {
+        match stream.read(&mut chunk) {
+            Ok(0) => break,
+            Ok(n) => buf.extend_from_slice(&chunk[..n]),
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(_) => return None,
+        }
+    }
+    let end = buf.iter().position(|&b| b == b'\n')?;
+    Some(String::from_utf8_lossy(&buf[..end]).trim_end().to_owned())
+}
+
+fn status_line_is_200(line: &str) -> bool {
+    line.starts_with("HTTP/1.0 200") || line.starts_with("HTTP/1.1 200")
 }
 
 /// Short on purpose: this runs before any window exists, against a loopback
@@ -264,6 +316,11 @@ fn get_api_port(state: State<SidecarState>) -> u16 {
 }
 
 #[tauri::command]
+fn get_api_token(state: State<SidecarState>) -> String {
+    state.token.clone()
+}
+
+#[tauri::command]
 fn minimize_window(window: tauri::Window) {
     let _ = window.minimize();
 }
@@ -307,6 +364,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             get_api_port,
+            get_api_token,
             minimize_window,
             toggle_maximize_window,
             close_window
@@ -317,14 +375,18 @@ pub fn run() {
             if let Some(port) = daemon_dashboard_port() {
                 app.manage(SidecarState {
                     port,
+                    token: read_server_token(),
                     child: Mutex::new(None),
                 });
                 return Ok(());
             }
             match spawn_dashboard_api() {
                 Ok((port, child)) => {
+                    // After the spawn on purpose: the sidecar generates the token
+                    // on first start, and prints its port only once that is done.
                     app.manage(SidecarState {
                         port,
+                        token: read_server_token(),
                         child: Mutex::new(Some(child)),
                     });
                     Ok(())
@@ -361,4 +423,95 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+
+    /// Hands out `step` bytes per read(), as a TCP stream may.
+    struct Dribble<'a> {
+        data: &'a [u8],
+        step: usize,
+    }
+
+    impl Read for Dribble<'_> {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            let n = self.step.min(self.data.len()).min(buf.len());
+            buf[..n].copy_from_slice(&self.data[..n]);
+            self.data = &self.data[n..];
+            Ok(n)
+        }
+    }
+
+    fn status_of(data: &[u8], step: usize) -> Option<String> {
+        read_status_line(&mut Dribble { data, step })
+    }
+
+    #[test]
+    fn status_line_survives_every_split_of_the_stream() {
+        let wire = b"HTTP/1.0 200 OK\r\nContent-Type: application/json\r\n\r\n{}";
+        for step in 1..=wire.len() {
+            let line = status_of(wire, step).unwrap_or_default();
+            assert!(status_line_is_200(&line), "step {step}: {line:?}");
+        }
+    }
+
+    #[test]
+    fn a_401_or_garbage_is_not_the_daemon() {
+        let denied = status_of(b"HTTP/1.0 401 Unauthorized\r\n\r\n", 3).unwrap();
+        assert!(!status_line_is_200(&denied));
+        assert!(status_of(b"SSH-2.0-OpenSSH_9.9\r\n", 5).is_some_and(|l| !status_line_is_200(&l)));
+    }
+
+    #[test]
+    fn no_newline_never_counts_and_does_not_read_forever() {
+        assert_eq!(status_of(&[b'x'; 10_000], 64), None);
+        assert_eq!(status_of(b"HTTP/1.0 200 OK", 4), None); // closed before the line ended
+    }
+
+    /// The real probe against a socket that answers in pieces with pauses, and
+    /// that checks the bearer header actually arrived on the wire.
+    #[test]
+    fn daemon_answers_with_a_fragmented_reply_and_sends_the_token() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = std::thread::spawn(move || {
+            let (mut conn, _) = listener.accept().unwrap();
+            let mut req = [0u8; 1024];
+            let n = conn.read(&mut req).unwrap();
+            let got = String::from_utf8_lossy(&req[..n]).to_string();
+            let authed = got.contains("Authorization: Bearer s3cret\r\n");
+            let reply: &[&[u8]] = if authed {
+                &[b"HTTP/1.", b"0 2", b"00 OK\r\n\r\n{}"]
+            } else {
+                &[b"HTTP/1.0 401 Unauthorized\r\n\r\n"]
+            };
+            for part in reply {
+                conn.write_all(part).unwrap();
+                conn.flush().unwrap();
+                std::thread::sleep(Duration::from_millis(40));
+            }
+            authed
+        });
+        assert!(daemon_answers(port, "s3cret"));
+        assert!(server.join().unwrap());
+    }
+
+    #[test]
+    fn daemon_answers_is_false_for_a_wrong_token() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = std::thread::spawn(move || {
+            let (mut conn, _) = listener.accept().unwrap();
+            let mut req = [0u8; 1024];
+            let _ = conn.read(&mut req).unwrap();
+            conn.write_all(b"HTTP/1.0 401 Unauthorized\r\n\r\n").unwrap();
+        });
+        assert!(!daemon_answers(port, "wrong"));
+        server.join().unwrap();
+    }
 }

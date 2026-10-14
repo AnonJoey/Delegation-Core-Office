@@ -14,8 +14,11 @@ ChromaDB opener on the index the server already held. The sidecar entry point
 below (run()) still works and is still what a Tauri install without the service
 falls back to; the daemon is simply the path that does not pay twice.
 
-Bound to 127.0.0.1 only (never a public interface) since it has no auth — it's
-meant to be reached exclusively by the local Tauri webview.
+Every request except the CORS preflight must carry the daemon's bearer token
+(`Authorization: Bearer <server_token>`), the same secret that guards the MCP
+port. The Tauri app reads it from config.json and hands it to its webview.
+run() binds loopback by default; serve_in_process() binds the daemon's
+server_host, which is why the token is required and not left to the bind.
 
 Endpoints:
   GET  /api/status                  vault/binary/model/llama.cpp health
@@ -70,6 +73,7 @@ the BGE model's ~600MB of GPU memory. No flag (manual/CLI launches) = no watchdo
 from __future__ import annotations
 
 import atexit
+import hmac
 import json
 import logging
 import re
@@ -95,6 +99,7 @@ _vault = None   # set once in run() — VaultManager, shared across every reques
                 # ("Vault not initialized") under repeated init. One shared
                 # instance, initialized once at startup, matches server.py's
                 # own _vault global pattern.
+_token = ""     # bearer token every request must present; empty rejects everything.
 _tracker = None  # set once in run() — ProcessTracker, same shared-instance reasoning
 _engine = None   # lazy DelegationEngine, only for llama.cpp start/stop — see _get_engine()
 
@@ -350,10 +355,10 @@ class _Handler(BaseHTTPRequestHandler):
         the header entirely (browser then blocks the caller from reading the
         response).
 
-        This server has no auth and binds only to 127.0.0.1, but that alone
-        doesn't stop a page loaded from a completely different site in the
-        user's regular browser from fetch()-ing a guessed local port — CORS is
-        what actually stops that page's JS from reading the response (and,
+        This server requires a bearer token and binds loopback by default, but a
+        page loaded from a completely different site in the user's regular
+        browser can still fetch() a guessed local port. CORS is what stops
+        that page's JS from reading the response (and,
         via the preflight this unlocks, from a state-changing POST executing
         at all). Sending `Access-Control-Allow-Origin: *` — this server's
         original behavior — grants that to literally any website. The only
@@ -390,7 +395,7 @@ class _Handler(BaseHTTPRequestHandler):
         if origin:
             self.send_header("Access-Control-Allow-Origin", origin)
             self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-            self.send_header("Access-Control-Allow-Headers", "Content-Type")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
         self.end_headers()
 
     def do_GET(self):
@@ -398,6 +403,29 @@ class _Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         self._serve(self._route_post)
+
+    def _authorized(self) -> bool:
+        """True when the request carries the daemon's bearer token.
+
+        Same secret that guards the MCP port, because the two ports reach the
+        same vault: /api/vault/note/save writes notes, /api/llama/start spawns a
+        process, /api/config/update edits settings. Loopback and the Origin
+        allowlist keep other *websites* out, but any local process, and any
+        host at all once server_host is not 127.0.0.1, could call these.
+
+        The preflight (do_OPTIONS) is exempt on purpose: browsers send it with no
+        credentials, and it grants nothing, it only reports which headers the
+        real request may carry. An empty `_token` rejects everything rather than
+        admitting everything, so a start path that forgets to set it fails closed.
+        """
+        if not _token:
+            return False
+        scheme, _, presented = (self.headers.get("Authorization") or "").partition(" ")
+        if scheme.lower() != "bearer" or not presented:
+            return False
+        # Bytes, not str: compare_digest raises TypeError on non-ASCII str, and a
+        # header is attacker-controlled input.
+        return hmac.compare_digest(presented.strip().encode("utf-8"), _token.encode("utf-8"))
 
     def _serve(self, route) -> None:
         """Run one request's routing under the error handling every verb shares.
@@ -407,6 +435,11 @@ class _Handler(BaseHTTPRequestHandler):
         third verb would have had to remember to copy them a third time.
         """
         parsed = urlparse(self.path)
+        if not self._authorized():
+            logger.warning("Rejected unauthenticated dashboard API request: %s", parsed.path)
+            self.close_connection = True
+            self._send_json({"error": "missing or invalid bearer token"}, status=401)
+            return
         try:
             route(parsed)
         except (BrokenPipeError, ConnectionResetError):
@@ -1017,8 +1050,9 @@ def serve_in_process(cfg, vault, tracker, host: str = "127.0.0.1",
     already in use usually means a second daemon, which is worth failing loudly
     over.
     """
-    global _cfg, _vault, _tracker
+    global _cfg, _vault, _tracker, _token
     _cfg, _vault, _tracker = cfg, vault, tracker
+    _token = cfg.ensure_server_token()
 
     server = ThreadingHTTPServer((host, port), _Handler)
     threading.Thread(
@@ -1036,8 +1070,11 @@ def run(port: int = 0, host: str = "127.0.0.1", parent_pid: int | None = None) -
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s",
                         stream=sys.stderr)
 
-    global _cfg, _vault, _tracker
+    global _cfg, _vault, _tracker, _token
     _cfg = Config.load()
+    # Generated here if missing, exactly as the daemon does: the Tauri app reads
+    # it back out of config.json after this process prints its port line.
+    _token = _cfg.ensure_server_token()
 
     # Matches cli.py's cmd_run(): skip the HF Hub round-trip once the weights are
     # cached. Deliberately after Config.load(), because the decision depends on

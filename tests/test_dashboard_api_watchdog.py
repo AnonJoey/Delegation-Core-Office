@@ -137,6 +137,9 @@ def _run_with_stubbed_server(monkeypatch, tmp_path, parent_pid):
         def is_configured(self):
             return True
 
+        def ensure_server_token(self):
+            return "token-de-teste"
+
     class FakeVault:
         def __init__(self, cfg):
             pass

@@ -19,6 +19,8 @@ import threading
 
 import pytest
 
+from tests._dashboard_auth import AUTH, TOKEN
+
 from delegation_core import dashboard_api
 from delegation_core.config import Config
 from delegation_core.tracker import ProcessTracker
@@ -34,7 +36,8 @@ def daemon_objects(monkeypatch, tmp_path):
     monkeypatch.setattr(config_mod, "CONFIG_FILE", tmp_path / "config.json")
     vault_path = tmp_path / "vault"
     vault_path.mkdir()
-    cfg = Config(vault_path=str(vault_path), vault_folders=["reference"])
+    cfg = Config(vault_path=str(vault_path), vault_folders=["reference"],
+                 server_token=TOKEN)
     # Restored by monkeypatch, so a test that sets the globals cannot leak them
     # into the next one.
     monkeypatch.setattr(dashboard_api, "_cfg", None)
@@ -45,7 +48,7 @@ def daemon_objects(monkeypatch, tmp_path):
 
 def _get(port, path):
     conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
-    conn.request("GET", path)
+    conn.request("GET", path, headers=AUTH)
     res = conn.getresponse()
     body = json.loads(res.read())
     conn.close()

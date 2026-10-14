@@ -18,6 +18,8 @@ from http.server import ThreadingHTTPServer
 
 import pytest
 
+from tests._dashboard_auth import AUTH
+
 from delegation_core import dashboard_api
 from delegation_core.config import Config
 from delegation_core.tracker import ProcessTracker
@@ -97,7 +99,7 @@ def server(monkeypatch, tmp_path):
 
 def _get(port, path):
     conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
-    conn.request("GET", path)
+    conn.request("GET", path, headers=AUTH)
     res = conn.getresponse()
     body = json.loads(res.read())
     conn.close()
@@ -282,7 +284,7 @@ def test_config_update_saves_new_settings(server):
     port, cfg, _ = server
     conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
     payload = json.dumps({"engine_mode": "hybrid", "search_threshold": 0.65})
-    conn.request("POST", "/api/config/update", body=payload, headers={"Content-Type": "application/json"})
+    conn.request("POST", "/api/config/update", body=payload, headers={**AUTH, "Content-Type": "application/json"})
     res = conn.getresponse()
     body = json.loads(res.read())
     conn.close()
@@ -295,7 +297,7 @@ def test_config_update_saves_new_settings(server):
 def test_purge_orphans_endpoint(server):
     port, _, _ = server
     conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
-    conn.request("POST", "/api/system/purge_orphans", body="{}", headers={"Content-Type": "application/json"})
+    conn.request("POST", "/api/system/purge_orphans", body="{}", headers={**AUTH, "Content-Type": "application/json"})
     res = conn.getresponse()
     body = json.loads(res.read())
     conn.close()
@@ -339,7 +341,7 @@ def test_vault_backlinks_propagates_a_bad_path_as_400(server):
 def _post(port, path, payload):
     conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
     conn.request("POST", path, body=json.dumps(payload),
-                 headers={"Content-Type": "application/json"})
+                 headers={**AUTH, "Content-Type": "application/json"})
     res = conn.getresponse()
     body = json.loads(res.read())
     conn.close()
