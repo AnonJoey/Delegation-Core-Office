@@ -181,19 +181,30 @@ def test_windows_sem_tarefa_e_sem_fallback_e_falha(comandos, monkeypatch, tmp_pa
 
 
 def test_windows_fallback_cria_cmd_visivel_com_python_e_remove_vbs_legado(comandos, monkeypatch, tmp_path):
+    """`install(visible=True)`: o `.cmd` roda o python.exe em primeiro plano, a janela fica.
+
+    Hermetico de proposito: o runner do Windows tem `pythonw.exe` ao lado do `python.exe`
+    e o do Linux nao, e a versao anterior deste teste olhava o `sys.executable` real.
+    """
+    scripts = tmp_path / "Scripts"
+    scripts.mkdir()
+    (scripts / "python.exe").write_text("")
+    (scripts / "pythonw.exe").write_text("")
+    monkeypatch.setattr(service.sys, "executable", str(scripts / "python.exe"))
     _em("Windows", monkeypatch)
     _startup_isolado(monkeypatch, tmp_path)
     comandos["resultado"] = (1, "ERROR: Access denied")
     service.WIN_STARTUP_VBS.write_text("launcher", encoding="utf-8")
 
-    result = service.install()
+    result = service.install(visible=True)
 
     assert result["status"] == "installed"
     assert result["unit"] == str(service.WIN_STARTUP_CMD)
     assert not service.WIN_STARTUP_VBS.exists()
     launcher = service.WIN_STARTUP_CMD.read_text(encoding="utf-8")
     assert launcher.startswith("@echo off")
-    assert f'"{service.sys.executable}" -m delegation_core run' in launcher
+    assert f'"{scripts / "python.exe"}" -m delegation_core run' in launcher
+    assert "pythonw" not in launcher and "start" not in launcher
 
 
 def test_windows_task_uses_python_and_removes_stale_startup_launchers(comandos, monkeypatch, tmp_path):

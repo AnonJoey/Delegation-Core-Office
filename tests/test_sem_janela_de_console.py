@@ -233,6 +233,16 @@ def test_garantir_stdio_da_destino_a_stdin_stdout_e_stderr_nulos(tmp_path):
     assert "traceback que antes sumia" in escrito
 
 
+def test_o_stdout_de_fallback_nao_e_um_terminal_em_plataforma_nenhuma():
+    """`open(os.devnull).isatty()` e True no Windows (NUL e um dispositivo de caracteres,
+    medido no CI com Python 3.12): o uvicorn ligaria as cores. O sorvedouro nosso diz False."""
+    nulo = stdio_nulo._Nulo()
+    assert nulo.isatty() is False
+    assert nulo.write("abc") == 3
+    nulo.flush()
+    nulo.close()
+
+
 def test_garantir_stdio_nao_mexe_em_quem_ja_tem_terminal():
     out, err = sys.stdout, sys.stderr
     stdio_nulo.garantir_stdio()
