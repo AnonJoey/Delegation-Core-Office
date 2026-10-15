@@ -407,6 +407,49 @@ def check_index_integrity(cfg) -> dict:
             "detail": f"{result['count']} row(s), every search scope answers"}
 
 
+def _e_backup_de_indice(pasta: Path) -> bool:
+    """`update` e `index-migrate` guardam o indice anterior como `.chroma_bge-backup-<data>`."""
+    return "-backup-" in pasta.name
+
+
+def _pastas_de_indice_abandonadas(cfg) -> list[Path]:
+    """Todo `.chroma*` do vault que nao e o indice do Chroma em uso."""
+    if not (cfg.vault and cfg.vault.is_dir()):
+        return []
+    em_uso = cfg.chroma_path.resolve()
+    return [p for p in cfg.vault.glob(".chroma*") if p.is_dir() and p.resolve() != em_uso]
+
+
+def _descreve_abandonadas(abandonadas: list[Path]) -> tuple[list[str], str | None]:
+    """Texto do aviso e remedio. Backup e rede de seguranca, nao lixo: o aviso diz qual
+    pasta e qual, e o remedio padrao nao a apaga (o Max, em 15/10/2026, recebeu
+    "1 diretorio de indice legado" sem saber que era o backup que ele mesmo fizera, e o
+    `--clean-orphans` o teria apagado junto com a possibilidade de voltar atras)."""
+    backups = [d for d in abandonadas if _e_backup_de_indice(d)]
+    legados = [d for d in abandonadas if not _e_backup_de_indice(d)]
+    detalhes, remedios = [], []
+    if legados:
+        detalhes.append(f"{len(legados)} abandoned legacy index directory(ies): "
+                        + ", ".join(d.name for d in legados))
+        remedios.append("run: delegation-core doctor --clean-orphans")
+    if backups:
+        detalhes.append(f"{len(backups)} index backup(s) kept from update/index-migrate "
+                        "(not removed by --clean-orphans): " + ", ".join(d.name for d in backups))
+        remedios.append("once you no longer need to roll back: "
+                        "delegation-core doctor --clean-orphans --include-backups")
+    return detalhes, "; ".join(remedios) or None
+
+
+def _tamanho_mb(pastas: list[Path]) -> float:
+    total = 0
+    for d in pastas:
+        try:
+            total += sum(f.stat().st_size for f in d.rglob("*") if f.is_file())
+        except Exception:
+            pass
+    return total / (1024 * 1024)
+
+
 def check_orphan_segments(cfg) -> dict:
     """Detect segment directories left behind on disk when collections were recreated."""
     if cfg.usa_sqlite:
@@ -414,24 +457,16 @@ def check_orphan_segments(cfg) -> dict:
     chroma_dir = cfg.chroma_path
     db_path = chroma_dir / "chroma.sqlite3"
 
-    abandoned_dirs = []
-    if cfg.vault and cfg.vault.is_dir():
-        abandoned_dirs = [
-            p for p in cfg.vault.glob(".chroma*")
-            if p.is_dir() and p.resolve() != chroma_dir.resolve()
-        ]
+    abandoned_dirs = _pastas_de_indice_abandonadas(cfg)
 
     if not db_path.exists():
         if abandoned_dirs:
-            abandoned_mb = sum(
-                sum(f.stat().st_size for f in d.rglob("*") if f.is_file())
-                for d in abandoned_dirs
-            ) / (1024 * 1024)
+            detalhes, remedio = _descreve_abandonadas(abandoned_dirs)
             return {
                 "check": "orphan_segments",
                 "status": "warn",
-                "detail": f"{len(abandoned_dirs)} abandoned legacy index directory(ies) ({abandoned_mb:.1f} MB)",
-                "fix": "run: delegation-core doctor --clean-orphans",
+                "detail": f"{'; '.join(detalhes)} ({_tamanho_mb(abandoned_dirs):.1f} MB)",
+                "fix": remedio,
             }
         return {"check": "orphan_segments", "status": "ok", "detail": "no chroma database found"}
 
@@ -452,50 +487,44 @@ def check_orphan_segments(cfg) -> dict:
         return {"check": "orphan_segments", "status": "ok",
                 "detail": "no orphan segment directories on disk"}
 
-    total_bytes = 0
-    for o in orphans:
-        try:
-            total_bytes += sum(f.stat().st_size for f in o.rglob("*") if f.is_file())
-        except Exception:
-            pass
-    for d in abandoned_dirs:
-        try:
-            total_bytes += sum(f.stat().st_size for f in d.rglob("*") if f.is_file())
-        except Exception:
-            pass
-
-    size_mb = total_bytes / (1024 * 1024)
+    size_mb = _tamanho_mb(orphans + abandoned_dirs)
     details = []
+    remedios = []
     if orphans:
         details.append(f"{len(orphans)} orphan segment directory(ies)")
-    if abandoned_dirs:
-        details.append(f"{len(abandoned_dirs)} abandoned legacy index directory(ies)")
+        remedios.append("run: delegation-core doctor --clean-orphans")
+    detalhes_abandonadas, remedio_abandonadas = _descreve_abandonadas(abandoned_dirs)
+    details += detalhes_abandonadas
+    if remedio_abandonadas:
+        remedios.append(remedio_abandonadas)
     return {
         "check": "orphan_segments",
         "status": "warn",
-        "detail": f"{', '.join(details)} ({size_mb:.1f} MB)",
-        "fix": "run: delegation-core doctor --clean-orphans",
+        "detail": f"{'; '.join(details)} ({size_mb:.1f} MB)",
+        "fix": "; ".join(dict.fromkeys(remedios)),
     }
 
 
-def clean_orphan_segments(cfg) -> int:
-    """Remove orphan segment directories on disk that are not referenced in SQLite."""
+def clean_orphan_segments(cfg, include_backups: bool = False) -> int:
+    """Remove orphan segment directories on disk that are not referenced in SQLite.
+
+    Backups do indice (`.chroma_bge-backup-<data>`, feitos por `update` e `index-migrate`)
+    ficam de fora: sao o caminho de volta, e quem os apaga so percebe quando precisa
+    deles. Passe `include_backups=True` para remove-los de proposito.
+    """
     import shutil
     import sqlite3
     removed = 0
 
     chroma_dir = cfg.chroma_path
-    if cfg.vault and cfg.vault.is_dir():
-        abandoned_dirs = [
-            p for p in cfg.vault.glob(".chroma*")
-            if p.is_dir() and p.resolve() != chroma_dir.resolve()
-        ]
-        for d in abandoned_dirs:
-            try:
-                shutil.rmtree(d)
-                removed += 1
-            except Exception:
-                pass
+    for d in _pastas_de_indice_abandonadas(cfg):
+        if _e_backup_de_indice(d) and not include_backups:
+            continue
+        try:
+            shutil.rmtree(d)
+            removed += 1
+        except Exception:
+            pass
 
     db_path = chroma_dir / "chroma.sqlite3"
     if db_path.exists():

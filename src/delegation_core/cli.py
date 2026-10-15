@@ -774,6 +774,11 @@ def cmd_reindex(args):
     console.print(f"[green]✓[/green]  {count} notes indexed.")
 
 
+def _texto_dos_empates(n: int) -> str:
+    """Explica por que "iguais" inclui consultas cujo conjunto de ids difere."""
+    return (f" ({n} com empate de nota no 10o lugar, desempate valido)" if n else "")
+
+
 def cmd_index_migrate(args):
     """Chroma -> SQLite, com exportacao neutra e verificacao antes de trocar."""
     from rich.console import Console
@@ -798,7 +803,8 @@ def cmd_index_migrate(args):
         console.print(f"[green]✓[/green]  {nome}: {v['linhas_destino']} linhas, "
                       f"texto, metadados e vetores identicos; "
                       f"{v.get('consultas_iguais_a_busca_exata', 0)}/{v.get('consultas', 0)} "
-                      f"consultas iguais a busca exata; sobreposicao com o Chroma "
+                      f"consultas iguais a busca exata"
+                      f"{_texto_dos_empates(v.get('consultas_com_empate', 0))}; sobreposicao com o Chroma "
                       f"{v.get('sobreposicao_media_com_o_chroma', 'n/d')}")
     console.print(f"Exportacao neutra guardada em [bold]{r['exportacao']}[/bold] "
                   "(pode apagar depois de validar). O indice do Chroma nao foi tocado.")
@@ -1605,8 +1611,10 @@ def cmd_doctor(args):
         sys.exit(1)
 
     if getattr(args, "clean_orphans", False):
-        cleaned = doctor.clean_orphan_segments(cfg)
-        console.print(f"[green]✓[/green] Cleaned {cleaned} orphan segment directory(ies).")
+        incluir = bool(getattr(args, "include_backups", False))
+        cleaned = doctor.clean_orphan_segments(cfg, include_backups=incluir)
+        console.print(f"[green]✓[/green] Cleaned {cleaned} orphan segment directory(ies)"
+                      + ("" if incluir else " (index backups were kept; --include-backups removes them)") + ".")
 
     if getattr(args, "rebuild_fts", False):
         rebuilt = doctor.rebuild_fts(cfg)
@@ -1989,7 +1997,11 @@ def main():
     sub.add_parser("status",   help="Check vault, model, binary, llama.cpp, and feature config")
     p_doctor = sub.add_parser("doctor",   help="Diagnose installation drift and vault hygiene problems")
     p_doctor.add_argument("--clean-orphans", action="store_true",
-                          help="Remove orphan ChromaDB segment directories on disk")
+                          help="Remove orphan ChromaDB segment directories on disk "
+                               "(index backups from update/index-migrate are kept)")
+    p_doctor.add_argument("--include-backups", action="store_true",
+                          help="With --clean-orphans: also remove the .chroma*-backup-* "
+                               "directories, the way back to the previous index")
     p_doctor.add_argument("--rebuild-fts", action="store_true",
                           help="Rebuild SQLite full-text search index if corrupted")
     p_recover = sub.add_parser(

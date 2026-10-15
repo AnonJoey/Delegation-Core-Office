@@ -48,6 +48,14 @@ Para cada colecao: mesma contagem, mesmos ids na mesma ordem, texto e metadados 
 vetores iguais bit a bit, `PRAGMA integrity_check` ok, e as consultas vizinhas iguais a
 busca exata sobre a matriz exportada. Qualquer diferenca aborta antes de trocar a pasta.
 
+"Iguais a busca exata" quer dizer **as mesmas notas, posicao a posicao** (tolerancia de
+1e-5 em cosseno, float64 contra o float32 do indice), e que a nota que o indice declara e a
+nota real do trecho devolvido. Nao quer dizer os mesmos ids: o mesmo texto em duas notas da
+o mesmo vetor, e se esses trechos empatam no 10o lugar qualquer desempate e uma resposta
+correta. Medido em 15/10/2026, uma instalacao reprovou 11 de 50 consultas por isso, com as
+10.077 linhas identicas. O relatorio traz `consultas_com_empate` (as que passaram por
+desempate diferente) e, quando reprova de verdade, a maior diferenca de nota.
+
 ## O que a fachada acrescenta ao ChromaDB
 
 - `where_document` (`$contains`, `$not_contains`, `$and`, `$or`) por FTS5 trigram.
