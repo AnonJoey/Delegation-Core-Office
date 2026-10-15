@@ -223,3 +223,71 @@ for that path and never deletes the original files.
 Use `ingest_status` to inspect declared and indexed sources, counts and missing
 paths. Disable a source to pause it, and call `ingest_forget` only when it must
 also stop appearing in search results.
+
+## Session transcript capture
+
+Raw client transcripts can be stored locally in the vault `Sessions` folder by
+a session-end hook. This is separate from the curated `export_session` note: a
+transcript is a verbatim backup, while the curated note is the useful summary.
+The hook redacts known credential-shaped values before it writes or indexes a
+transcript, but redaction is a safety net, not a substitute for never sharing a
+secret in a chat.
+
+Configure the policy after installation in the same runtime `config.json`:
+
+```json
+{
+  "session_transcripts": {
+    "mode": "automatic"
+  }
+}
+```
+
+`automatic` is the default and preserves the existing behavior: each completed
+supported-client session is written and then queued for reindexing. `manual`
+saves only a session explicitly requested before it ends. `off` writes no raw
+transcripts. Changing the mode never interrupts the local-model shutdown that
+runs at session end.
+
+### Client scope
+
+This release registers the SessionEnd hook for **Claude Code**. The same policy
+is intentionally shared by all clients, but a Codex SessionEnd adapter must be
+installed and tested separately before Codex transcripts can be captured.
+Codex support must use its documented hook payload (`session_id`, `cwd` and
+`transcript_path`) rather than scan undocumented history files. Until that
+adapter is present, these commands affect Claude Code capture only.
+
+Use these commands to manage the setting:
+
+```powershell
+# Inspect the active policy and whether a manual capture is pending
+delegation-core session status
+
+# Save no new raw transcripts
+delegation-core session mode off
+
+# Require explicit approval for a single upcoming Claude Code session
+delegation-core session mode manual
+delegation-core session capture-next
+
+# Restore the default automatic capture
+delegation-core session mode automatic
+```
+
+`capture-next` creates a local, single-use marker. The next supported session
+that completes consumes it and is captured; if the session does not start, the
+marker simply remains pending and is visible in `session status`. Restart the
+daemon and begin a new MCP client session after editing `config.json` directly.
+
+When Codex support is added, manual capture should require an explicit client
+target to avoid a Claude Code session consuming an authorization intended for
+Codex:
+
+```powershell
+delegation-core session capture-next --client codex
+delegation-core session capture-next --client claude
+```
+
+Those client-targeted commands are documented design, not available in this
+release yet.

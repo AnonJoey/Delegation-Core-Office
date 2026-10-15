@@ -25,6 +25,7 @@ from datetime import datetime
 from pathlib import Path
 
 CONFIG_PATH = Path.home() / ".delegation_core" / "config.json"
+MANUAL_CAPTURE_FILE = Path.home() / ".delegation_core" / "capture_next_session"
 MAX_TEXT_LENGTH = 8000  # truncate very long individual messages
 
 
@@ -69,6 +70,23 @@ def _load_config() -> dict:
         return json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
     except Exception:
         return {}
+
+
+def transcript_mode(config: dict) -> str:
+    """Read a safe mode from hand-edited JSON, preserving the old default."""
+    section = config.get("session_transcripts", {}) if isinstance(config, dict) else {}
+    mode = section.get("mode", "automatic") if isinstance(section, dict) else "automatic"
+    return mode if mode in {"automatic", "manual", "off"} else "automatic"
+
+
+def _manual_capture_requested() -> bool:
+    try:
+        MANUAL_CAPTURE_FILE.unlink()
+        return True
+    except FileNotFoundError:
+        return False
+    except OSError:
+        return False
 
 
 def _resolve_sessions_dir(vault: Path, config: dict) -> Path:
@@ -326,6 +344,13 @@ def main(raw: str | None = None) -> int:
         return 0
 
     config = _load_config()
+    mode = transcript_mode(config)
+    if mode == "off":
+        sys.stderr.write("session_export: transcript capture is off\n")
+        return 0
+    if mode == "manual" and not _manual_capture_requested():
+        sys.stderr.write("session_export: manual capture was not requested\n")
+        return 0
     vault_path = config.get("vault_path", "")
     if not vault_path:
         sys.stderr.write("session_export: delegation-core not configured — skipping export\n")

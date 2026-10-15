@@ -974,6 +974,36 @@ def cmd_ingest(args):
             console.print(f"  {e}")
 
 
+def cmd_session(args):
+    """Manage opt-in capture of raw Claude Code session transcripts."""
+    from .config import CONFIG_DIR, Config
+
+    cfg = Config.load()
+    section = cfg.session_transcripts if isinstance(cfg.session_transcripts, dict) else {}
+    mode = section.get("mode", "automatic")
+    if mode not in {"automatic", "manual", "off"}:
+        mode = "automatic"
+    marker = CONFIG_DIR / "capture_next_session"
+
+    if args.session_command == "status":
+        print(json.dumps({"mode": mode, "next_session_requested": marker.exists()}, indent=2))
+        return
+    if args.session_command == "mode":
+        cfg.session_transcripts = {"mode": args.mode}
+        cfg.save()
+        if args.mode != "manual":
+            marker.unlink(missing_ok=True)
+        print(f"Session transcript capture mode: {args.mode}")
+        return
+    if args.session_command == "capture-next":
+        if mode != "manual":
+            print("Session transcript mode is not manual. Set it first with: delegation-core session mode manual")
+            sys.exit(2)
+        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        marker.touch(exist_ok=True)
+        print("The next completed Claude Code session will be saved to the vault.")
+
+
 def cmd_relink(args):
     from rich.console import Console
     from .config import Config
@@ -2079,6 +2109,13 @@ def main():
                           help="Maximum seconds to wait for daemon job to complete (default 3600s, 0 for unlimited)")
     _add_local_flag(p_ingest)
 
+    p_session = sub.add_parser("session", help="Configure raw Claude Code transcript capture")
+    session_sub = p_session.add_subparsers(dest="session_command", metavar="session-command")
+    session_sub.add_parser("status", help="Show transcript capture mode and pending manual capture")
+    p_session_mode = session_sub.add_parser("mode", help="Set automatic, manual, or off transcript capture")
+    p_session_mode.add_argument("mode", choices=["automatic", "manual", "off"])
+    session_sub.add_parser("capture-next", help="In manual mode, save the next completed session")
+
     p_relink = sub.add_parser("relink", help="Add wikilinks to notes in a vault subfolder")
     _add_local_flag(p_relink)
     p_relink.add_argument("folder",                   help="Vault-relative folder path (e.g. meetings)")
@@ -2273,6 +2310,11 @@ def main():
             process_dispatch[args.process_command](args)
         else:
             p_process.print_help()
+    elif args.command == "session":
+        if args.session_command:
+            cmd_session(args)
+        else:
+            p_session.print_help()
     elif args.command in dispatch:
         dispatch[args.command](args)
     else:

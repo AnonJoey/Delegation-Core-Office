@@ -386,6 +386,13 @@ class Config:
         ".pytest_cache", ".ruff_cache", ".tox", ".venv", "venv", "dist",
         "build", "coverage", "htmlcov",
     ])
+    # Raw Claude Code transcripts are useful local records, but their capture is
+    # an explicit operator policy. The stdlib-only SessionEnd hook reads this
+    # section directly from config.json.
+    # automatic: save every completed session (the backwards-compatible default)
+    # manual: save only the next session after `session capture-next`
+    # off: never save raw transcripts
+    session_transcripts: dict = field(default_factory=lambda: {"mode": "automatic"})
 
     # ── derived ──────────────────────────────────────────────────────────────
 

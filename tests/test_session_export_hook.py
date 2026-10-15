@@ -59,3 +59,20 @@ def test_ignores_non_string_entries_in_vault_folders(hook, tmp_path):
     """A hand-edited config.json must not crash the hook on session close."""
     resolved = hook._resolve_sessions_dir(tmp_path, {"vault_folders": [None, 3, "Sessions"]})
     assert resolved == tmp_path / "Sessions"
+
+
+def test_transcript_mode_defaults_to_automatic_and_rejects_unknown_values(hook):
+    assert hook.transcript_mode({}) == "automatic"
+    assert hook.transcript_mode({"session_transcripts": {"mode": "manual"}}) == "manual"
+    assert hook.transcript_mode({"session_transcripts": {"mode": "off"}}) == "off"
+    assert hook.transcript_mode({"session_transcripts": {"mode": "surprise"}}) == "automatic"
+
+
+def test_manual_capture_marker_is_single_use(hook, monkeypatch, tmp_path):
+    marker = tmp_path / "capture_next_session"
+    monkeypatch.setattr(hook, "MANUAL_CAPTURE_FILE", marker)
+    marker.touch()
+
+    assert hook._manual_capture_requested() is True
+    assert not marker.exists()
+    assert hook._manual_capture_requested() is False
