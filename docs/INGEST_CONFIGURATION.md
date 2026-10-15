@@ -155,10 +155,13 @@ disabling and reporting.
 }
 ```
 
-Each source requires `name` and either `path` or `paths`. A `paths` array groups
-physical roots under one logical source name; each item has its own optional
-`recursive` (default `true`) and optional `exclude`. `enabled: false` keeps the
-entry as documentation but prevents ingestion.
+Each source requires either `path` or `paths`. A `name` is strongly recommended:
+it identifies the logical source for `ingest --configured <name>`, reporting,
+and enabling or disabling it. When omitted, the runtime falls back to the
+physical path as its identifier. A `paths` array groups physical roots under one
+logical source name; each item has its own optional `recursive` (default `true`)
+and optional `exclude`. `enabled: false` keeps the entry as documentation but
+prevents ingestion.
 
 Use one source with multiple `paths` when the locations form one operational
 unit, for example a documentation directory plus the repository `README.md`
@@ -211,9 +214,11 @@ path is registered, that source's exclusions.
 ## Change a rule after indexing
 
 A new exclusion prevents future reads; it does not remove chunks already in the
-index. To remove already indexed content, call `ingest_forget` for the source
-and then run configured ingestion again. This removes only external-index rows
-for that source and never deletes the original files.
+index. To remove already indexed content, call `ingest_forget` for the physical
+source path and then run configured ingestion again. For a logical source using
+`paths`, call it once for each physical path that must be removed; the command
+does not accept the logical source name. This removes only external-index rows
+for that path and never deletes the original files.
 
 Use `ingest_status` to inspect declared and indexed sources, counts and missing
 paths. Disable a source to pause it, and call `ingest_forget` only when it must
