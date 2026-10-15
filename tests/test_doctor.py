@@ -350,6 +350,54 @@ def test_orphan_segments_detected_and_cleaned(cfg, tmp_path):
     assert result_clean["status"] == "ok"
 
 
+def _chroma_com_um_segmento(cfg):
+    import sqlite3
+    cfg.chroma_path.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(cfg.chroma_path / "chroma.sqlite3") as conn:
+        conn.execute("CREATE TABLE segments (id TEXT PRIMARY KEY, type TEXT, scope TEXT, collection TEXT)")
+        conn.execute("INSERT INTO segments VALUES ('seg', 'type', 'scope', 'col')")
+    (cfg.chroma_path / "seg").mkdir()
+    (cfg.chroma_path / "seg" / "d.bin").write_bytes(b"1")
+
+
+def test_backup_do_indice_e_nomeado_no_aviso_e_poupado_pelo_clean_orphans(cfg):
+    """O Max recebeu "1 diretorio de indice legado" sem saber que era o backup que ele
+    mesmo fizera, e o remedio sugerido o teria apagado junto com o caminho de volta."""
+    _chroma_com_um_segmento(cfg)
+    backup = cfg.vault / ".chroma_bge-backup-20261015"
+    backup.mkdir()
+    (backup / "chroma.sqlite3").write_bytes(b"x" * 2048)
+
+    r = doctor.check_orphan_segments(cfg)
+    assert r["status"] == "warn"
+    assert ".chroma_bge-backup-20261015" in r["detail"]
+    assert "backup" in r["detail"]
+    assert "--include-backups" in r["fix"]
+
+    assert doctor.clean_orphan_segments(cfg) == 0
+    assert backup.exists() and cfg.chroma_path.exists()
+
+    assert doctor.clean_orphan_segments(cfg, include_backups=True) == 1
+    assert not backup.exists()
+    assert cfg.chroma_path.exists() and (cfg.chroma_path / "seg").exists()
+
+
+def test_pasta_legada_que_nao_e_backup_continua_saindo_no_clean_orphans(cfg):
+    _chroma_com_um_segmento(cfg)
+    legado = cfg.vault / ".chroma_antigo"
+    legado.mkdir()
+    (legado / "x.bin").write_bytes(b"1")
+    backup = cfg.vault / ".chroma_bge-backup-20260929-pre-bb3a31a"
+    backup.mkdir()
+
+    r = doctor.check_orphan_segments(cfg)
+    assert ".chroma_antigo" in r["detail"] and backup.name in r["detail"]
+    assert "clean-orphans" in r["fix"] and "--include-backups" in r["fix"]
+
+    assert doctor.clean_orphan_segments(cfg) == 1
+    assert not legado.exists() and backup.exists()
+
+
 # ── fts integrity ────────────────────────────────────────────────────────────
 
 def test_fts_integrity_detected_and_rebuilt(cfg, tmp_path):

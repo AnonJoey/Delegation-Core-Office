@@ -39,6 +39,9 @@ logger = logging.getLogger("migracao_indice")
 LOTE = 2000
 PRAZO_DO_FILHO_SEG = 1800
 VIZINHOS = 10
+# Notas de cosseno que diferem menos que isto sao a mesma nota: o float32 do indice
+# erra na casa de 1e-7, e uma troca de ordem de verdade fica ordens de grandeza acima.
+TOLERANCIA_DE_NOTA = 1e-5
 
 
 # ── exportacao (roda no filho) ───────────────────────────────────────────────
@@ -192,6 +195,42 @@ def importar(export_dir: Path, alvo_dir: Path) -> dict[str, int]:
 
 # ── verificacao ──────────────────────────────────────────────────────────────
 
+def _notas_exatas(matriz, q, bloco: int = 20000) -> np.ndarray:
+    """Cosseno de `q` contra TODAS as linhas, em float64, sem carregar a matriz inteira."""
+    qn = np.asarray(q, dtype=np.float64)
+    qn = qn / (np.linalg.norm(qn) + 1e-300)
+    notas = np.empty(len(matriz), dtype=np.float64)
+    for ini in range(0, len(matriz), bloco):
+        b = np.asarray(matriz[ini:ini + bloco], dtype=np.float64)
+        notas[ini:ini + len(b)] = (b @ qn) / (np.linalg.norm(b, axis=1) + 1e-300)
+    return notas
+
+
+def _confere_contra_o_exato(meu: list[str], distancias: list[float], notas: np.ndarray,
+                            posicao: dict[str, int], k: int) -> dict:
+    """Diz se `meu` e um top-k correto, aceitando empate.
+
+    Comparar CONJUNTOS de ids reprova uma busca certa quando dois ou mais trechos de
+    nota igual atravessam o k-esimo lugar: o mesmo texto em duas notas da o mesmo
+    vetor, e qualquer desempate entre eles e valido. Dois algoritmos corretos escolhem
+    diferente, entao o conjunto muda sem que nada esteja errado (medido em 15/10/2026:
+    11 de 50 consultas num indice cujas 10.077 linhas eram identicas). O que tem de
+    bater sao as NOTAS, posicao a posicao, e a nota que o indice declara tem de ser a
+    nota real do trecho que ele devolveu.
+    """
+    k = min(k, len(notas))
+    if len(meu) != k or len(set(meu)) != k or any(i not in posicao for i in meu):
+        return {"equivalente": False, "conjunto_igual": False, "maior_diferenca": 1.0}
+    ordem = np.argsort(-notas, kind="stable")[:k]
+    reais = notas[[posicao[i] for i in meu]]
+    declaradas = 1.0 - np.asarray(distancias, dtype=np.float64)
+    diferenca = max(float(np.max(np.abs(reais - notas[ordem]))),
+                    float(np.max(np.abs(declaradas - reais))))
+    return {"equivalente": diferenca <= TOLERANCIA_DE_NOTA,
+            "conjunto_igual": {posicao[i] for i in meu} == {int(j) for j in ordem},
+            "maior_diferenca": diferenca}
+
+
 def verificar(export_dir: Path, alvo_dir: Path) -> dict:
     """Compara o indice SQLite com a exportacao. `ok` so e True se TUDO bate."""
     from .indice_sqlite import ClienteSqlite
@@ -244,23 +283,29 @@ def verificar(export_dir: Path, alvo_dir: Path) -> dict:
             # contra o que o Chroma (aproximado) respondeu na hora da exportacao.
             vizinhos = json.loads((export_dir / nome / "vizinhos_chroma.json").read_text(encoding="utf-8"))
             if vizinhos and info["linhas"]:
-                M = np.asarray(matriz)
-                Mn = M / (np.linalg.norm(M, axis=1, keepdims=True) + 1e-12)
                 ids = [json.loads(x)["id"] for x in open(export_dir / nome / "linhas.jsonl", encoding="utf-8")]
-                exato_igual = 0
+                posicao = {id_: i for i, id_ in enumerate(ids)}
+                equivalentes = empates = 0
+                maior_diferenca = 0.0
                 sobreposicao = []
                 for p, ids_chroma in vizinhos.items():
-                    q = M[int(p)]
-                    exato = [ids[i] for i in np.argsort(-(Mn @ (q / (np.linalg.norm(q) + 1e-12))))[:VIZINHOS]]
-                    meu = col.query(query_embeddings=[q.tolist()], n_results=VIZINHOS)["ids"][0]
-                    exato_igual += int(set(meu) == set(exato))
+                    q = np.asarray(matriz[int(p)])
+                    notas = _notas_exatas(matriz, q)
+                    res = col.query(query_embeddings=[q.tolist()], n_results=VIZINHOS)
+                    meu = res["ids"][0]
+                    veredito = _confere_contra_o_exato(meu, res["distances"][0], notas, posicao, VIZINHOS)
+                    equivalentes += int(veredito["equivalente"])
+                    empates += int(veredito["equivalente"] and not veredito["conjunto_igual"])
+                    maior_diferenca = max(maior_diferenca, veredito["maior_diferenca"])
                     sobreposicao.append(len(set(meu) & set(ids_chroma)) / VIZINHOS)
                 r["consultas"] = len(vizinhos)
-                r["consultas_iguais_a_busca_exata"] = exato_igual
+                r["consultas_iguais_a_busca_exata"] = equivalentes
+                r["consultas_com_empate"] = empates
                 r["sobreposicao_media_com_o_chroma"] = round(float(np.mean(sobreposicao)), 4)
-                if exato_igual != len(vizinhos):
+                if equivalentes != len(vizinhos):
                     r["problemas"].append(
-                        f"{len(vizinhos) - exato_igual} consultas diferem da busca exata")
+                        f"{len(vizinhos) - equivalentes} consultas diferem da busca exata "
+                        f"alem de empate (maior diferenca de nota {maior_diferenca:.2e})")
             r["ok"] = not r["problemas"]
             relatorio["ok"] = relatorio["ok"] and r["ok"]
             relatorio["colecoes"][nome] = r
