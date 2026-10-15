@@ -22,6 +22,33 @@ from pathlib import Path
 LIMITE_DO_ARQUIVO = 5 * 1024 * 1024
 
 
+class _Nulo:
+    """Descarta o que recebe, e diz que nao e um terminal.
+
+    Nao e `open(os.devnull)`: no Windows `NUL` e um dispositivo de caracteres e
+    `isatty()` responde True (medido no CI, Python 3.12), entao o uvicorn ligaria as cores
+    e escreveria sequencias ANSI no nada. Aqui `isatty()` e False nas tres plataformas.
+    """
+
+    encoding = "utf-8"
+    errors = "replace"
+
+    def write(self, texto: str) -> int:
+        return len(texto)
+
+    def flush(self) -> None:
+        pass
+
+    def close(self) -> None:
+        pass
+
+    def isatty(self) -> bool:
+        return False
+
+    def writable(self) -> bool:
+        return True
+
+
 class _ArquivoComTeto:
     """Arquivo de texto que nunca passa de `limite` bytes: ao estourar, o atual vira `.1`."""
 
@@ -72,11 +99,11 @@ def garantir_stdio() -> None:
     if sys.stdout is not None and sys.stderr is not None:
         return
     if sys.stdout is None:
-        sys.stdout = open(os.devnull, "w", encoding="utf-8")
+        sys.stdout = _Nulo()
     if sys.stderr is None:
         from .config import CONFIG_DIR
         try:
             CONFIG_DIR.mkdir(parents=True, exist_ok=True)
             sys.stderr = _ArquivoComTeto(CONFIG_DIR / "daemon-stderr.log")
         except OSError:
-            sys.stderr = open(os.devnull, "w", encoding="utf-8")
+            sys.stderr = _Nulo()
