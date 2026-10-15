@@ -29,6 +29,7 @@ from __future__ import annotations
 import platform
 import subprocess
 from pathlib import Path
+from .procs import sem_janela
 
 _HOOK_MARKER = "# delegation-core-graph-hook-start"
 _HOOK_MARKER_END = "# delegation-core-graph-hook-end"
@@ -61,7 +62,7 @@ def _hooks_dir(root: Path) -> Path:
     try:
         res = subprocess.run(
             ["git", "-C", str(root), "rev-parse", "--git-path", "hooks"],
-            capture_output=True, text=True,
+            capture_output=True, text=True, **sem_janela(),
         )
         if res.returncode == 0 and res.stdout.strip():
             hooks_path = Path(res.stdout.strip())

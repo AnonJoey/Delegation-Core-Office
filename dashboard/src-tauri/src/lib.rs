@@ -19,6 +19,8 @@
 // which port to hand the frontend via the get_api_port command.
 
 use std::io::{BufRead, BufReader};
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::{mpsc, Mutex};
@@ -250,6 +252,10 @@ impl SidecarError {
 /// a genuinely wedged sidecar, never as a false positive on a slow disk.
 const SIDECAR_STARTUP_TIMEOUT: Duration = Duration::from_secs(120);
 
+/// Win32 process-creation flag: run a console program with no console window.
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
 fn spawn_dashboard_api() -> Result<(u16, Child), SidecarError> {
     let python = venv_python()?;
     if !python.exists() {
@@ -262,13 +268,19 @@ fn spawn_dashboard_api() -> Result<(u16, Child), SidecarError> {
     // GPU memory. Chosen over Linux-only prctl(PR_SET_PDEATHSIG) because it's
     // one portable mechanism for all three shipped platforms and needs no new
     // crate dependency (prctl would require libc + unsafe pre_exec).
-    let mut child = Command::new(&python)
+    let mut command = Command::new(&python);
+    command
         .args(["-m", "delegation_core.dashboard_api", "--port", "0", "--parent-pid"])
         .arg(std::process::id().to_string())
         .stdout(Stdio::piped())
-        .stderr(Stdio::inherit())
-        .spawn()
-        .map_err(SidecarError::SpawnFailed)?;
+        .stderr(Stdio::inherit());
+    // Windows: this app is a GUI process (windows_subsystem = "windows") with no
+    // console, so a console-subsystem child like python.exe is handed a NEW, visible
+    // console, even with its stdout piped, and it stays open for as long as the
+    // sidecar lives. CREATE_NO_WINDOW gives it a hidden console instead.
+    #[cfg(windows)]
+    command.creation_flags(CREATE_NO_WINDOW);
+    let mut child = command.spawn().map_err(SidecarError::SpawnFailed)?;
 
     match read_sidecar_port(&mut child) {
         Ok(port) => Ok((port, child)),

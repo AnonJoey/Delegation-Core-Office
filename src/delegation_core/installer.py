@@ -36,6 +36,7 @@ from pathlib import Path
 
 from . import service
 from .config import CONFIG_DIR
+from .procs import sem_janela
 
 logger = logging.getLogger("installer")
 
@@ -108,7 +109,7 @@ def is_editable() -> bool:
 def _git(root: Path, *args: str, timeout: int = 60) -> tuple[int, str]:
     try:
         p = subprocess.run(["git", "-C", str(root), *args],
-                           capture_output=True, text=True, timeout=timeout)
+                           capture_output=True, text=True, timeout=timeout, **sem_janela())
         return p.returncode, (p.stdout + p.stderr).strip()
     except FileNotFoundError:
         return 127, "git not found"
@@ -230,7 +231,7 @@ def _pip_install(root: Path) -> tuple[bool, str]:
     base = [sys.executable, "-m", "pip", "install", "--quiet"]
     for alvo in (f"{root}[graph,web]", str(root)):
         try:
-            p = subprocess.run([*base, alvo], capture_output=True, text=True, timeout=1800)
+            p = subprocess.run([*base, alvo], capture_output=True, text=True, timeout=1800, **sem_janela())
         except subprocess.TimeoutExpired:
             return False, "pip timed out after 30 minutes"
         if p.returncode == 0:
@@ -388,7 +389,7 @@ def _finish_in_new_code(root: Path) -> list[dict]:
     """
     cmd = [sys.executable, "-m", "delegation_core", "update-finish", "--root", str(root)]
     try:
-        p = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=300, **sem_janela())
         linhas = [l for l in p.stdout.splitlines() if l.startswith(FINISH_MARKER)]
         if p.returncode == 0 and linhas:
             passos = json.loads(linhas[-1][len(FINISH_MARKER):])
@@ -810,7 +811,7 @@ def _download_release_asset(root: Path, padrao: str, destino: Path) -> Path | No
         subprocess.run(
             ["gh", "release", "download", "--repo", repo_slug(root),
              "--pattern", padrao, "--dir", str(destino)],
-            capture_output=True, text=True, timeout=600,
+            capture_output=True, text=True, timeout=600, **sem_janela(),
         )
     except (OSError, subprocess.SubprocessError):
         return None
@@ -862,7 +863,7 @@ def _install_appimage(root: Path, appimage: Path) -> dict:
         _desktop_entry_text(destino, nome_icone), encoding="utf-8")
     if shutil.which("update-desktop-database"):
         subprocess.run(["update-desktop-database", "-q", str(apps)],
-                       capture_output=True, timeout=60)
+                       capture_output=True, timeout=60, **sem_janela())
     return {"method": "appimage", "status": "installed", "path": str(destino)}
 
 
@@ -896,18 +897,18 @@ def install_dashboard(root: Path) -> dict:
 
             if deb and shutil.which("dpkg"):
                 p = subprocess.run(["sudo", "dpkg", "-i", str(deb)],
-                                   capture_output=True, text=True, timeout=600)
+                                   capture_output=True, text=True, timeout=600, **sem_janela())
                 if p.returncode != 0 and shutil.which("apt-get"):
                     p = subprocess.run(["sudo", "apt-get", "install", "-f", "-y"],
-                                       capture_output=True, text=True, timeout=600)
+                                       capture_output=True, text=True, timeout=600, **sem_janela())
                 return {"method": "deb", "status": "installed" if p.returncode == 0 else "failed",
                         "path": str(deb), "detail": (p.stdout + p.stderr).strip()[-400:]}
             if rpm and shutil.which("rpm"):
                 p = subprocess.run(["sudo", "rpm", "-i", str(rpm)],
-                                   capture_output=True, text=True, timeout=600)
+                                   capture_output=True, text=True, timeout=600, **sem_janela())
                 if p.returncode != 0 and shutil.which("dnf"):
                     p = subprocess.run(["sudo", "dnf", "install", "-y", str(rpm)],
-                                       capture_output=True, text=True, timeout=600)
+                                       capture_output=True, text=True, timeout=600, **sem_janela())
                 return {"method": "rpm", "status": "installed" if p.returncode == 0 else "failed",
                         "path": str(rpm), "detail": (p.stdout + p.stderr).strip()[-400:]}
             if appimage:
@@ -922,7 +923,7 @@ def install_dashboard(root: Path) -> dict:
                 return {"method": None, "status": "not_found", "detail": manual}
 
             p = subprocess.run(["hdiutil", "attach", str(dmg), "-nobrowse", "-readonly"],
-                               capture_output=True, text=True, timeout=300)
+                               capture_output=True, text=True, timeout=300, **sem_janela())
             # `hdiutil attach` exit status is what decides, not the last word of
             # its output. The shell version piped it and lost the status, so a
             # garbled mount left an empty path and `"$mnt"/*.app` collapsed to
@@ -947,7 +948,7 @@ def install_dashboard(root: Path) -> dict:
                 return {"method": "dmg", "status": "installed", "path": str(alvo)}
             finally:
                 subprocess.run(["hdiutil", "detach", str(montagem), "-quiet"],
-                               capture_output=True, timeout=120)
+                               capture_output=True, timeout=120, **sem_janela())
 
         if sistema == "Windows":
             msi = _dashboard_artifact(root, "msi", ".msi")
@@ -959,11 +960,11 @@ def install_dashboard(root: Path) -> dict:
                     nsis = _download_release_asset(root, "*.exe", tmp)
             if msi:
                 p = subprocess.run(["msiexec", "/i", str(msi), "/qb"],
-                                   capture_output=True, text=True, timeout=1800)
+                                   capture_output=True, text=True, timeout=1800, **sem_janela())
                 return {"method": "msi", "status": "installed" if p.returncode == 0 else "failed",
                         "path": str(msi), "detail": (p.stdout + p.stderr).strip()[-400:]}
             if nsis:
-                p = subprocess.run([str(nsis), "/S"], capture_output=True, text=True, timeout=1800)
+                p = subprocess.run([str(nsis), "/S"], capture_output=True, text=True, timeout=1800, **sem_janela())
                 return {"method": "nsis", "status": "installed" if p.returncode == 0 else "failed",
                         "path": str(nsis), "detail": (p.stdout + p.stderr).strip()[-400:]}
             return {"method": None, "status": "not_found", "detail": manual}

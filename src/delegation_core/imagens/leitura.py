@@ -31,6 +31,7 @@ import shutil
 import subprocess
 from datetime import datetime
 from pathlib import Path
+from delegation_core.procs import sem_janela
 
 EXTENSOES = frozenset({".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tif", ".tiff"})
 IDIOMAS_PADRAO = ("por", "eng")
@@ -111,7 +112,7 @@ def idiomas_disponiveis(tessdata: str | Path | None = None) -> list[str]:
     if tessdata:
         env["TESSDATA_PREFIX"] = str(tessdata)
     try:
-        r = subprocess.run([exe, "--list-langs"], capture_output=True, text=True, timeout=10, env=env)
+        r = subprocess.run([exe, "--list-langs"], capture_output=True, text=True, timeout=10, env=env, **sem_janela())
     except (OSError, subprocess.SubprocessError):
         return []
     return [l.strip() for l in (r.stdout + r.stderr).splitlines()[1:] if l.strip() and " " not in l.strip()]
@@ -132,7 +133,7 @@ def ocr(caminho: Path, tessdata: str | Path | None = None, idiomas: tuple[str, .
         env["TESSDATA_PREFIX"] = str(tessdata)
     try:
         r = subprocess.run([exe, str(caminho), "-", "-l", "+".join(usar)],
-                           capture_output=True, text=True, timeout=timeout, env=env)
+                           capture_output=True, text=True, timeout=timeout, env=env, **sem_janela())
     except subprocess.TimeoutExpired:
         return "", f"OCR passou de {timeout:.0f} s"
     except OSError as e:

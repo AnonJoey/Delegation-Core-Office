@@ -17,6 +17,7 @@ import tempfile
 import urllib.parse
 from pathlib import Path
 from typing import Callable, Any
+from delegation_core.procs import sem_janela
 
 
 GOOGLE_WORKSPACE_EXTENSIONS = {".gdoc", ".gsheet", ".gslides"}
@@ -112,7 +113,7 @@ def _run_gws_export(file_id: str, mime_type: str, output: Path, resource_key: st
         capture_output=True,
         cwd=output.parent,
         text=True,
-        timeout=timeout,
+        timeout=timeout, **sem_janela(),
     )
     if result.returncode != 0:
         stderr = (result.stderr or result.stdout or "").strip()

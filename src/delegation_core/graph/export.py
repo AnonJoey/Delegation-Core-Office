@@ -18,6 +18,7 @@ from delegation_core.graph.analyze import _node_community_map
 from delegation_core.graph.build import edge_data
 
 from delegation_core.graph.exporters.graphdb import push_to_falkordb, push_to_neo4j  # noqa: E402,F401
+from delegation_core.procs import sem_janela
 
 
 # Artifacts worth preserving across rebuilds (non-regenerable without LLM or curation).
@@ -174,7 +175,7 @@ def _git_head() -> str | None:
     """Return the current git HEAD commit hash, or None if not in a git repo."""
     import subprocess as _sp
     try:
-        r = _sp.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, timeout=3)
+        r = _sp.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, timeout=3, **sem_janela())
         return r.stdout.strip() if r.returncode == 0 else None
     except Exception:
         return None

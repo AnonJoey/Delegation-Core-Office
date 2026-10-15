@@ -29,6 +29,7 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+from .procs import sem_janela
 
 CONFIG_DIR = Path.home() / ".delegation_core"
 
@@ -238,7 +239,7 @@ def sondar_indice(cfg, timeout: int = 120) -> dict:
         completed = subprocess.run(
             [sys.executable, "-c", _PROBE_SOURCE, str(cfg.chroma_path),
              cfg.collection_name, json.dumps(list(_SCOPE_FILTERS))],
-            capture_output=True, text=True, timeout=timeout,
+            capture_output=True, text=True, timeout=timeout, **sem_janela(),
         )
     except subprocess.TimeoutExpired:
         return {"timeout": True, "sinal": None}

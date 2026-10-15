@@ -15,6 +15,7 @@ import csv as _csv
 import json
 import logging
 from pathlib import Path
+from .procs import sem_janela
 
 logger = logging.getLogger("extractor")
 
@@ -93,7 +94,7 @@ def materialize_if_dataless(path: Path, timeout: float = 10.0) -> bool:
     try:
         import shutil, subprocess
         if shutil.which("brctl"):
-            subprocess.run(["brctl", "download", str(path)], timeout=timeout, capture_output=True)
+            subprocess.run(["brctl", "download", str(path)], timeout=timeout, capture_output=True, **sem_janela())
     except Exception:
         pass
     try:

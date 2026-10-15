@@ -31,6 +31,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from .procs import sem_janela
 
 logger = logging.getLogger("service")
 
@@ -78,15 +79,44 @@ def _executable() -> str:
     return SERVICE_NAME
 
 
-def _windows_run_command() -> str:
+def _windows_interpreter(visible: bool = False) -> tuple[str, bool]:
+    """The Python that runs the daemon on Windows, and whether it has no console.
+
+    `pythonw.exe` beside the venv's `python.exe` is the same interpreter without a
+    console, so the daemon does not sit in a cmd window for as long as the
+    machine is on. Falls back to `python.exe` (a visible window) when there is no
+    pythonw, or when `visible` asks for the window on purpose, which is the way
+    to see why a daemon that never came up did not.
+    """
+    atual = Path(sys.executable)
+    if not visible:
+        sem_console = atual.with_name("pythonw.exe")
+        if sem_console.exists():
+            return str(sem_console), True
+    return str(atual), False
+
+
+def _windows_run_command(visible: bool = False) -> str:
     """Return the Windows daemon command without the console-script wrapper.
 
     Windows Application Control can block a newly-created console-script .exe
-    even when the virtual environment's Python interpreter is allowed. Running
-    the module through that interpreter also makes the Startup fallback show
-    the same visible status window an operator gets from a terminal.
+    even when the virtual environment's Python interpreter is allowed, so this
+    runs the module through the interpreter instead.
     """
-    return f'"{sys.executable}" -m delegation_core run'
+    return f'"{_windows_interpreter(visible)[0]}" -m delegation_core run'
+
+
+def _windows_launcher_text(visible: bool = False) -> str:
+    """The .cmd the Startup folder runs at logon.
+
+    With a console-less interpreter the launcher only *starts* it (`start`) and
+    exits, so its window closes at once instead of staying open for as long as the
+    daemon lives. With python.exe it has to run in the foreground, as before.
+    """
+    comando = _windows_run_command(visible)
+    if _windows_interpreter(visible)[1]:
+        return f'@echo off\r\nstart "" {comando}\r\n'
+    return f"@echo off\r\n{comando}\r\n"
 
 
 def systemd_unit_text() -> str:
@@ -173,7 +203,7 @@ STOP_TIMEOUT_SEC = 600
 
 def _run(cmd: list[str], timeout: int = 30) -> tuple[int, str]:
     try:
-        p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, **sem_janela())
         return p.returncode, (p.stdout + p.stderr).strip()
     except FileNotFoundError:
         return 127, f"{cmd[0]} not found"
@@ -181,7 +211,9 @@ def _run(cmd: list[str], timeout: int = 30) -> tuple[int, str]:
         return 124, f"{cmd[0]} timed out after {timeout}s"
 
 
-def install() -> dict:
+def install(visible: bool = False) -> dict:
+    """Register the daemon to start at login. `visible` is Windows-only: keep a
+    console window for the daemon (for diagnosing a daemon that did not come up)."""
     system = platform.system()
 
     if system == "Linux":
@@ -204,7 +236,7 @@ def install() -> dict:
                 "detail": out}
 
     if system == "Windows":
-        windows_command = _windows_run_command()
+        windows_command = _windows_run_command(visible)
         code, out = _run([
             "schtasks", "/Create", "/TN", SERVICE_NAME, "/SC", "ONLOGON",
             "/TR", windows_command, "/F",
@@ -217,14 +249,15 @@ def install() -> dict:
                     "hint": "The task runs at logon; start it now with `schtasks /Run /TN delegation-core`."}
         try:
             WIN_STARTUP_DIR.mkdir(parents=True, exist_ok=True)
-            WIN_STARTUP_CMD.write_text(
-                f"@echo off\r\n{windows_command}\r\n",
-                encoding="utf-8",
-            )
+            WIN_STARTUP_CMD.write_text(_windows_launcher_text(visible), encoding="utf-8")
             WIN_STARTUP_VBS.unlink(missing_ok=True)
+            sem_console = _windows_interpreter(visible)[1]
             return {"platform": system, "unit": str(WIN_STARTUP_CMD),
-                    "status": "installed", "detail": "Configured via visible user Startup launcher (no elevation required)",
-                    "hint": "The launcher runs at logon and keeps its status window visible."}
+                    "status": "installed",
+                    "detail": "Configured via user Startup launcher (no elevation required)",
+                    "hint": ("The launcher runs at logon and starts the daemon without a console window."
+                             if sem_console else
+                             "The launcher runs at logon and keeps its status window visible.")}
         except Exception as e:
             return {"platform": system, "unit": f"Task Scheduler: {SERVICE_NAME}",
                     "status": "failed", "detail": f"{out}; Startup folder fallback failed: {e}"}
@@ -427,9 +460,15 @@ def _parar_processos_do_daemon(timeout: float) -> int:
 
 
 def _abrir_launcher(caminho: Path) -> None:
-    """Executa o .cmd da pasta Startup desacoplado, como o logon faria."""
-    subprocess.Popen(["cmd", "/c", "start", "", str(caminho)],
-                     close_fds=True, creationflags=getattr(subprocess, "DETACHED_PROCESS", 0))
+    """Executa o .cmd da pasta Startup, como o logon faria, sem abrir janela.
+
+    Antes era `cmd /c start "" <launcher>`, que abre um console novo para o .cmd e o
+    deixa aberto enquanto o daemon viver. O launcher de interpretador sem console so
+    dispara o daemon e termina; o de `python.exe` roda em primeiro plano, e aqui o
+    console dele e oculto.
+    """
+    subprocess.Popen(["cmd", "/c", str(caminho)], close_fds=True,
+                     **sem_janela(creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)))
 
 
 def restart(timeout: int = STOP_TIMEOUT_SEC) -> dict:
