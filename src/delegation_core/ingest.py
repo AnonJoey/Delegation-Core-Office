@@ -272,12 +272,39 @@ def is_excluded(path: Path, source: Path, patterns: list[str]) -> bool:
     return False
 
 
+def _source_paths(entry: dict) -> list[dict]:
+    """Expand one logical source into its physical paths.
+
+    ``path`` remains the backwards-compatible shorthand. ``paths`` lets one
+    named source group multiple roots, with per-path options overriding the
+    source defaults while exclusions remain additive.
+    """
+    if not isinstance(entry, dict):
+        return []
+    if str(entry.get("path", "")).strip():
+        return [{"path": str(entry["path"]), "recursive": entry.get("recursive", True),
+                 "exclude": entry.get("exclude", [])}]
+    raw_paths = entry.get("paths", [])
+    if not isinstance(raw_paths, list):
+        return []
+    result = []
+    for item in raw_paths:
+        if not isinstance(item, dict) or not str(item.get("path", "")).strip():
+            continue
+        result.append({
+            "path": str(item["path"]),
+            "recursive": item.get("recursive", entry.get("recursive", True)),
+            "exclude": _merge_patterns(entry.get("exclude", []), item.get("exclude", [])),
+        })
+    return result
+
+
 def _configured_sources(cfg) -> list[dict]:
-    """Return only well-formed source entries from the user configuration."""
+    """Return source entries having at least one usable physical path."""
     raw = getattr(cfg, "ingest_sources", [])
     if not isinstance(raw, list):
         return []
-    return [entry for entry in raw if isinstance(entry, dict) and str(entry.get("path", "")).strip()]
+    return [entry for entry in raw if isinstance(entry, dict) and _source_paths(entry)]
 
 
 def _has_source_policy(cfg) -> bool:
@@ -328,15 +355,16 @@ class IngestManager:
             logger.warning("Nao consegui conferir o indice para %s (%s); confiando no carimbo", source_key, e)
             return None
 
-    def _configured_source_for(self, source: Path) -> dict | None:
-        """Find the configured source that exactly authorizes ``source``."""
+    def _configured_source_for(self, source: Path) -> tuple[dict, dict] | None:
+        """Find the logical source and physical path that authorize ``source``."""
         for entry in _configured_sources(self._cfg):
-            try:
-                configured_path = Path(str(entry["path"])).expanduser().resolve()
-            except (OSError, ValueError):
-                continue
-            if configured_path == source:
-                return entry
+            for item in _source_paths(entry):
+                try:
+                    configured_path = Path(item["path"]).expanduser().resolve()
+                except (OSError, ValueError):
+                    continue
+                if configured_path == source:
+                    return entry, item
         return None
 
     def ingest(self, source_path: str, recursive: bool = True, force: bool = False,
@@ -364,15 +392,16 @@ class IngestManager:
             return {"error": f"Path not found: {source_path}"}
 
         configured = _has_source_policy(self._cfg)
-        configured_source = self._configured_source_for(source)
-        if configured and configured_source is None:
+        configured_match = self._configured_source_for(source)
+        if configured and configured_match is None:
             return {
                 "error": (
                     f"Source is not configured: {source}. Add it to ingest_sources "
                     "before ingesting it."
                 )
             }
-        if configured_source is not None and not configured_source.get("enabled", True):
+        configured_source, configured_path = configured_match or ({}, {})
+        if configured_match is not None and not configured_source.get("enabled", True):
             return {"error": f"Configured source is disabled: {configured_source.get('name') or source}"}
 
         candidates: list[Path]
@@ -380,7 +409,7 @@ class IngestManager:
 
         patterns = _merge_patterns(
             getattr(self._cfg, "ingest_exclude_patterns", []),
-            configured_source.get("exclude", []) if configured_source else [],
+            configured_path.get("exclude", []) if configured_match else [],
             exclude or [],
         )
         excluded: list[str] = []
@@ -559,7 +588,7 @@ class IngestManager:
             "reindexed_missing_from_index": len(reingeridos_sem_linhas),
             "errors":             errors,
         }
-        if configured_source is not None:
+        if configured_match is not None:
             result["configured_source"] = configured_source.get("name") or source_key
         if excluded:
             # Reported, not silent: a pattern that matches more than the caller
@@ -593,13 +622,11 @@ class IngestManager:
         for entry in selected:
             if not entry.get("enabled", True):
                 continue
-            result = self.ingest(
-                str(entry["path"]),
-                recursive=bool(entry.get("recursive", True)),
-                force=force,
-            )
-            result["name"] = entry.get("name") or str(entry["path"])
-            results.append(result)
+            for item in _source_paths(entry):
+                result = self.ingest(item["path"], recursive=bool(item.get("recursive", True)), force=force)
+                result["name"] = entry.get("name") or item["path"]
+                result["configured_path"] = str(Path(item["path"]).expanduser().resolve())
+                results.append(result)
 
         return {
             "sources": results,
@@ -672,21 +699,22 @@ class IngestManager:
             sources_status[src] = entry
         configured_status = []
         for entry in _configured_sources(self._cfg):
-            raw_path = str(entry["path"])
-            try:
-                path = Path(raw_path).expanduser().resolve()
-                exists = path.exists()
-                path_text = str(path)
-            except (OSError, ValueError):
-                exists = False
-                path_text = raw_path
-            configured_status.append({
-                "name": entry.get("name") or path_text,
-                "path": path_text,
-                "recursive": bool(entry.get("recursive", True)),
-                "enabled": bool(entry.get("enabled", True)),
-                "exists": exists,
-            })
+            for item in _source_paths(entry):
+                raw_path = item["path"]
+                try:
+                    path = Path(raw_path).expanduser().resolve()
+                    exists = path.exists()
+                    path_text = str(path)
+                except (OSError, ValueError):
+                    exists = False
+                    path_text = raw_path
+                configured_status.append({
+                    "name": entry.get("name") or path_text,
+                    "path": path_text,
+                    "recursive": bool(item.get("recursive", True)),
+                    "enabled": bool(entry.get("enabled", True)),
+                    "exists": exists,
+                })
 
         res = {
             "sources": sources_status,

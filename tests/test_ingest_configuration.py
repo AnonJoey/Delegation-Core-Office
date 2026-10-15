@@ -108,3 +108,50 @@ def test_status_reports_declared_sources_even_before_first_ingest(tmp_path, monk
         "name": "planned", "path": str(source.resolve()), "recursive": False,
         "enabled": True, "exists": True,
     }]
+
+
+def test_one_logical_source_can_ingest_multiple_paths_with_per_path_rules(tmp_path, monkeypatch):
+    import delegation_core.ingest as ingest_mod
+
+    monkeypatch.setattr(ingest_mod, "_REGISTRY_FILE", tmp_path / "registry.json")
+    docs = tmp_path / "docs"
+    root_readme = tmp_path / "README.md"
+    _write(docs / "guide.md")
+    _write(docs / "drafts" / "private.md")
+    _write(root_readme, "# Project")
+    cfg = Config(vault_path=str(tmp_path / "vault"), ingest_exclude_patterns=[], ingest_sources=[{
+        "name": "project-reference",
+        "enabled": True,
+        "paths": [
+            {"path": str(docs), "recursive": True, "exclude": ["drafts/*"]},
+            {"path": str(root_readme), "recursive": False},
+        ],
+    }])
+    vault = FakeVault(cfg)
+
+    result = IngestManager(vault).ingest_configured("project-reference")
+
+    assert result["configured_count"] == 2
+    assert result["indexed"] == 2
+    assert {item["configured_path"] for item in result["sources"]} == {
+        str(docs.resolve()), str(root_readme.resolve()),
+    }
+    assert all(item["name"] == "project-reference" for item in result["sources"])
+    assert all("private.md" not in meta["path"] for _, meta in vault.indexed)
+
+
+def test_direct_ingest_accepts_each_path_of_a_multiple_path_source(tmp_path, monkeypatch):
+    import delegation_core.ingest as ingest_mod
+
+    monkeypatch.setattr(ingest_mod, "_REGISTRY_FILE", tmp_path / "registry.json")
+    docs = tmp_path / "docs"
+    _write(docs / "guide.md")
+    cfg = Config(vault_path=str(tmp_path / "vault"), ingest_exclude_patterns=[], ingest_sources=[{
+        "name": "project-reference", "enabled": True,
+        "paths": [{"path": str(docs), "recursive": True}],
+    }])
+
+    result = IngestManager(FakeVault(cfg)).ingest(str(docs))
+
+    assert result["indexed"] == 1
+    assert result["configured_source"] == "project-reference"
