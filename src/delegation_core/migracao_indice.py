@@ -33,6 +33,7 @@ from datetime import datetime
 from pathlib import Path
 
 import numpy as np
+from .procs import sem_janela
 
 logger = logging.getLogger("migracao_indice")
 
@@ -134,7 +135,7 @@ def exportar_em_filho(chroma_dir: Path, destino: Path, amostra: int = 50,
     cmd = [sys.executable, "-m", "delegation_core.migracao_indice", "exportar",
            str(chroma_dir), str(destino), str(amostra)]
     try:
-        p = subprocess.run(cmd, capture_output=True, text=True, timeout=prazo)
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=prazo, **sem_janela())
     except subprocess.TimeoutExpired:
         raise RuntimeError(f"o Chroma nao terminou de exportar em {int(prazo)} s "
                            "(o indice pode estar travado)") from None
@@ -351,7 +352,7 @@ def comparar(cfg, *, amostra: int = 100, prazo: float = 600, origem: Path | None
         cmd = [sys.executable, "-m", "delegation_core.migracao_indice", "consultar",
                str(origem), str(trabalho / "pedido.json"), str(trabalho / "resposta.json")]
         try:
-            p = subprocess.run(cmd, capture_output=True, text=True, timeout=prazo)
+            p = subprocess.run(cmd, capture_output=True, text=True, timeout=prazo, **sem_janela())
         except subprocess.TimeoutExpired:
             raise RuntimeError("o Chroma nao respondeu a tempo") from None
         if p.returncode != 0:

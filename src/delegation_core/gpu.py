@@ -26,6 +26,7 @@ import subprocess
 import threading
 import weakref
 from contextlib import contextmanager
+from .procs import sem_janela
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +69,7 @@ def vram_free_mib() -> int | None:
     try:
         out = subprocess.run(
             ["nvidia-smi", "--query-gpu=memory.free", "--format=csv,noheader,nounits"],
-            capture_output=True, text=True, timeout=10, check=True,
+            capture_output=True, text=True, timeout=10, check=True, **sem_janela(),
         ).stdout.strip().splitlines()
         return int(out[0].strip()) if out else None
     except Exception:

@@ -415,12 +415,14 @@ def cmd_service(args):
     from . import service as _service
 
     console = Console()
-    result = {"install": _service.install,
-              "uninstall": _service.uninstall,
-              "status": _service.status,
-              "stop": _service.stop,
-              "start": _service.start,
-              "restart": _service.restart}[args.action]()
+    if args.action == "install":
+        result = _service.install(visible=bool(getattr(args, "visible", False)))
+    else:
+        result = {"uninstall": _service.uninstall,
+                  "status": _service.status,
+                  "stop": _service.stop,
+                  "start": _service.start,
+                  "restart": _service.restart}[args.action]()
 
     for key, value in result.items():
         console.print(f"[bold]{key}[/bold]: {value}")
@@ -1907,6 +1909,8 @@ def cmd_process_get(args):
 
 
 def main():
+    from .stdio_nulo import garantir_stdio
+    garantir_stdio()
     parser = argparse.ArgumentParser(
         prog="delegation-core",
         description="Local MCP delegation server: llama.cpp + BGE + SQLite vector index + Obsidian vault",
@@ -1973,6 +1977,9 @@ def main():
     p_service = sub.add_parser(
         "service", help="Install/remove/stop/start the daemon as a per-user background service")
     p_service.add_argument("action", choices=["install", "uninstall", "status", "stop", "start", "restart"])
+    p_service.add_argument("--visible", action="store_true",
+                           help="install, Windows: run the daemon in a visible console window "
+                                "(default is no window), for diagnosing a daemon that did not start")
 
     p_clients = sub.add_parser(
         "clients", help="Point MCP clients at the HTTP daemon (migrates from stdio)")

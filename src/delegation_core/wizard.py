@@ -18,6 +18,7 @@ from rich.table import Table
 
 from .config import Config, CONFIG_DIR
 from .downloader import MODELS, download_llama_binary, download_model, find_llama_binary
+from .procs import sem_janela
 
 console = Console()
 
@@ -195,7 +196,7 @@ def _check_linux_packages() -> tuple[str, list[str]]:
     required = ["python3-venv", "python3-dev", "build-essential"]
     missing = []
     for pkg in required:
-        r = subprocess.run(["dpkg", "-s", pkg], capture_output=True, text=True)
+        r = subprocess.run(["dpkg", "-s", pkg], capture_output=True, text=True, **sem_janela())
         if r.returncode != 0:
             missing.append(pkg)
     if missing:
@@ -219,7 +220,7 @@ def _install_linux_packages(missing: list[str]):
 
 
 def _check_xcode() -> bool:
-    r = subprocess.run(["xcode-select", "-p"], capture_output=True, text=True)
+    r = subprocess.run(["xcode-select", "-p"], capture_output=True, text=True, **sem_janela())
     return r.returncode == 0
 
 
@@ -230,7 +231,7 @@ def _install_xcode():
         console.print("  [yellow]Skipped.[/yellow] You may see errors during installation.\n")
         return
     console.print("  Starting Xcode installer: a dialog will appear, click Install.")
-    subprocess.run(["xcode-select", "--install"], capture_output=True)
+    subprocess.run(["xcode-select", "--install"], capture_output=True, **sem_janela())
     console.input("  Press Enter once the Xcode installer has finished: ")
     console.print()
 
@@ -844,9 +845,9 @@ def _startup_task_scheduler(cfg: Config):
          "/sc", "ONLOGON",
          "/rl", "HIGHEST",
          "/f"],
-        check=True, capture_output=True,
+        check=True, capture_output=True, **sem_janela(),
     )
-    subprocess.run(["schtasks", "/run", "/tn", _svc.LLAMA_SERVICE_NAME], capture_output=True)
+    subprocess.run(["schtasks", "/run", "/tn", _svc.LLAMA_SERVICE_NAME], capture_output=True, **sem_janela())
 
 
 # ── completion ────────────────────────────────────────────────────────────────

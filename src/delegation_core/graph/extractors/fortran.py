@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from delegation_core.graph.extractors.base import _file_stem, _make_id, _read_text
+from delegation_core.procs import sem_janela
 
 
 _FORTRAN_CPP_EXTS = {".F", ".F90", ".F95", ".F03", ".F08"}
@@ -33,7 +34,7 @@ def _cpp_preprocess(path: Path) -> bytes:
         result = subprocess.run(
             ["cpp", "-w", "-P", "-nostdinc", "-I", "/dev/null", str(path.resolve())],
             capture_output=True,
-            timeout=30,
+            timeout=30, **sem_janela(),
         )
         if result.returncode == 0 and result.stdout:
             return result.stdout
