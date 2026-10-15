@@ -44,19 +44,88 @@ To add a source, append an enabled entry and run it by name. To pause it, set
 When a source path changes, call `ingest_forget` on the old path before removing
 or changing its entry, then ingest the new path.
 
-## Example
+## Source path formats
+
+Choose the format that matches the number of physical locations in one logical
+source. Both are supported:
+
+- Use **`path`** when a source has exactly one directory or file. This is the
+  original format and remains fully supported.
+- Use **`paths`** when one logical source must ingest two or more directories
+  and/or files. Each item has one singular `path`, because it represents one
+  physical location.
+
+Do not put `path` and `paths` in the same source entry. Use the shorter `path`
+form for one location; use `paths` as soon as the source needs multiple
+locations.
+
+### One physical location: `path`
 
 ```json
 {
   "ingest_sources": [
     {
       "name": "project-docs",
-      "path": "C:\\Example\\Projects\\project-docs",
+      "path": "C:\\Example\\Projects\\project\\docs",
       "recursive": true,
       "enabled": true,
-      "exclude": [
-        "drafts/*"
-      ]
+      "exclude": ["drafts/*"]
+    }
+  ]
+}
+```
+
+### Multiple physical locations: `paths`
+
+```json
+{
+  "ingest_sources": [
+    {
+      "name": "project-reference",
+      "paths": [
+        {
+          "path": "C:\\Example\\Projects\\project\\docs",
+          "recursive": true,
+          "exclude": ["drafts/*"]
+        },
+        {
+          "path": "C:\\Example\\Projects\\project\\README.md",
+          "recursive": false
+        },
+        {
+          "path": "C:\\Example\\Projects\\project\\AGENTS.md",
+          "recursive": false
+        }
+      ],
+      "enabled": true
+    }
+  ]
+}
+```
+
+Running `delegation-core ingest --configured project-reference` ingests all
+three physical paths, while keeping one logical source name for enabling,
+disabling and reporting.
+
+## Complete example
+
+```json
+{
+  "ingest_sources": [
+    {
+      "name": "project-reference",
+      "paths": [
+        {
+          "path": "C:\\Example\\Projects\\project\\docs",
+          "recursive": true,
+          "exclude": ["drafts/*"]
+        },
+        {
+          "path": "C:\\Example\\Projects\\project\\README.md",
+          "recursive": false
+        }
+      ],
+      "enabled": true
     },
     {
       "name": "shared-docs",
@@ -86,15 +155,21 @@ or changing its entry, then ingest the new path.
 }
 ```
 
-Each source requires `name` and `path`. `recursive` is optional and defaults to
-`true`. `enabled: false` keeps the entry as documentation but prevents ingestion.
-`exclude` is optional and applies only to that source.
+Each source requires `name` and either `path` or `paths`. A `paths` array groups
+physical roots under one logical source name; each item has its own optional
+`recursive` (default `true`) and optional `exclude`. `enabled: false` keeps the
+entry as documentation but prevents ingestion.
+
+Use one source with multiple `paths` when the locations form one operational
+unit, for example a documentation directory plus the repository `README.md`
+and `AGENTS.md`. Use separate named sources when they should be run, paused or
+forgotten independently.
 
 ## How rules are applied
 
-`ingest_exclude_patterns` applies to every source. A source `exclude` value and
-an `exclude` argument passed to a call are additive; neither removes a global
-rule. A pattern can represent:
+`ingest_exclude_patterns` applies to every source. Source-level and per-path
+`exclude` values, plus an `exclude` argument passed to a call, are additive;
+none removes a global rule. A pattern can represent:
 
 - A directory, such as `node_modules` or `.git`, which excludes its whole subtree.
 - A filename or extension, such as `*.log` or `manifest.*`.
@@ -108,8 +183,8 @@ example repeats the directories that should remain protected.
 
 When `ingest_sources` is empty, `ingest_folder` keeps its ad-hoc behavior: any
 existing path can be provided. When at least one source is configured, a path
-must exactly match an enabled `ingest_sources` entry. This makes the list an
-allow-list and prevents an accidental ingestion of an entire `Projects` folder.
+must exactly match a configured physical path. This makes the list an allow-list
+and prevents an accidental ingestion of an entire `Projects` folder.
 
 ## Run configured ingestion
 
