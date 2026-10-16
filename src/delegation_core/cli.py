@@ -316,7 +316,8 @@ def cmd_post_install(args):
                   + (f" ({ganchos['detail']})" if ganchos.get("detail") else ""))
     codex_ganchos = r["codex_hooks"]
     console.print(f"  Codex hooks: {codex_ganchos['status']}"
-                  + (" (review with /hooks)" if codex_ganchos.get("trust_review_required") else ""))
+                  + (" (restart Codex and review its trust prompt)"
+                     if codex_ganchos.get("trust_review_required") else ""))
     pele = r["skills"]
     if pele["available"]:
         console.print(f"  skills: {len(pele['installed'])} installed, "

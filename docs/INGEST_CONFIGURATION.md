@@ -259,11 +259,10 @@ session transcripts. Codex provides the documented `session_id`, `cwd` and
 `transcript_path` payload; the hook dispatches its export to a local worker so
 Codex can close within its short SessionEnd timeout.
 
-After installation or upgrade, open the **Codex CLI** in a valid working
-directory and use `/hooks` to review and trust the new local hooks before they
-can run. The VS Code client does not expose this slash command; it uses the
-trust persisted by the CLI. This is a Codex safety requirement; the installer
-never bypasses that review. The installer also copies bundled skills to
+After installation or upgrade, restart **Codex**, review the new local hooks in
+`~/.codex/hooks.json`, and allow them if Codex asks for a trust decision. This
+is a Codex safety requirement; the installer never bypasses that review. The
+installer also copies bundled skills to
 `~/.agents/skills/` without overwriting a same-named skill already owned by
 the user. Restart Codex after installation so it discovers newly installed
 skills.
