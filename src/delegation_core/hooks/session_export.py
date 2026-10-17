@@ -49,16 +49,23 @@ VENV_BIN = (
 )
 REINDEX_LOG = Path.home() / ".delegation_core" / "reindex.log"
 
+# subprocess exposes these constants only on Windows. Keeping their documented
+# numeric values makes this stdlib-only hook importable and testable on every
+# platform while preserving Windows process behavior.
+DETACHED_PROCESS = getattr(subprocess, "DETACHED_PROCESS", 0x00000008)
+CREATE_NEW_PROCESS_GROUP = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
+CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
+
 
 def _detached_popen_kwargs() -> dict:
     """Platform-appropriate kwargs to fully detach a background process.
 
-    POSIX: ``start_new_session`` (setsid). Windows: the child has its own
-    process group and is launched with no visible console window.
+    POSIX: ``start_new_session`` (setsid). Windows: the child is detached,
+    has its own process group, and is launched with no visible console window.
     """
     if platform.system() == "Windows":
         return {
-            "creationflags": subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP
+            "creationflags": DETACHED_PROCESS | CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP
         }
     return {"start_new_session": True}
 

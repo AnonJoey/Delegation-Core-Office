@@ -477,10 +477,10 @@ def _codex_hook_command(argument: str, executable: Path) -> str:
     """Build a trusted, portable Codex hook command.
 
     Windows Application Control can allow the virtual-environment interpreter
-    while blocking console-script executable shims. Run the package module
-    through that interpreter there. Force UTF-8 because Codex reads hook output
-    from a pipe, while a Windows console otherwise may use a legacy code page.
-    Unix keeps the normal console command.
+    while blocking console-script executable shims. Always run the package
+    module through the interpreter that installed this package, rather than a
+    platform-specific shim. Force UTF-8 because Codex reads hook output from a
+    pipe, while a Windows console otherwise may use a legacy code page.
     """
     if platform.system() == "Windows":
         python = str(Path(sys.executable))
@@ -488,7 +488,10 @@ def _codex_hook_command(argument: str, executable: Path) -> str:
             return f"{python} -X utf8 -m delegation_core.hooks.entrada {argument}"
         return (f'cmd.exe /d /s /c ""{python}" -X utf8 -m '
                 f'delegation_core.hooks.entrada {argument}"')
-    return f'"{executable}" {argument}'
+    python = str(Path(sys.executable))
+    if " " not in python:
+        return f"{python} -X utf8 -m delegation_core.hooks.entrada {argument}"
+    return f'"{python}" -X utf8 -m delegation_core.hooks.entrada {argument}'
 
 
 def _codex_hook_groups_without_ours(groups: list) -> tuple[list, int]:

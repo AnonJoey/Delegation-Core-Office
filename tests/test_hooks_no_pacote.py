@@ -90,10 +90,12 @@ def test_codex_session_end_only_dispatches_a_detached_worker(monkeypatch, tmp_pa
     assert Path(calls[0][0][-1]).is_file()
 
 
-def test_codex_worker_is_hidden_on_windows():
+def test_codex_worker_is_hidden_on_windows(monkeypatch):
+    monkeypatch.setattr(entrada, "_is_windows", lambda: True)
     flags = entrada._detached_popen_kwargs().get("creationflags", 0)
-    assert flags & entrada.subprocess.CREATE_NO_WINDOW
-    assert flags & entrada.subprocess.CREATE_NEW_PROCESS_GROUP
+    assert flags & entrada.DETACHED_PROCESS
+    assert flags & entrada.CREATE_NO_WINDOW
+    assert flags & entrada.CREATE_NEW_PROCESS_GROUP
 
 
 def test_codex_session_end_copies_transcript_before_dispatch(monkeypatch, tmp_path):

@@ -79,10 +79,12 @@ def test_parses_codex_response_items(hook, tmp_path):
     ]
 
 
-def test_reindex_worker_is_hidden_on_windows(hook):
+def test_reindex_worker_is_hidden_on_windows(hook, monkeypatch):
+    monkeypatch.setattr(hook.platform, "system", lambda: "Windows")
     flags = hook._detached_popen_kwargs().get("creationflags", 0)
-    assert flags & hook.subprocess.CREATE_NO_WINDOW
-    assert flags & hook.subprocess.CREATE_NEW_PROCESS_GROUP
+    assert flags & hook.DETACHED_PROCESS
+    assert flags & hook.CREATE_NO_WINDOW
+    assert flags & hook.CREATE_NEW_PROCESS_GROUP
 
 
 def test_transcript_mode_defaults_to_automatic_and_rejects_unknown_values(hook):
