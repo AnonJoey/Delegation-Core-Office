@@ -249,6 +249,25 @@ saves only a session explicitly requested before it ends. `off` writes no raw
 transcripts. Changing the mode never interrupts the local-model shutdown that
 runs at session end.
 
+To set the policy directly in `config.json`, keep the same structure and
+replace the mode value as needed:
+
+```json
+{
+  "session_transcripts": {
+    "mode": "manual"
+  }
+}
+```
+
+```json
+{
+  "session_transcripts": {
+    "mode": "off"
+  }
+}
+```
+
 ### Client scope
 
 The installer registers SessionStart and SessionEnd hooks for **Claude Code**
@@ -322,6 +341,13 @@ session starts, the marker remains pending and is visible in `session status`.
 Use `--client any` only when either client may safely consume the authorization.
 Restart the daemon and begin a new MCP client session after editing `config.json`
 directly.
+
+### Codex session end
+
+Codex runs its SessionEnd hook when the root conversation ends. Use `/archive`
+to close and archive a Codex conversation when a transcript must be captured
+immediately. In some Codex clients, `/exit` only disconnects from the task; it
+does not reliably end the conversation or trigger transcript capture.
 
 ### Claude Code in VS Code
 

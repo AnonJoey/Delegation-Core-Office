@@ -10,9 +10,10 @@ AGENT_GUIDE.md standing orders). Claude Code has no direct access to those
 Desktop/Cowork conversations — but it shares the same vault.
 
 This hook prints a short "what changed since you were last here" brief at the
-start of every Claude Code session: notes added/updated in the vault since the
-last Code session, plus a flag if _inbox/ has files waiting. Plain stdout from
-a SessionStart hook is injected directly into the model's context.
+start of every supported-client session (Claude Code or Codex): notes
+added/updated in the vault since the last supported-client session, plus a flag
+if _inbox/ has files waiting. Plain stdout from a SessionStart hook is injected
+directly into the model's context.
 
 If _inbox/ has files and maintenance hasn't been triggered recently (see
 MAINTENANCE_COOLDOWN), this hook also fires `delegation-core maintain` as a
@@ -303,7 +304,7 @@ def main():
         return
 
     new_notes.sort(reverse=True)
-    lines = ["## Vault activity since your last Claude Code session"]
+    lines = ["## Vault activity since your last supported-client session"]
 
     if new_notes:
         lotes, soltas = _separar_lotes(new_notes)
