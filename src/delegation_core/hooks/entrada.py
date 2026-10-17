@@ -125,7 +125,6 @@ def session_end_file(payload: str) -> None:
         data = json.loads(raw)
     except json.JSONDecodeError:
         return
-    transcript = data.get("transcript_path") if isinstance(data, dict) else None
     snapshot_path = data.get("_delegation_core_snapshot_path") if isinstance(data, dict) else None
     try:
         session_end(raw, client="codex")
