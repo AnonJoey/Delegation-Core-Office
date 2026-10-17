@@ -456,11 +456,21 @@ def unregister_session_hooks(settings_path: Path | None = None) -> dict:
 
 
 def _e_nosso_codex(comando: str) -> bool:
+    """Recognize both the current Codex hooks and the pre-release generic ones.
+
+    Before Codex received its dedicated adapter, this installation wrote the
+    Claude-style ``session-start`` and ``session-end`` commands to
+    ``~/.codex/hooks.json``.  Those commands are ours, but do not understand
+    Codex's lifecycle payload correctly.  Treat them as legacy registrations so
+    a post-install replaces them instead of running both handlers.
+    """
     comando = str(comando)
-    return (
-        ("delegation-core-hook" in comando or "delegation_core.hooks.entrada" in comando)
-        and ("codex-session-start" in comando or "codex-session-end" in comando)
-    )
+    is_delegation_hook = ("delegation-core-hook" in comando
+                          or "delegation_core.hooks.entrada" in comando)
+    lifecycle_argument = any(argument in comando for argument in (
+        "session-start", "session-end", "codex-session-start", "codex-session-end",
+    ))
+    return is_delegation_hook and lifecycle_argument
 
 
 def _codex_hook_command(argument: str, executable: Path) -> str:

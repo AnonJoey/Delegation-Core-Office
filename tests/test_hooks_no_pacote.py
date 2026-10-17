@@ -160,6 +160,33 @@ def test_register_codex_hook_preserves_other_handlers(tmp_path):
     assert "commandWindows" not in end_hook
 
 
+def test_register_codex_hook_replaces_legacy_generic_handlers(tmp_path):
+    hooks = tmp_path / "hooks.json"
+    hooks.write_text(json.dumps({"hooks": {
+        "SessionStart": [{"hooks": [
+            {"type": "command", "command": "other-start"},
+            {"type": "command", "command": "delegation-core-hook session-start"},
+        ]}],
+        "SessionEnd": [{"hooks": [
+            {"type": "command", "command": "other-end"},
+            {"type": "command", "command": "python -m delegation_core.hooks.entrada session-end"},
+        ]}],
+    }}), encoding="utf-8")
+
+    result = clients.register_codex_session_hook(hooks_path=hooks)
+
+    assert result["status"] == "updated"
+    assert result["replaced"] == 2
+    assert _comandos(hooks, "SessionStart") == [
+        "other-start",
+        f'{sys.executable} -X utf8 -m delegation_core.hooks.entrada codex-session-start',
+    ]
+    assert _comandos(hooks, "SessionEnd") == [
+        "other-end",
+        f'{sys.executable} -X utf8 -m delegation_core.hooks.entrada codex-session-end',
+    ]
+
+
 def test_remove_os_dois_hooks_do_codex_sem_afetar_outros(tmp_path):
     hooks = tmp_path / "hooks.json"
     hooks.write_text(json.dumps({"hooks": {
