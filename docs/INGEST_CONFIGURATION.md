@@ -271,6 +271,30 @@ Open each VS Code session from an existing folder. Codex starts command hooks
 with the session working directory, so a session still associated with a moved
 or deleted folder cannot start a hook.
 
+### Windows PowerShell command helper
+
+The installer runtime lives in a virtual environment. If `delegation-core` is
+not available as a command in PowerShell, add the following function to your
+PowerShell profile (`$PROFILE`). It provides the same short command for the
+transcript-policy workflow without adding the virtual-environment directory to
+the system `PATH`:
+
+```powershell
+function delegation-core {
+    & "$env:USERPROFILE\.delegation_core\venv\Scripts\python.exe" -m delegation_core @args
+}
+```
+
+Create the profile first when PowerShell reports that it does not exist:
+
+```powershell
+New-Item -ItemType File -Path $PROFILE -Force
+```
+
+Open a new PowerShell window after saving the function, or reload the current
+profile with `. $PROFILE`. The function is local to the current Windows user
+and applies to future PowerShell sessions.
+
 Use these commands to manage the setting:
 
 ```powershell
