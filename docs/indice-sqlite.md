@@ -9,7 +9,7 @@ texto e os metadados no SQLite e os vetores em arquivos HNSW separados
 atomicidade entre si, e e dai que saem as linhas fantasma e o SIGSEGV. O indice SQLite
 guarda texto, metadados e vetor na mesma transacao, e a busca e exata em numpy.
 
-Medicoes completas em `docs/substituto-do-chromadb.md` (branch `feat/fila-operacoes`).
+Medicoes completas em `docs/substituto-do-chromadb.md`, com os scripts que as produzem em `scripts/medicoes/`.
 
 ## Qual indice esta em uso
 
