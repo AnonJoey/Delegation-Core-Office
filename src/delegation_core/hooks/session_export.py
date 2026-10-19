@@ -27,6 +27,7 @@ from pathlib import Path
 CONFIG_PATH = Path.home() / ".delegation_core" / "config.json"
 MANUAL_CAPTURE_FILE = Path.home() / ".delegation_core" / "capture_next_session"
 MAX_TEXT_LENGTH = 8000  # truncate very long individual messages
+CODEX_PREAMBLE_TAG = "<environment_context>"
 
 
 def _yaml_quote_scalar(value: str) -> str:
@@ -91,12 +92,7 @@ def _manual_capture_requested(client: str = "claude") -> bool:
     request survives an upgrade. Client-specific markers prevent a Codex session
     from consuming an authorization made for Claude Code (and vice versa).
     """
-    client = client if client in {"claude", "codex"} else "any"
-    markers = [MANUAL_CAPTURE_FILE.with_name(f"{MANUAL_CAPTURE_FILE.name}.{client}")]
-    if client != "any":
-        markers.append(MANUAL_CAPTURE_FILE.with_name(f"{MANUAL_CAPTURE_FILE.name}.any"))
-    markers.append(MANUAL_CAPTURE_FILE)
-    for marker in markers:
+    for marker in _capture_markers(client):
         try:
             marker.unlink()
             return True
@@ -105,6 +101,30 @@ def _manual_capture_requested(client: str = "claude") -> bool:
         except OSError:
             return False
     return False
+
+
+def _capture_markers(client: str) -> list[Path]:
+    client = client if client in {"claude", "codex"} else "any"
+    markers = [MANUAL_CAPTURE_FILE.with_name(f"{MANUAL_CAPTURE_FILE.name}.{client}")]
+    if client != "any":
+        markers.append(MANUAL_CAPTURE_FILE.with_name(f"{MANUAL_CAPTURE_FILE.name}.any"))
+    markers.append(MANUAL_CAPTURE_FILE)
+    return markers
+
+
+def capture_permitted(client: str = "claude") -> bool:
+    """Would the current policy let this client's transcript be written?
+
+    Looks without consuming the manual marker, so a caller that must decide
+    before touching the transcript (the Codex dispatcher copies it) can ask
+    first. ``main`` still enforces the policy itself.
+    """
+    mode = transcript_mode(_load_config())
+    if mode == "off":
+        return False
+    if mode == "manual":
+        return any(marker.exists() for marker in _capture_markers(client))
+    return True
 
 
 def _resolve_sessions_dir(vault: Path, config: dict) -> Path:
@@ -226,6 +246,12 @@ def _parse_transcript(transcript_path: str) -> list[dict]:
                 text = _text_content(content)
 
                 if not text:
+                    continue
+
+                # Codex records its own session preamble as a user turn. It is
+                # the client talking, not the person, and would otherwise be
+                # the first "You" message and the source of the note's topic.
+                if msg_type == "response_item" and text.startswith(CODEX_PREAMBLE_TAG):
                     continue
 
                 if len(text) > MAX_TEXT_LENGTH:

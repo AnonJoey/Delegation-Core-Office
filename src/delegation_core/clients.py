@@ -473,7 +473,7 @@ def _e_nosso_codex(comando: str) -> bool:
     return is_delegation_hook and lifecycle_argument
 
 
-def _codex_hook_command(argument: str, executable: Path) -> str:
+def _codex_hook_command(argument: str) -> str:
     """Build a trusted, portable Codex hook command.
 
     Windows Application Control can allow the virtual-environment interpreter
@@ -508,8 +508,7 @@ def _codex_hook_groups_without_ours(groups: list) -> tuple[list, int]:
     return remaining, removed
 
 
-def register_codex_session_hook(hooks_path: Path | None = None,
-                                executable: Path | None = None) -> dict:
+def register_codex_session_hook(hooks_path: Path | None = None) -> dict:
     """Register the small Codex SessionEnd dispatcher without touching TOML.
 
     Codex discovers ``~/.codex/hooks.json`` independently from config.toml.
@@ -517,7 +516,6 @@ def register_codex_session_hook(hooks_path: Path | None = None,
     TOML and preserves unrelated hook groups.
     """
     path = hooks_path or CODEX_HOOKS
-    exe = executable or hook_executable()
     data, error = _ler_settings(path)
     if error:
         return {"client": "codex-hooks", "path": str(path), "status": "error", "detail": error}
@@ -531,7 +529,7 @@ def register_codex_session_hook(hooks_path: Path | None = None,
                                      ("SessionEnd", "codex-session-end", 3)):
         groups, removed = _codex_hook_groups_without_ours(list(hooks.get(event) or []))
         replaced += removed
-        command = _codex_hook_command(argument, exe)
+        command = _codex_hook_command(argument)
         groups.append({"hooks": [{"type": "command", "command": command, "timeout": timeout}]})
         hooks[event] = groups
     if json.dumps(data, sort_keys=True) != before:
@@ -539,9 +537,11 @@ def register_codex_session_hook(hooks_path: Path | None = None,
         status = "updated" if replaced else "installed"
     else:
         status = "already-configured"
+    # Codex asks for a trust decision when a hook it has not seen is written.
+    # Nothing written, nothing to review.
     return {"client": "codex-hooks", "path": str(path), "status": status,
-            "executable": str(exe), "replaced": replaced,
-            "trust_review_required": True}
+            "replaced": replaced,
+            "trust_review_required": status != "already-configured"}
 
 
 def unregister_codex_session_hook(hooks_path: Path | None = None) -> dict:

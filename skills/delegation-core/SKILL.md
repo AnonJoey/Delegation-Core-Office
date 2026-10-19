@@ -16,12 +16,13 @@ durable project-context layer.
 
 ## During work
 
-- For work that lasts long enough to benefit from visibility, call `heartbeat` with a concise objective and current status.
+- Call `heartbeat` to confirm the service is healthy and to see the active processes. It takes no objective or status, only an optional `force` to bypass its cache.
+- For work that spans sessions, track it with `process_create` and keep it current with `process_update`.
 - Keep personal paths, names, tokens, credentials, and customer data out of notes and exported transcripts.
 - Use the repository's documented engineering workflow for commits, tests, and pull requests; the skill does not authorize external writes or deployments.
 
 ## At handoff
 
 - When the session produced reusable implementation knowledge, call `export_session` with a concise title, outcome, and the relevant repository/project context.
-- The automatic session transcript policy is configured in delegation-core-office. In `manual` mode, a local operator must first run `delegation-core session capture-next --client codex`; never assume a transcript was saved merely because an export was requested.
+- The automatic session transcript policy is configured in delegation-core-office. In `manual` mode, a local operator must first run `delegation-core session capture-next --client <codex|claude>`, naming the client that is running; never assume a transcript was saved merely because an export was requested.
 - Do not export raw transcripts if they could contain secrets or sensitive customer data. Prefer a concise, sanitized summary.

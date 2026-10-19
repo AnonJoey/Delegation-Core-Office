@@ -765,15 +765,23 @@ def install_skills(root: Path) -> dict:
     return resultado
 
 
-def install_codex_skills(root: Path) -> dict:
-    """Copy the same open-skill folders to Codex's user discovery location."""
+#: The bundled skills Codex gets. The rest of `skills/` is the Claude Code set
+#: (document formats, design, API reference) and stays out of the shared
+#: ~/.agents/skills, where every agent on the machine would list them.
+CODEX_SKILLS = ("delegation-core",)
+
+
+def install_codex_skills(root: Path, nomes: tuple[str, ...] | None = None) -> dict:
+    """Copy the Codex skills to Codex's user discovery location, never clobbering."""
+    nomes = CODEX_SKILLS if nomes is None else nomes
     origem = root / "skills"
     resultado: dict = {"installed": [], "kept_yours": [], "available": bool(origem.is_dir())}
     if not origem.is_dir():
         return resultado
     destino_raiz = Path.home() / ".agents" / "skills"
     destino_raiz.mkdir(parents=True, exist_ok=True)
-    for pasta in sorted(p for p in origem.iterdir() if p.is_dir() and (p / "SKILL.md").is_file()):
+    for pasta in sorted(p for p in origem.iterdir()
+                        if p.name in nomes and p.is_dir() and (p / "SKILL.md").is_file()):
         destino = destino_raiz / pasta.name
         if destino.exists():
             resultado["kept_yours"].append(pasta.name)

@@ -983,7 +983,7 @@ def cmd_ingest(args):
 
 
 def cmd_session(args):
-    """Manage opt-in capture of raw Claude Code session transcripts."""
+    """Manage the capture policy for raw Claude Code and Codex session transcripts."""
     from .config import CONFIG_DIR, Config
 
     cfg = Config.load()
@@ -2125,7 +2125,7 @@ def main():
                           help="Maximum seconds to wait for daemon job to complete (default 3600s, 0 for unlimited)")
     _add_local_flag(p_ingest)
 
-    p_session = sub.add_parser("session", help="Configure raw Claude Code transcript capture")
+    p_session = sub.add_parser("session", help="Configure raw Claude Code and Codex transcript capture")
     session_sub = p_session.add_subparsers(dest="session_command", metavar="session-command")
     session_sub.add_parser("status", help="Show transcript capture mode and pending manual capture")
     p_session_mode = session_sub.add_parser("mode", help="Set automatic, manual, or off transcript capture")
