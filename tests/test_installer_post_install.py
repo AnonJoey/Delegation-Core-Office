@@ -21,6 +21,7 @@ Nada aqui toca a maquina: sem sudo, sem gh, sem dpkg, sem hdiutil, sem
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -207,10 +208,37 @@ def test_checkout_sem_pasta_de_skills_nao_e_erro(tmp_path, sem_maquina):
     assert r["installed"] == []
 
 
-def test_instala_as_skills_tambem_no_local_global_do_codex(checkout, sem_maquina, tmp_path):
+def test_instala_no_local_global_do_codex_so_as_skills_do_codex(checkout, sem_maquina, tmp_path, monkeypatch):
+    monkeypatch.setattr(installer, "CODEX_SKILLS", ("uma-skill",))
     r = installer.install_codex_skills(checkout)
-    assert sorted(r["installed"]) == ["outra-skill", "uma-skill"]
-    assert (tmp_path / "casa" / ".agents" / "skills" / "uma-skill" / "SKILL.md").is_file()
+    assert r["installed"] == ["uma-skill"]
+    destino = tmp_path / "casa" / ".agents" / "skills"
+    assert (destino / "uma-skill" / "SKILL.md").is_file()
+    assert not (destino / "outra-skill").exists()
+
+
+def test_o_post_install_deixa_hooks_e_skill_do_codex_mesmo_sem_codex_instalado(
+        checkout, sem_maquina, _sem_escrita_no_estado_real, tmp_path, monkeypatch):
+    """Quem instala o Codex depois encontra tudo no lugar. Sem ~/.codex, o
+    post-install cria o hooks.json e a skill; nada e condicionado a presenca."""
+    from delegation_core import clients
+    monkeypatch.setattr(installer, "CODEX_SKILLS", ("uma-skill",))
+    casa = tmp_path / "casa"
+    monkeypatch.setattr(clients, "CODEX_HOOKS", casa / ".codex" / "hooks.json")
+    assert not (casa / ".codex").exists()
+
+    r = installer.post_install(checkout)
+
+    assert r["codex_hooks"]["status"] == "installed"
+    assert (casa / ".codex" / "hooks.json").is_file()
+    assert r["codex_skills"]["installed"] == ["uma-skill"]
+    assert (casa / ".agents" / "skills" / "uma-skill" / "SKILL.md").is_file()
+
+
+def test_a_lista_do_codex_e_so_a_skill_nova_e_ela_existe_no_repositorio():
+    raiz = Path(installer.__file__).resolve().parents[2]
+    assert installer.CODEX_SKILLS == ("delegation-core",)
+    assert (raiz / "skills" / "delegation-core" / "SKILL.md").is_file()
 
 
 def test_nao_sobrescreve_skill_global_existente_do_codex(checkout, sem_maquina, tmp_path):
@@ -218,7 +246,7 @@ def test_nao_sobrescreve_skill_global_existente_do_codex(checkout, sem_maquina, 
     minha.mkdir(parents=True)
     (minha / "SKILL.md").write_text("a minha versao")
 
-    r = installer.install_codex_skills(checkout)
+    r = installer.install_codex_skills(checkout, nomes=("uma-skill",))
     assert r["kept_yours"] == ["uma-skill"]
     assert (minha / "SKILL.md").read_text() == "a minha versao"
 

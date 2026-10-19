@@ -111,3 +111,58 @@ def test_manual_capture_for_one_client_does_not_authorize_the_other(hook, monkey
 
     assert hook._manual_capture_requested("claude") is False
     assert hook._manual_capture_requested("codex") is True
+
+
+def test_capture_permitted_olha_sem_consumir_o_marcador(hook, monkeypatch, tmp_path):
+    marker = tmp_path / "capture_next_session"
+    monkeypatch.setattr(hook, "MANUAL_CAPTURE_FILE", marker)
+
+    monkeypatch.setattr(hook, "_load_config", lambda: {})
+    assert hook.capture_permitted("codex") is True
+
+    monkeypatch.setattr(hook, "_load_config", lambda: {"session_transcripts": {"mode": "off"}})
+    assert hook.capture_permitted("codex") is False
+
+    monkeypatch.setattr(hook, "_load_config", lambda: {"session_transcripts": {"mode": "manual"}})
+    assert hook.capture_permitted("codex") is False
+    marker.with_name("capture_next_session.codex").touch()
+    assert hook.capture_permitted("codex") is True
+    assert hook.capture_permitted("codex") is True  # ainda la: so quem exporta consome
+    assert hook.capture_permitted("claude") is False
+
+
+def test_o_preambulo_que_o_codex_grava_como_fala_do_usuario_nao_entra(hook, tmp_path):
+    """Forma medida em ~/.codex/sessions (codex-cli 0.147.0): o primeiro
+    response_item de usuario e o bloco <environment_context>, e a fala real vem depois."""
+    import json
+
+    def fala(hora, texto):
+        return json.dumps({
+            "timestamp": f"2026-08-18T14:43:{hora}Z", "type": "response_item",
+            "payload": {"type": "message", "role": "user",
+                        "content": [{"type": "input_text", "text": texto}]},
+        })
+
+    preambulo = "<environment_context>\n  <cwd>/home/x/proj</cwd>\n  <shell>bash</shell>\n</environment_context>"
+    transcript = tmp_path / "rollout.jsonl"
+    transcript.write_text(fala("12", preambulo) + "\n" + fala("13", "heartbeat") + "\n", encoding="utf-8")
+
+    # a linha do preambulo tem de ser lida de verdade: sem o filtro ela entraria
+    assert json.loads(transcript.read_text(encoding="utf-8").splitlines()[0])
+
+    mensagens = hook._parse_transcript(str(transcript))
+
+    assert [m["text"] for m in mensagens] == ["heartbeat"]
+    assert hook._topic(mensagens) == "heartbeat"
+
+
+def test_a_fala_do_usuario_no_claude_que_comeca_igual_nao_e_descartada(hook, tmp_path):
+    """O filtro e do formato do Codex; no Claude Code a mesma abertura e do usuario."""
+    transcript = tmp_path / "claude.jsonl"
+    transcript.write_text(
+        '{"type":"user","timestamp":"2026-10-19T10:00:00Z","message":{"role":"user",'
+        '"content":"<environment_context> o que e essa tag?"}}\n',
+        encoding="utf-8",
+    )
+
+    assert len(hook._parse_transcript(str(transcript))) == 1

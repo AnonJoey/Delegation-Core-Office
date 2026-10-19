@@ -281,14 +281,37 @@ Codex can close within its short SessionEnd timeout.
 After installation or upgrade, restart **Codex**, review the new local hooks in
 `~/.codex/hooks.json`, and allow them if Codex asks for a trust decision. This
 is a Codex safety requirement; the installer never bypasses that review. The
-installer also copies bundled skills to
+installer also copies the `delegation-core` skill to
 `~/.agents/skills/` without overwriting a same-named skill already owned by
-the user. Restart Codex after installation so it discovers newly installed
-skills.
+the user. The other bundled skills are the Claude Code set and are not copied
+there. Restart Codex after installation so it discovers the new skill.
+
+The policy is checked before the Codex hook copies anything. With `off`, or with
+`manual` and no pending request for Codex, no snapshot of the rollout is made and
+the export worker never receives a transcript path. The local-model shutdown
+still runs. A snapshot or payload left behind by a worker that never ran is
+removed by the next Codex session end once it is a day old.
 
 Open each VS Code session from an existing folder. Codex starts command hooks
 with the session working directory, so a session still associated with a moved
 or deleted folder cannot start a hook.
+
+### Installing Codex after delegation-core
+
+The installer writes the Codex hooks and the `delegation-core` skill whether or
+not Codex is installed yet: `~/.codex/hooks.json` and `~/.agents/skills/` are
+created if they are missing, and Codex reads them the first time it starts. Nothing
+about the hooks has to be repeated when Codex arrives later. Two things are left:
+
+1. Run `delegation-core clients --codex` to add the MCP server to
+   `~/.codex/config.toml`. The hooks only talk to the vault; the tools come from
+   that entry.
+2. Start Codex and review the hooks with `/hooks` when it asks. Codex runs a
+   command hook only after it is trusted, and the installer does not bypass that.
+
+Codex 0.147.0 lists the `hooks` feature as stable and enabled (`codex features
+list`). If `codex features list` shows it off in your version, turn it on before
+looking for another cause.
 
 ### Windows PowerShell command helper
 

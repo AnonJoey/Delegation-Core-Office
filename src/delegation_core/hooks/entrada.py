@@ -19,6 +19,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 from typing import Callable
 
@@ -86,22 +87,29 @@ def codex_session_end(raw: str) -> None:
     worker keeps closing the client responsive while preserving the documented
     payload for the existing redaction and indexing flow.
     """
+    created: list[Path] = []
     try:
         data = json.loads(raw)
         if not isinstance(data, dict):
             return
-        transcript = data.get("transcript_path")
-        has_transcript = isinstance(transcript, str) and bool(transcript)
-        from ..config import CONFIG_DIR
-        payload_dir = CONFIG_DIR / "session_hook_payloads"
+        from . import session_export
+        payload_dir = _payload_dir()
         payload_dir.mkdir(parents=True, exist_ok=True)
-        # Codex can move the rollout file as soon as SessionEnd returns. Copy
-        # it while the hook still owns a live path; the detached worker then
-        # reads this private snapshot instead of racing the archive operation.
-        if has_transcript and Path(transcript).is_file():
+        _sweep_stale_payloads(payload_dir)
+        transcript = data.get("transcript_path")
+        if not session_export.capture_permitted("codex"):
+            # The policy says no raw transcript, so nothing may copy one. The
+            # worker still runs for the local-model shutdown, but it is never
+            # handed a path to read.
+            data = {key: value for key, value in data.items() if key != "transcript_path"}
+        elif isinstance(transcript, str) and transcript and Path(transcript).is_file():
+            # Codex can move the rollout file as soon as SessionEnd returns. Copy
+            # it while the hook still owns a live path; the detached worker then
+            # reads this private snapshot instead of racing the archive operation.
             with tempfile.NamedTemporaryFile("wb", suffix=".jsonl", prefix="codex-transcript-",
                                              dir=payload_dir, delete=False) as snapshot_file:
                 snapshot = Path(snapshot_file.name)
+                created.append(snapshot)
                 with Path(transcript).open("rb") as source_file:
                     shutil.copyfileobj(source_file, snapshot_file)
             data = dict(data)
@@ -109,19 +117,63 @@ def codex_session_end(raw: str) -> None:
             data["_delegation_core_snapshot_path"] = str(snapshot)
         with tempfile.NamedTemporaryFile("w", suffix=".json", prefix="codex-",
                                          dir=payload_dir, delete=False, encoding="utf-8") as fh:
-            json.dump(data, fh)
             payload = Path(fh.name)
+            created.append(payload)
+            json.dump(data, fh)
         subprocess.Popen(
             [sys.executable, "-m", "delegation_core.hooks.entrada", "session-end-file", str(payload)],
             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             **_detached_popen_kwargs(),
         )
     except Exception as e:
+        # No worker will ever clean these up, and one of them holds the raw,
+        # unredacted transcript.
+        for leftover in created:
+            try:
+                leftover.unlink(missing_ok=True)
+            except OSError:
+                pass
         sys.stderr.write(f"delegation-core-hook: codex session dispatch failed: {type(e).__name__}: {e}\n")
+
+
+def _payload_dir() -> Path:
+    from ..config import CONFIG_DIR
+    return CONFIG_DIR / "session_hook_payloads"
+
+
+def _inside_payload_dir(path: Path) -> bool:
+    try:
+        path.resolve().relative_to(_payload_dir().resolve())
+        return True
+    except (ValueError, OSError):
+        return False
+
+
+#: A worker that never ran (reboot, kill, a failed spawn) leaves its payload and
+#: a raw transcript snapshot behind. A live worker finishes in seconds, so
+#: anything this old is an orphan.
+STALE_PAYLOAD_SECONDS = 24 * 3600
+
+
+def _sweep_stale_payloads(payload_dir: Path, now: float | None = None) -> None:
+    moment = time.time() if now is None else now
+    try:
+        entries = list(payload_dir.glob("codex-*"))
+    except OSError:
+        return
+    for entry in entries:
+        try:
+            if moment - entry.stat().st_mtime > STALE_PAYLOAD_SECONDS:
+                entry.unlink()
+        except OSError:
+            pass
 
 
 def session_end_file(payload: str) -> None:
     path = Path(payload)
+    if not _inside_payload_dir(path):
+        sys.stderr.write("delegation-core-hook: refusing a session payload outside the payload directory\n")
+        return
     try:
         raw = path.read_text(encoding="utf-8")
     except OSError as e:
@@ -140,7 +192,7 @@ def session_end_file(payload: str) -> None:
     try:
         session_end(raw, client="codex")
     finally:
-        if isinstance(snapshot_path, str):
+        if isinstance(snapshot_path, str) and _inside_payload_dir(Path(snapshot_path)):
             try:
                 Path(snapshot_path).unlink(missing_ok=True)
             except OSError:
