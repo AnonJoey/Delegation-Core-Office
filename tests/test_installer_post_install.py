@@ -217,6 +217,24 @@ def test_instala_no_local_global_do_codex_so_as_skills_do_codex(checkout, sem_ma
     assert not (destino / "outra-skill").exists()
 
 
+def test_o_post_install_deixa_hooks_e_skill_do_codex_mesmo_sem_codex_instalado(
+        checkout, sem_maquina, _sem_escrita_no_estado_real, tmp_path, monkeypatch):
+    """Quem instala o Codex depois encontra tudo no lugar. Sem ~/.codex, o
+    post-install cria o hooks.json e a skill; nada e condicionado a presenca."""
+    from delegation_core import clients
+    monkeypatch.setattr(installer, "CODEX_SKILLS", ("uma-skill",))
+    casa = tmp_path / "casa"
+    monkeypatch.setattr(clients, "CODEX_HOOKS", casa / ".codex" / "hooks.json")
+    assert not (casa / ".codex").exists()
+
+    r = installer.post_install(checkout)
+
+    assert r["codex_hooks"]["status"] == "installed"
+    assert (casa / ".codex" / "hooks.json").is_file()
+    assert r["codex_skills"]["installed"] == ["uma-skill"]
+    assert (casa / ".agents" / "skills" / "uma-skill" / "SKILL.md").is_file()
+
+
 def test_a_lista_do_codex_e_so_a_skill_nova_e_ela_existe_no_repositorio():
     raiz = Path(installer.__file__).resolve().parents[2]
     assert installer.CODEX_SKILLS == ("delegation-core",)

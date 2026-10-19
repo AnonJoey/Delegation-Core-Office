@@ -231,6 +231,24 @@ def test_trust_review_so_e_pedido_quando_algo_foi_escrito(tmp_path):
     assert segunda["status"] == "already-configured" and segunda["trust_review_required"] is False
 
 
+def test_os_hooks_do_codex_ja_estao_no_lugar_quando_o_codex_chega_depois(tmp_path):
+    """Registrar nao depende de o Codex estar instalado na hora do setup: o
+    arquivo fica esperando em ~/.codex/ e o Codex o le quando existir. Se alguem
+    condicionar o registro a ~/.codex, quem instala o Codex depois fica sem
+    hook e sem aviso (o post-install roda antes do wizard, e um update so
+    repetiria o mesmo teste)."""
+    hooks = tmp_path / "casa-sem-codex" / ".codex" / "hooks.json"
+    assert not hooks.parent.exists()
+
+    resultado = clients.register_codex_session_hook(hooks_path=hooks)
+
+    assert resultado["status"] == "installed"
+    salvo = json.loads(hooks.read_text(encoding="utf-8"))
+    assert set(salvo["hooks"]) == {"SessionStart", "SessionEnd"}
+    assert _comandos(hooks, "SessionStart") == [
+        f"{sys.executable} -X utf8 -m delegation_core.hooks.entrada codex-session-start"]
+
+
 # ── a politica vale antes de o hook do Codex copiar o transcript ─────────────
 
 
@@ -375,6 +393,10 @@ def test_nao_ha_mais_pasta_hooks_solta_no_repositorio():
 
 def test_a_suite_nao_enxerga_o_settings_real():
     assert clients.CLAUDE_SETTINGS != Path.home() / ".claude" / "settings.json"
+
+
+def test_a_suite_nao_enxerga_o_hooks_json_real_do_codex():
+    assert clients.CODEX_HOOKS != Path.home() / ".codex" / "hooks.json"
 
 
 def _settings(tmp_path, dados) -> Path:

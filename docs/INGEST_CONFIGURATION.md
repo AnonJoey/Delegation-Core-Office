@@ -296,6 +296,23 @@ Open each VS Code session from an existing folder. Codex starts command hooks
 with the session working directory, so a session still associated with a moved
 or deleted folder cannot start a hook.
 
+### Installing Codex after delegation-core
+
+The installer writes the Codex hooks and the `delegation-core` skill whether or
+not Codex is installed yet: `~/.codex/hooks.json` and `~/.agents/skills/` are
+created if they are missing, and Codex reads them the first time it starts. Nothing
+about the hooks has to be repeated when Codex arrives later. Two things are left:
+
+1. Run `delegation-core clients --codex` to add the MCP server to
+   `~/.codex/config.toml`. The hooks only talk to the vault; the tools come from
+   that entry.
+2. Start Codex and review the hooks with `/hooks` when it asks. Codex runs a
+   command hook only after it is trusted, and the installer does not bypass that.
+
+Codex 0.147.0 lists the `hooks` feature as stable and enabled (`codex features
+list`). If `codex features list` shows it off in your version, turn it on before
+looking for another cause.
+
 ### Windows PowerShell command helper
 
 The installer runtime lives in a virtual environment. If `delegation-core` is

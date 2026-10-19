@@ -140,6 +140,13 @@ def _sem_escrita_no_estado_real(tmp_path, monkeypatch):
     from delegation_core import clients as clients_mod
     monkeypatch.setattr(clients_mod, "CLAUDE_SETTINGS", raiz / "claude_settings.json",
                         raising=False)
+    # O mesmo vale para ~/.codex/hooks.json, que `post_install` e `update`
+    # tambem gravam. Medido em 19/10/2026: rodar os testes do instalador criou o
+    # arquivo real, apontando para o venv de quem rodou, e o Codex da maquina
+    # passaria a disparar o hook. A constante e calculada no import, entao
+    # trocar `Path.home` nao a alcanca.
+    monkeypatch.setattr(clients_mod, "CODEX_HOOKS", raiz / "codex_hooks.json",
+                        raising=False)
 
     yield raiz
 
