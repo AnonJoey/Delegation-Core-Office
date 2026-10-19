@@ -269,7 +269,12 @@ def test_vault_por_symlink_para_dentro_tambem_e_recusado(instalacao, servico, tm
     alvo = instalacao / "vault-real"
     alvo.mkdir()
     link = tmp_path / "atalho-do-vault"
-    link.symlink_to(alvo, target_is_directory=True)
+    try:
+        link.symlink_to(alvo, target_is_directory=True)
+    except OSError as exc:
+        if getattr(exc, "winerror", None) == 1314:
+            pytest.skip("Windows symlink privilege is not available")
+        raise
     (instalacao / "config.json").write_text(json.dumps({"vault_path": str(link)}))
 
     assert installer.uninstall()["status"] == "refused_vault_inside_config_dir"

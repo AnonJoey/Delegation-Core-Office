@@ -207,6 +207,22 @@ def test_checkout_sem_pasta_de_skills_nao_e_erro(tmp_path, sem_maquina):
     assert r["installed"] == []
 
 
+def test_instala_as_skills_tambem_no_local_global_do_codex(checkout, sem_maquina, tmp_path):
+    r = installer.install_codex_skills(checkout)
+    assert sorted(r["installed"]) == ["outra-skill", "uma-skill"]
+    assert (tmp_path / "casa" / ".agents" / "skills" / "uma-skill" / "SKILL.md").is_file()
+
+
+def test_nao_sobrescreve_skill_global_existente_do_codex(checkout, sem_maquina, tmp_path):
+    minha = tmp_path / "casa" / ".agents" / "skills" / "uma-skill"
+    minha.mkdir(parents=True)
+    (minha / "SKILL.md").write_text("a minha versao")
+
+    r = installer.install_codex_skills(checkout)
+    assert r["kept_yours"] == ["uma-skill"]
+    assert (minha / "SKILL.md").read_text() == "a minha versao"
+
+
 # ── agents ──────────────────────────────────────────────────────────────────
 
 def test_instala_os_agentes_empacotados(checkout, sem_maquina, tmp_path):

@@ -90,6 +90,7 @@ def test_uninstall_when_not_installed_reports_not_installed(repo):
 
 def test_install_outside_git_repo_returns_error(tmp_path, monkeypatch):
     monkeypatch.setattr(graph_hook, "_VENV_PYTHON", __import__("pathlib").Path(sys.executable))
+    monkeypatch.setattr(graph_hook, "_git_root", lambda _: None)
     not_a_repo = tmp_path / "not-a-repo"
     not_a_repo.mkdir()
     result = graph_hook.install(not_a_repo)

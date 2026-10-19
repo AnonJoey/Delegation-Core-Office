@@ -76,7 +76,9 @@ machine configuration. The installer preserves it on upgrades.
 
 See [docs/INGEST_CONFIGURATION.md](docs/INGEST_CONFIGURATION.md) for the
 `ingest_sources` allow-list, exclusion patterns, safe edits during use, and the
-configured ingestion commands.
+configured ingestion commands. It also documents the local session-transcript
+capture policy, the Claude Code/Codex SessionStart and SessionEnd hooks, and the
+globally installed Codex skill.
 
 ## Using it as an MCP server
 
@@ -116,11 +118,12 @@ delegation-core graph build ~/code/my-project    # code graph -> vault
 delegation-core graph affected my-project auth.py  # blast-radius query
 delegation-core graph hook install ~/code/my-project  # auto-rebuild on every commit
 delegation-core process create "Migrate auth" --steps "plan,implement,test"
+delegation-core session status                  # transcript-capture policy and pending requests
 ```
 
 Run `delegation-core --help` (and `<command> --help`) for the full tree - `setup`, `run`,
-`status`, `reindex`, `maintain`, `ingest`, `relink`, `search`, `compress`, `note`, `graph`,
-`process`.
+`status`, `reindex`, `maintain`, `ingest`, `session`, `relink`, `search`, `compress`, `note`,
+`graph`, `process`.
 
 ## Engine modes
 
@@ -179,5 +182,6 @@ real model to say anything useful.
 - `DEPLOYMENT_LOG.md` - per-deployment upgrade notes (this repo runs on more than one machine).
 - `docs/ATUALIZAR.md` - updating an install from GitHub with `delegation-core update`, and when to migrate the index.
 - `docs/evals-de-busca.md` - the retrieval evals that run with the test suite: 40 notes, 40 questions, and a baseline that fails when search gets worse.
-- `docs/INGEST_CONFIGURATION.md` - declarative ingestion sources, exclusions and safe re-ingestion.
+- `docs/INGEST_CONFIGURATION.md` - declarative ingestion sources, exclusions, safe re-ingestion,
+  and supported-client transcript-capture policy.
 - `THIRD_PARTY_LICENSES/` - attribution for vendored code (Graphify).

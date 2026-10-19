@@ -49,6 +49,7 @@ import json
 import logging
 import platform
 import shutil
+import sys
 from pathlib import Path
 
 from .config import Config
@@ -57,6 +58,7 @@ from .windows import SELF, read_client_config, write_client_config
 logger = logging.getLogger("clients")
 
 CODEX_CONFIG = Path.home() / ".codex" / "config.toml"
+CODEX_HOOKS = Path.home() / ".codex" / "hooks.json"
 
 #: Antigravity (the `agy` CLI) and the Gemini CLI share this file. Its own docs
 #: call it the "Global Configuration", applying to all sessions.
@@ -451,3 +453,114 @@ def unregister_session_hooks(settings_path: Path | None = None) -> dict:
     _gravar_settings(path, dados)
     return {"client": "claude-code-hooks", "path": str(path), "status": "removed",
             "removed": removidos}
+
+
+def _e_nosso_codex(comando: str) -> bool:
+    """Recognize both the current Codex hooks and the pre-release generic ones.
+
+    Before Codex received its dedicated adapter, this installation wrote the
+    Claude-style ``session-start`` and ``session-end`` commands to
+    ``~/.codex/hooks.json``.  Those commands are ours, but do not understand
+    Codex's lifecycle payload correctly.  Treat them as legacy registrations so
+    a post-install replaces them instead of running both handlers.
+    """
+    comando = str(comando)
+    is_delegation_hook = ("delegation-core-hook" in comando
+                          or "delegation_core.hooks.entrada" in comando)
+    lifecycle_argument = any(argument in comando for argument in (
+        "session-start", "session-end", "codex-session-start", "codex-session-end",
+    ))
+    return is_delegation_hook and lifecycle_argument
+
+
+def _codex_hook_command(argument: str, executable: Path) -> str:
+    """Build a trusted, portable Codex hook command.
+
+    Windows Application Control can allow the virtual-environment interpreter
+    while blocking console-script executable shims. Always run the package
+    module through the interpreter that installed this package, rather than a
+    platform-specific shim. Force UTF-8 because Codex reads hook output from a
+    pipe, while a Windows console otherwise may use a legacy code page.
+    """
+    if platform.system() == "Windows":
+        python = str(Path(sys.executable))
+        if " " not in python:
+            return f"{python} -X utf8 -m delegation_core.hooks.entrada {argument}"
+        return (f'cmd.exe /d /s /c ""{python}" -X utf8 -m '
+                f'delegation_core.hooks.entrada {argument}"')
+    python = str(Path(sys.executable))
+    if " " not in python:
+        return f"{python} -X utf8 -m delegation_core.hooks.entrada {argument}"
+    return f'"{python}" -X utf8 -m delegation_core.hooks.entrada {argument}'
+
+
+def _codex_hook_groups_without_ours(groups: list) -> tuple[list, int]:
+    remaining, removed = [], 0
+    for group in groups:
+        if not isinstance(group, dict) or not isinstance(group.get("hooks"), list):
+            remaining.append(group)
+            continue
+        kept = [hook for hook in group["hooks"] if not (
+            isinstance(hook, dict) and _e_nosso_codex(hook.get("command", "")))]
+        removed += len(group["hooks"]) - len(kept)
+        if kept:
+            remaining.append(dict(group, hooks=kept))
+    return remaining, removed
+
+
+def register_codex_session_hook(hooks_path: Path | None = None,
+                                executable: Path | None = None) -> dict:
+    """Register the small Codex SessionEnd dispatcher without touching TOML.
+
+    Codex discovers ``~/.codex/hooks.json`` independently from config.toml.
+    Keeping the hook in its own JSON document avoids hand-editing the user's
+    TOML and preserves unrelated hook groups.
+    """
+    path = hooks_path or CODEX_HOOKS
+    exe = executable or hook_executable()
+    data, error = _ler_settings(path)
+    if error:
+        return {"client": "codex-hooks", "path": str(path), "status": "error", "detail": error}
+    before = json.dumps(data, sort_keys=True)
+    hooks = data.setdefault("hooks", {})
+    if not isinstance(hooks, dict):
+        return {"client": "codex-hooks", "path": str(path), "status": "error",
+                "detail": "hooks is not an object, not touching it"}
+    replaced = 0
+    for event, argument, timeout in (("SessionStart", "codex-session-start", 30),
+                                     ("SessionEnd", "codex-session-end", 3)):
+        groups, removed = _codex_hook_groups_without_ours(list(hooks.get(event) or []))
+        replaced += removed
+        command = _codex_hook_command(argument, exe)
+        groups.append({"hooks": [{"type": "command", "command": command, "timeout": timeout}]})
+        hooks[event] = groups
+    if json.dumps(data, sort_keys=True) != before:
+        _gravar_settings(path, data)
+        status = "updated" if replaced else "installed"
+    else:
+        status = "already-configured"
+    return {"client": "codex-hooks", "path": str(path), "status": status,
+            "executable": str(exe), "replaced": replaced,
+            "trust_review_required": True}
+
+
+def unregister_codex_session_hook(hooks_path: Path | None = None) -> dict:
+    path = hooks_path or CODEX_HOOKS
+    data, error = _ler_settings(path)
+    if error:
+        return {"client": "codex-hooks", "path": str(path), "status": "error", "detail": error}
+    hooks = data.get("hooks")
+    if not isinstance(hooks, dict):
+        return {"client": "codex-hooks", "path": str(path), "status": "absent"}
+    removed = 0
+    for event in ("SessionStart", "SessionEnd"):
+        groups, count = _codex_hook_groups_without_ours(list(hooks.get(event) or []))
+        removed += count
+        if groups:
+            hooks[event] = groups
+        else:
+            hooks.pop(event, None)
+    if not removed:
+        return {"client": "codex-hooks", "path": str(path), "status": "absent"}
+    _gravar_settings(path, data)
+    return {"client": "codex-hooks", "path": str(path), "status": "removed", "removed": removed}

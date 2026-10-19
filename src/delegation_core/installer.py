@@ -359,11 +359,13 @@ def finish_update(root: Path) -> list[dict]:
     Kept apart so they can run in the code that pip just installed, not in the
     code that was loaded when `update` started. See `_finish_in_new_code`.
     """
-    from .clients import register_session_hooks
+    from .clients import register_codex_session_hook, register_session_hooks
 
     passos = [{"step": "refresh_docs", "ok": True, **refresh_shipped_files(root)}]
     ganchos = register_session_hooks()
     passos.append({"step": "register_hooks", "ok": ganchos["status"] != "error", **ganchos})
+    codex_hooks = register_codex_session_hook()
+    passos.append({"step": "register_codex_hooks", "ok": codex_hooks["status"] != "error", **codex_hooks})
     passos.append({"step": "register_service", "ok": True, **service.install()})
     return passos
 
@@ -636,9 +638,11 @@ def uninstall(dry_run: bool = False) -> dict:
         )
         return relatorio
 
-    from .clients import unregister_session_hooks
+    from .clients import unregister_codex_session_hook, unregister_session_hooks
     ganchos = unregister_session_hooks()
     _passo("unregister_hooks", ganchos["status"] != "error", **ganchos)
+    codex_hooks = unregister_codex_session_hook()
+    _passo("unregister_codex_hooks", codex_hooks["status"] != "error", **codex_hooks)
     _passo("unregister_daemon", True, **service.uninstall())
     _passo("unregister_llama_autostart", True, **service.uninstall_llama_autostart())
 
@@ -749,6 +753,27 @@ def install_skills(root: Path) -> dict:
     destino_raiz = Path.home() / ".claude" / "skills"
     destino_raiz.mkdir(parents=True, exist_ok=True)
     for pasta in sorted(p for p in origem.iterdir() if p.is_dir()):
+        destino = destino_raiz / pasta.name
+        if destino.exists():
+            resultado["kept_yours"].append(pasta.name)
+            continue
+        try:
+            shutil.copytree(pasta, destino)
+            resultado["installed"].append(pasta.name)
+        except OSError as e:
+            resultado.setdefault("errors", []).append({"skill": pasta.name, "error": str(e)})
+    return resultado
+
+
+def install_codex_skills(root: Path) -> dict:
+    """Copy the same open-skill folders to Codex's user discovery location."""
+    origem = root / "skills"
+    resultado: dict = {"installed": [], "kept_yours": [], "available": bool(origem.is_dir())}
+    if not origem.is_dir():
+        return resultado
+    destino_raiz = Path.home() / ".agents" / "skills"
+    destino_raiz.mkdir(parents=True, exist_ok=True)
+    for pasta in sorted(p for p in origem.iterdir() if p.is_dir() and (p / "SKILL.md").is_file()):
         destino = destino_raiz / pasta.name
         if destino.exists():
             resultado["kept_yours"].append(pasta.name)
@@ -1044,9 +1069,11 @@ def post_install(root: Path) -> dict:
     relatorio: dict = {"root": str(root)}
 
     relatorio["docs"] = refresh_shipped_files(root)
-    from .clients import register_session_hooks
+    from .clients import register_codex_session_hook, register_session_hooks
     relatorio["hooks"] = register_session_hooks()
+    relatorio["codex_hooks"] = register_codex_session_hook()
     relatorio["skills"] = install_skills(root)
+    relatorio["codex_skills"] = install_codex_skills(root)
     relatorio["agents"] = install_agents(root)
     relatorio["dashboard"] = install_dashboard(root)
 

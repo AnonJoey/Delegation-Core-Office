@@ -59,3 +59,55 @@ def test_ignores_non_string_entries_in_vault_folders(hook, tmp_path):
     """A hand-edited config.json must not crash the hook on session close."""
     resolved = hook._resolve_sessions_dir(tmp_path, {"vault_folders": [None, 3, "Sessions"]})
     assert resolved == tmp_path / "Sessions"
+
+
+def test_parses_codex_response_items(hook, tmp_path):
+    transcript = tmp_path / "codex-rollout.jsonl"
+    transcript.write_text(
+        '{"type":"response_item","timestamp":"2026-10-06T12:00:00Z",'
+        '"payload":{"type":"message","role":"user",'
+        '"content":[{"type":"input_text","text":"Hello"}]}}\n'
+        '{"type":"response_item","timestamp":"2026-10-06T12:00:01Z",'
+        '"payload":{"item":{"type":"message","role":"assistant",'
+        '"content":[{"type":"output_text","text":"Hi"}]}}}\n',
+        encoding="utf-8",
+    )
+
+    assert hook._parse_transcript(str(transcript)) == [
+        {"role": "user", "text": "Hello", "ts": "2026-10-06T12:00:00Z"},
+        {"role": "assistant", "text": "Hi", "ts": "2026-10-06T12:00:01Z"},
+    ]
+
+
+def test_reindex_worker_is_hidden_on_windows(hook, monkeypatch):
+    monkeypatch.setattr(hook.platform, "system", lambda: "Windows")
+    flags = hook._detached_popen_kwargs().get("creationflags", 0)
+    assert flags & hook.DETACHED_PROCESS
+    assert flags & hook.CREATE_NO_WINDOW
+    assert flags & hook.CREATE_NEW_PROCESS_GROUP
+
+
+def test_transcript_mode_defaults_to_automatic_and_rejects_unknown_values(hook):
+    assert hook.transcript_mode({}) == "automatic"
+    assert hook.transcript_mode({"session_transcripts": {"mode": "manual"}}) == "manual"
+    assert hook.transcript_mode({"session_transcripts": {"mode": "off"}}) == "off"
+    assert hook.transcript_mode({"session_transcripts": {"mode": "surprise"}}) == "automatic"
+
+
+def test_manual_capture_marker_is_single_use(hook, monkeypatch, tmp_path):
+    marker = tmp_path / "capture_next_session"
+    monkeypatch.setattr(hook, "MANUAL_CAPTURE_FILE", marker)
+    marker.with_name("capture_next_session.codex").touch()
+
+    assert hook._manual_capture_requested("codex") is True
+    assert not marker.with_name("capture_next_session.codex").exists()
+    assert hook._manual_capture_requested("codex") is False
+
+
+def test_manual_capture_for_one_client_does_not_authorize_the_other(hook, monkeypatch, tmp_path):
+    marker = tmp_path / "capture_next_session"
+    monkeypatch.setattr(hook, "MANUAL_CAPTURE_FILE", marker)
+    marker.with_name("capture_next_session.codex").touch()
+
+    assert hook._manual_capture_requested("claude") is False
+    assert hook._manual_capture_requested("codex") is True

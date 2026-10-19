@@ -15,7 +15,7 @@ call remains available while `ingest_sources` is empty.
 
 Edit the runtime `config.json`:
 
-- Windows: `%USERPROFILE%\\.delegation_core\\config.json`
+- Windows: `%USERPROFILE%\.delegation_core\config.json`
 - Linux/macOS: `~/.delegation_core/config.json`
 
 The file is strict JSON: do not add comments or a trailing comma. Back it up
@@ -223,3 +223,136 @@ for that path and never deletes the original files.
 Use `ingest_status` to inspect declared and indexed sources, counts and missing
 paths. Disable a source to pause it, and call `ingest_forget` only when it must
 also stop appearing in search results.
+
+## Session transcript capture
+
+Raw client transcripts can be stored locally in the vault `Sessions` folder by
+a session-end hook. This is separate from the curated `export_session` note: a
+transcript is a verbatim backup, while the curated note is the useful summary.
+The hook redacts known credential-shaped values before it writes or indexes a
+transcript, but redaction is a safety net, not a substitute for never sharing a
+secret in a chat.
+
+Configure the policy after installation in the same runtime `config.json`:
+
+```json
+{
+  "session_transcripts": {
+    "mode": "automatic"
+  }
+}
+```
+
+`automatic` is the default and preserves the existing behavior: each completed
+supported-client session is written and then queued for reindexing. `manual`
+saves only a session explicitly requested before it ends. `off` writes no raw
+transcripts. Changing the mode never interrupts the local-model shutdown that
+runs at session end.
+
+To set the policy directly in `config.json`, keep the same structure and
+replace the mode value as needed:
+
+```json
+{
+  "session_transcripts": {
+    "mode": "manual"
+  }
+}
+```
+
+```json
+{
+  "session_transcripts": {
+    "mode": "off"
+  }
+}
+```
+
+### Client scope
+
+The installer registers SessionStart and SessionEnd hooks for **Claude Code**
+and **Codex**. At startup, each client receives a short vault-activity brief;
+the Codex brief also directs the agent to the installed delegation-core-office skill.
+At session end, both clients use the same local policy and store only their own
+session transcripts. Codex provides the documented `session_id`, `cwd` and
+`transcript_path` payload; the hook dispatches its export to a local worker so
+Codex can close within its short SessionEnd timeout.
+
+After installation or upgrade, restart **Codex**, review the new local hooks in
+`~/.codex/hooks.json`, and allow them if Codex asks for a trust decision. This
+is a Codex safety requirement; the installer never bypasses that review. The
+installer also copies bundled skills to
+`~/.agents/skills/` without overwriting a same-named skill already owned by
+the user. Restart Codex after installation so it discovers newly installed
+skills.
+
+Open each VS Code session from an existing folder. Codex starts command hooks
+with the session working directory, so a session still associated with a moved
+or deleted folder cannot start a hook.
+
+### Windows PowerShell command helper
+
+The installer runtime lives in a virtual environment. If `delegation-core` is
+not available as a command in PowerShell, add the following function to your
+PowerShell profile (`$PROFILE`). It provides the same short command for the
+transcript-policy workflow without adding the virtual-environment directory to
+the system `PATH`:
+
+```powershell
+function delegation-core {
+    & "$env:USERPROFILE\.delegation_core\venv\Scripts\python.exe" -m delegation_core @args
+}
+```
+
+Create the profile first when PowerShell reports that it does not exist:
+
+```powershell
+New-Item -ItemType File -Path $PROFILE -Force
+```
+
+Open a new PowerShell window after saving the function, or reload the current
+profile with `. $PROFILE`. The function is local to the current Windows user
+and applies to future PowerShell sessions.
+
+Use these commands to manage the setting:
+
+```powershell
+# Inspect the active policy and whether a manual capture is pending
+delegation-core session status
+
+# Save no new raw transcripts
+delegation-core session mode off
+
+# Require explicit approval for the next session of one client
+delegation-core session mode manual
+delegation-core session capture-next --client codex
+
+# Or authorize one Claude Code session, or the next session of either client
+delegation-core session capture-next --client claude
+delegation-core session capture-next --client any
+
+# Restore the default automatic capture
+delegation-core session mode automatic
+```
+
+`capture-next` creates a local, single-use marker for the selected client. The
+next matching session that completes consumes it and is captured; if no matching
+session starts, the marker remains pending and is visible in `session status`.
+Use `--client any` only when either client may safely consume the authorization.
+Restart the daemon and begin a new MCP client session after editing `config.json`
+directly.
+
+### Codex session end
+
+Codex runs its SessionEnd hook when the root conversation ends. Use `/archive`
+to close and archive a Codex conversation when a transcript must be captured
+immediately. In some Codex clients, `/exit` only disconnects from the task; it
+does not reliably end the conversation or trigger transcript capture.
+
+### Claude Code in VS Code
+
+The Claude Code terminal client emits its session-end event when its session exits.
+The native Claude Code VS Code extension can keep its session active after a chat is
+archived or closed; in practice, its session-end hook runs when the VS Code window
+is closed. Use the integrated terminal and `/exit` when a transcript must be
+captured immediately, or close VS Code to end the extension session.

@@ -25,6 +25,7 @@ from datetime import datetime
 from pathlib import Path
 
 CONFIG_PATH = Path.home() / ".delegation_core" / "config.json"
+MANUAL_CAPTURE_FILE = Path.home() / ".delegation_core" / "capture_next_session"
 MAX_TEXT_LENGTH = 8000  # truncate very long individual messages
 
 
@@ -48,18 +49,23 @@ VENV_BIN = (
 )
 REINDEX_LOG = Path.home() / ".delegation_core" / "reindex.log"
 
+# subprocess exposes these constants only on Windows. Keeping their documented
+# numeric values makes this stdlib-only hook importable and testable on every
+# platform while preserving Windows process behavior.
+DETACHED_PROCESS = getattr(subprocess, "DETACHED_PROCESS", 0x00000008)
+CREATE_NEW_PROCESS_GROUP = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
+CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
+
 
 def _detached_popen_kwargs() -> dict:
     """Platform-appropriate kwargs to fully detach a background process.
 
-    POSIX: ``start_new_session`` (setsid) so the child survives the parent's
-    exit. Windows: ``start_new_session`` is silently ignored by subprocess
-    on that platform, so use DETACHED_PROCESS + CREATE_NEW_PROCESS_GROUP
-    instead, which achieve the equivalent (no console, own process group).
+    POSIX: ``start_new_session`` (setsid). Windows: the child is detached,
+    has its own process group, and is launched with no visible console window.
     """
     if platform.system() == "Windows":
         return {
-            "creationflags": subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+            "creationflags": DETACHED_PROCESS | CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP
         }
     return {"start_new_session": True}
 
@@ -69,6 +75,36 @@ def _load_config() -> dict:
         return json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
     except Exception:
         return {}
+
+
+def transcript_mode(config: dict) -> str:
+    """Read a safe mode from hand-edited JSON, preserving the old default."""
+    section = config.get("session_transcripts", {}) if isinstance(config, dict) else {}
+    mode = section.get("mode", "automatic") if isinstance(section, dict) else "automatic"
+    return mode if mode in {"automatic", "manual", "off"} else "automatic"
+
+
+def _manual_capture_requested(client: str = "claude") -> bool:
+    """Consume a single-use request for this client, or the explicit ``any`` one.
+
+    The legacy unqualified marker is treated as ``any`` so an in-flight manual
+    request survives an upgrade. Client-specific markers prevent a Codex session
+    from consuming an authorization made for Claude Code (and vice versa).
+    """
+    client = client if client in {"claude", "codex"} else "any"
+    markers = [MANUAL_CAPTURE_FILE.with_name(f"{MANUAL_CAPTURE_FILE.name}.{client}")]
+    if client != "any":
+        markers.append(MANUAL_CAPTURE_FILE.with_name(f"{MANUAL_CAPTURE_FILE.name}.any"))
+    markers.append(MANUAL_CAPTURE_FILE)
+    for marker in markers:
+        try:
+            marker.unlink()
+            return True
+        except FileNotFoundError:
+            continue
+        except OSError:
+            return False
+    return False
 
 
 def _resolve_sessions_dir(vault: Path, config: dict) -> Path:
@@ -119,6 +155,46 @@ def _trigger_reindex() -> bool:
         return False
 
 
+def _text_content(content: object) -> str:
+    """Extract text from Claude- and Codex-style message content blocks."""
+    if isinstance(content, str):
+        return content.strip()
+    if not isinstance(content, list):
+        return ""
+    parts = []
+    for block in content:
+        if not isinstance(block, dict):
+            continue
+        # Claude commonly uses ``text``. Codex response items use input_text
+        # and output_text blocks, which expose the same text field.
+        if block.get("type") in {"text", "input_text", "output_text"}:
+            text = block.get("text", "")
+            if isinstance(text, str) and text.strip():
+                parts.append(text.strip())
+    return "\n".join(parts)
+
+
+def _response_item_message(item: object) -> dict | None:
+    """Find the user/assistant message nested in a Codex ``response_item``.
+
+    Codex rollouts wrap response items in a payload (and some versions add an
+    ``item`` wrapper). Restrict the walk to those structural wrappers so tool
+    inputs and unrelated event metadata never become transcript messages.
+    """
+    current = item
+    for _ in range(3):
+        if not isinstance(current, dict):
+            return None
+        role = current.get("role")
+        if role in {"user", "assistant"} and "content" in current:
+            return current
+        next_item = current.get("payload", current.get("item"))
+        if next_item is None or next_item is current:
+            return None
+        current = next_item
+    return None
+
+
 def _parse_transcript(transcript_path: str) -> list[dict]:
     """Extract user and assistant text turns from the JSONL transcript."""
     messages = []
@@ -134,26 +210,20 @@ def _parse_transcript(transcript_path: str) -> list[dict]:
                     continue
 
                 msg_type = obj.get("type")
-                if msg_type not in ("user", "assistant"):
+                if msg_type in ("user", "assistant"):
+                    message = obj.get("message", {})
+                    role = message.get("role", msg_type)
+                elif msg_type == "response_item":
+                    message = _response_item_message(obj)
+                    if message is None:
+                        continue
+                    role = message["role"]
+                else:
                     continue
-
-                message = obj.get("message", {})
-                role = message.get("role", msg_type)
                 content = message.get("content", "")
                 ts = obj.get("timestamp", "")
 
-                if isinstance(content, str):
-                    text = content.strip()
-                elif isinstance(content, list):
-                    # Keep only text blocks; skip thinking, tool_use, tool_result
-                    parts = [
-                        c.get("text", "")
-                        for c in content
-                        if isinstance(c, dict) and c.get("type") == "text"
-                    ]
-                    text = "\n".join(parts).strip()
-                else:
-                    continue
+                text = _text_content(content)
 
                 if not text:
                     continue
@@ -253,6 +323,7 @@ def _topic(messages: list[dict]) -> str:
 
 def _format_markdown(
     messages: list[dict], session_id: str, cwd: str, segredos_removidos: int = 0,
+    client: str = "claude",
 ) -> str:
     date_str = _session_date(messages)
     time_str = datetime.now().strftime("%H:%M")
@@ -260,6 +331,7 @@ def _format_markdown(
 
     topic = _topic(messages)
 
+    client_label = "Codex" if client == "codex" else "Claude Code"
     lines = [
         "---",
         # Hyphen and not an em dash: the vault's writing rule forbids it, and
@@ -282,14 +354,14 @@ def _format_markdown(
         f"*Working directory: `{cwd}`*",
         "",
         "> This is a verbatim raw transcript. For the curated summary, see the",
-        "> `export_session` note written by Claude before ending the session.",
+        f"> `export_session` note written by {client_label} before ending the session.",
         "",
         "---",
         "",
     ])
 
     for msg in messages:
-        role_label = "### You" if msg["role"] == "user" else "### Claude"
+        role_label = "### You" if msg["role"] == "user" else f"### {client_label}"
         ts_label = f" *({msg['ts'][:16].replace('T', ' ')})*" if msg["ts"] else ""
         lines.append(f"{role_label}{ts_label}")
         lines.append("")
@@ -301,7 +373,7 @@ def _format_markdown(
     return "\n".join(lines)
 
 
-def main(raw: str | None = None) -> int:
+def main(raw: str | None = None, client: str = "claude") -> int:
     """Exporta a transcricao da sessao que terminou. `raw` e o JSON do hook;
     sem ele, le da entrada padrao. Devolve 0 sempre: o fim da sessao nunca
     pode falhar por causa do export."""
@@ -326,6 +398,13 @@ def main(raw: str | None = None) -> int:
         return 0
 
     config = _load_config()
+    mode = transcript_mode(config)
+    if mode == "off":
+        sys.stderr.write("session_export: transcript capture is off\n")
+        return 0
+    if mode == "manual" and not _manual_capture_requested(client):
+        sys.stderr.write("session_export: manual capture was not requested\n")
+        return 0
     vault_path = config.get("vault_path", "")
     if not vault_path:
         sys.stderr.write("session_export: delegation-core not configured — skipping export\n")
@@ -372,7 +451,7 @@ def main(raw: str | None = None) -> int:
         redacted_messages.append(m_copy)
 
     content = _format_markdown(
-        redacted_messages, session_id, cwd, segredos_removidos=total_removidos,
+        redacted_messages, session_id, cwd, segredos_removidos=total_removidos, client=client,
     )
     try:
         tmp = dest.with_suffix(".tmp")

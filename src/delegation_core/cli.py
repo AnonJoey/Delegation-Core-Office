@@ -314,10 +314,18 @@ def cmd_post_install(args):
     ganchos = r["hooks"]
     console.print(f"  session hooks: {ganchos['status']}"
                   + (f" ({ganchos['detail']})" if ganchos.get("detail") else ""))
+    codex_ganchos = r["codex_hooks"]
+    console.print(f"  Codex hooks: {codex_ganchos['status']}"
+                  + (" (restart Codex and review its trust prompt)"
+                     if codex_ganchos.get("trust_review_required") else ""))
     pele = r["skills"]
     if pele["available"]:
         console.print(f"  skills: {len(pele['installed'])} installed, "
                       f"{len(pele['kept_yours'])} kept yours")
+    codex_pele = r.get("codex_skills", {})
+    if codex_pele.get("available"):
+        console.print(f"  Codex skills: {len(codex_pele['installed'])} installed, "
+                      f"{len(codex_pele['kept_yours'])} kept yours")
     agentes = r.get("agents", {})
     if agentes.get("available"):
         console.print(f"  agents: {len(agentes['installed'])} installed, "
@@ -972,6 +980,44 @@ def cmd_ingest(args):
         console.print("[dim]Errors:[/dim]")
         for e in result["errors"]:
             console.print(f"  {e}")
+
+
+def cmd_session(args):
+    """Manage opt-in capture of raw Claude Code session transcripts."""
+    from .config import CONFIG_DIR, Config
+
+    cfg = Config.load()
+    section = cfg.session_transcripts if isinstance(cfg.session_transcripts, dict) else {}
+    mode = section.get("mode", "automatic")
+    if mode not in {"automatic", "manual", "off"}:
+        mode = "automatic"
+    marker_base = CONFIG_DIR / "capture_next_session"
+    pending = [client for client in ("claude", "codex", "any")
+               if marker_base.with_name(f"{marker_base.name}.{client}").exists()]
+    if marker_base.exists():
+        pending.append("any (legacy)")
+
+    if args.session_command == "status":
+        print(json.dumps({"mode": mode, "pending_capture_clients": pending}, indent=2))
+        return
+    if args.session_command == "mode":
+        cfg.session_transcripts = {"mode": args.mode}
+        cfg.save()
+        if args.mode != "manual":
+            for client in ("claude", "codex", "any"):
+                marker_base.with_name(f"{marker_base.name}.{client}").unlink(missing_ok=True)
+            marker_base.unlink(missing_ok=True)
+        print(f"Session transcript capture mode: {args.mode}")
+        return
+    if args.session_command == "capture-next":
+        if mode != "manual":
+            print("Session transcript mode is not manual. Set it first with: delegation-core session mode manual")
+            sys.exit(2)
+        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        marker = marker_base.with_name(f"{marker_base.name}.{args.client}")
+        marker.touch(exist_ok=True)
+        target = "either supported client" if args.client == "any" else args.client
+        print(f"The next completed {target} session will be saved to the vault.")
 
 
 def cmd_relink(args):
@@ -2079,6 +2125,15 @@ def main():
                           help="Maximum seconds to wait for daemon job to complete (default 3600s, 0 for unlimited)")
     _add_local_flag(p_ingest)
 
+    p_session = sub.add_parser("session", help="Configure raw Claude Code transcript capture")
+    session_sub = p_session.add_subparsers(dest="session_command", metavar="session-command")
+    session_sub.add_parser("status", help="Show transcript capture mode and pending manual capture")
+    p_session_mode = session_sub.add_parser("mode", help="Set automatic, manual, or off transcript capture")
+    p_session_mode.add_argument("mode", choices=["automatic", "manual", "off"])
+    p_capture_next = session_sub.add_parser("capture-next", help="In manual mode, save the next completed client session")
+    p_capture_next.add_argument("--client", choices=["claude", "codex", "any"], required=True,
+                                help="Client whose next completed session may be captured")
+
     p_relink = sub.add_parser("relink", help="Add wikilinks to notes in a vault subfolder")
     _add_local_flag(p_relink)
     p_relink.add_argument("folder",                   help="Vault-relative folder path (e.g. meetings)")
@@ -2273,6 +2328,11 @@ def main():
             process_dispatch[args.process_command](args)
         else:
             p_process.print_help()
+    elif args.command == "session":
+        if args.session_command:
+            cmd_session(args)
+        else:
+            p_session.print_help()
     elif args.command in dispatch:
         dispatch[args.command](args)
     else:

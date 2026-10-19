@@ -186,6 +186,30 @@ def test_sem_segredo_a_nota_nao_ganha_o_campo(hook, monkeypatch, tmp_path):
     assert "type: session-transcript" in nota
 
 
+@pytest.mark.parametrize("config", [
+    {"session_transcripts": {"mode": "off"}},
+    {"session_transcripts": {"mode": "manual"}},
+])
+def test_capture_disabled_or_manual_without_marker_does_not_write(hook, monkeypatch, tmp_path, config):
+    """The policy is enforced before the hook opens a transcript or vault file."""
+    import io
+    import json as _json
+
+    vault = tmp_path / "vault"
+    transcript = tmp_path / "transcript.jsonl"
+    transcript.write_text(_json.dumps({
+        "type": "user", "message": {"role": "user", "content": "private chat"},
+    }) + "\n", encoding="utf-8")
+    monkeypatch.setattr(hook, "_load_config", lambda: {"vault_path": str(vault), **config})
+    monkeypatch.setattr(hook, "MANUAL_CAPTURE_FILE", tmp_path / "capture_next_session")
+    monkeypatch.setattr(hook.sys, "stdin", io.StringIO(_json.dumps({
+        "transcript_path": str(transcript), "session_id": "session-1", "cwd": str(tmp_path),
+    })))
+
+    assert hook.main() == 0
+    assert not (vault / "Sessions").exists()
+
+
 def test_a_ancora_do_frontmatter_existe_de_verdade(hook):
     """O contador e injetado depois de `type: session-transcript`. Se o
     formatador deixar de emitir essa linha, a contagem some sem erro nenhum e

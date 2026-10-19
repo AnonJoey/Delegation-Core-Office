@@ -294,7 +294,12 @@ def test_config_update_saves_new_settings(server):
     assert cfg.search_threshold == 0.65
 
 
-def test_purge_orphans_endpoint(server):
+def test_purge_orphans_endpoint(server, monkeypatch, tmp_path):
+    import psutil
+    from delegation_core import client_tracking
+
+    monkeypatch.setattr(client_tracking, "SESSIONS_DIR", tmp_path / "sessions")
+    monkeypatch.setattr(psutil, "process_iter", lambda _attrs: [])
     port, _, _ = server
     conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
     conn.request("POST", "/api/system/purge_orphans", body="{}", headers={**AUTH, "Content-Type": "application/json"})
