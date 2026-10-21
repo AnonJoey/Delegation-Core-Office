@@ -27,7 +27,14 @@ from pathlib import Path
 CONFIG_PATH = Path.home() / ".delegation_core" / "config.json"
 MANUAL_CAPTURE_FILE = Path.home() / ".delegation_core" / "capture_next_session"
 MAX_TEXT_LENGTH = 8000  # truncate very long individual messages
-CODEX_PREAMBLE_TAG = "<environment_context>"
+# Codex can inject its own AGENTS.md instructions and environment block into a
+# ``response_item`` that it labels as a user turn. Depending on the client
+# version, the block is either the whole message or follows a prose wrapper
+# such as "The following ...". Only line-start markers are considered so a
+# person asking about either term in normal prose remains part of the record.
+CODEX_AUTOMATIC_CONTEXT = re.compile(
+    r"(?m)^(?:# AGENTS\.md instructions\b|<environment_context>)"
+)
 
 
 def _yaml_quote_scalar(value: str) -> str:
@@ -248,10 +255,13 @@ def _parse_transcript(transcript_path: str) -> list[dict]:
                 if not text:
                     continue
 
-                # Codex records its own session preamble as a user turn. It is
-                # the client talking, not the person, and would otherwise be
-                # the first "You" message and the source of the note's topic.
-                if msg_type == "response_item" and text.startswith(CODEX_PREAMBLE_TAG):
+                # Codex records its own AGENTS/environment preamble as a user
+                # turn. It can be a standalone block or sit after a prose
+                # wrapper, and would otherwise become the note topic. This is
+                # specific to Codex response items, never ordinary Claude/user
+                # transcript records.
+                if (msg_type == "response_item" and role == "user"
+                        and CODEX_AUTOMATIC_CONTEXT.search(text)):
                     continue
 
                 if len(text) > MAX_TEXT_LENGTH:
