@@ -203,8 +203,14 @@ STOP_TIMEOUT_SEC = 600
 
 def _run(cmd: list[str], timeout: int = 30) -> tuple[int, str]:
     try:
-        p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, **sem_janela())
-        return p.returncode, (p.stdout + p.stderr).strip()
+        kwargs = sem_janela(capture_output=True, text=True, timeout=timeout)
+        if platform.system() == "Windows":
+            # `schtasks.exe` escreve na code page ANSI local. `PYTHONUTF8=1`
+            # mudaria a decodificacao padrao do subprocess para UTF-8 e pode
+            # fazer um `service restart` falhar antes de receber sua resposta.
+            kwargs.update(encoding="mbcs", errors="replace")
+        p = subprocess.run(cmd, **kwargs)
+        return p.returncode, ((p.stdout or "") + (p.stderr or "")).strip()
     except FileNotFoundError:
         return 127, f"{cmd[0]} not found"
     except subprocess.TimeoutExpired:

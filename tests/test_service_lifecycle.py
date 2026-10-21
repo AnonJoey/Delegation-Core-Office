@@ -21,9 +21,16 @@ gerenciador ACEITA o pedido, nao quando o daemon atende.
 """
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 
 from delegation_core import service
+
+# A fixture automatica troca ``service._run`` para impedir chamadas reais ao
+# gerenciador de servico. Estes dois testes guardam o helper original, mas
+# ainda trocam ``subprocess.run`` antes de chama-lo.
+_run_real = service._run
 
 
 @pytest.fixture
@@ -48,6 +55,38 @@ def _startup_isolado(monkeypatch, tmp_path):
     monkeypatch.setattr(service, "WIN_STARTUP_DIR", tmp_path)
     monkeypatch.setattr(service, "WIN_STARTUP_CMD", tmp_path / "delegation-core.cmd")
     monkeypatch.setattr(service, "WIN_STARTUP_VBS", tmp_path / "delegation-core.vbs")
+
+
+def test_windows_run_le_schtasks_na_codepage_do_sistema(monkeypatch):
+    """UTF-8 forçado no processo pai não pode quebrar o `schtasks.exe`."""
+    _em("Windows", monkeypatch)
+    chamado = {}
+
+    def executar(cmd, **kwargs):
+        chamado["cmd"] = cmd
+        chamado.update(kwargs)
+        return SimpleNamespace(returncode=0, stdout=None, stderr=None)
+
+    monkeypatch.setattr(service.subprocess, "run", executar)
+
+    assert _run_real(["schtasks", "/End", "/TN", "delegation-core"]) == (0, "")
+    assert chamado["encoding"] == "mbcs"
+    assert chamado["errors"] == "replace"
+
+
+def test_unix_run_mantem_a_decodificacao_padrao(monkeypatch):
+    _em("Linux", monkeypatch)
+    chamado = {}
+
+    def executar(cmd, **kwargs):
+        chamado.update(kwargs)
+        return SimpleNamespace(returncode=0, stdout="ok", stderr="")
+
+    monkeypatch.setattr(service.subprocess, "run", executar)
+
+    assert _run_real(["systemctl", "--user", "status", "delegation-core"]) == (0, "ok")
+    assert "encoding" not in chamado
+    assert "errors" not in chamado
 
 
 # ── o timeout, que e a razao de stop existir separado ───────────────────────
