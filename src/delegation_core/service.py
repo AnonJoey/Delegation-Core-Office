@@ -209,7 +209,7 @@ def _run(cmd: list[str], timeout: int = 30) -> tuple[int, str]:
             # mudaria a decodificacao padrao do subprocess para UTF-8 e pode
             # fazer um `service restart` falhar antes de receber sua resposta.
             kwargs.update(encoding="mbcs", errors="replace")
-        p = subprocess.run(cmd, **kwargs)
+        p = subprocess.run(cmd, **sem_janela(**kwargs))
         return p.returncode, ((p.stdout or "") + (p.stderr or "")).strip()
     except FileNotFoundError:
         return 127, f"{cmd[0]} not found"
