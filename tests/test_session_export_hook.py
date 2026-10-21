@@ -156,6 +156,56 @@ def test_o_preambulo_que_o_codex_grava_como_fala_do_usuario_nao_entra(hook, tmp_
     assert hook._topic(mensagens) == "heartbeat"
 
 
+def test_contexto_do_codex_com_wrapper_e_instrucoes_agents_nao_entra(hook, tmp_path):
+    """O Codex tambem pode embrulhar o contexto automatico em texto antes
+    dos blocos. A fixture reproduz a estrutura observada, sem caminho ou regra
+    de projeto reais."""
+    import json
+
+    def fala(hora, texto):
+        return json.dumps({
+            "timestamp": f"2026-10-20T20:48:{hora}Z", "type": "response_item",
+            "payload": {"type": "message", "role": "user",
+                        "content": [{"type": "input_text", "text": texto}]},
+        })
+
+    contexto_automatico = """The following instructions apply to this session.
+
+# AGENTS.md instructions for C:\\workspace\\sample
+Use the project conventions.
+
+<environment_context>
+  <cwd>C:\\workspace\\sample</cwd>
+  <shell>powershell</shell>
+</environment_context>"""
+    pedido_real = "Validate the parser regression with a harmless example."
+    transcript = tmp_path / "codex-rollout.jsonl"
+    transcript.write_text(
+        fala("12", contexto_automatico) + "\n" + fala("13", pedido_real) + "\n",
+        encoding="utf-8",
+    )
+
+    mensagens = hook._parse_transcript(str(transcript))
+
+    assert [m["text"] for m in mensagens] == [pedido_real]
+    assert hook._topic(mensagens) == pedido_real
+
+
+def test_mencao_normal_dos_marcadores_pelo_usuario_do_codex_e_preservada(hook, tmp_path):
+    """A regra procura marcadores no inicio da linha, nao uma mera mencao."""
+    import json
+
+    pergunta = "Can you explain why # AGENTS.md instructions mention <environment_context>?"
+    transcript = tmp_path / "codex-question.jsonl"
+    transcript.write_text(json.dumps({
+        "timestamp": "2026-10-20T20:48:14Z", "type": "response_item",
+        "payload": {"type": "message", "role": "user",
+                    "content": [{"type": "input_text", "text": pergunta}]},
+    }) + "\n", encoding="utf-8")
+
+    assert [m["text"] for m in hook._parse_transcript(str(transcript))] == [pergunta]
+
+
 def test_a_fala_do_usuario_no_claude_que_comeca_igual_nao_e_descartada(hook, tmp_path):
     """O filtro e do formato do Codex; no Claude Code a mesma abertura e do usuario."""
     transcript = tmp_path / "claude.jsonl"
