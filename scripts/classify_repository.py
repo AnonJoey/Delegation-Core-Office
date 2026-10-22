@@ -151,7 +151,7 @@ def extract_ast_metadata(filepath: Path, src_dir: Path) -> Dict[str, Any]:
         "top_level_functions": top_level_functions
     }
 
-def call_remote_classifier(batch: List[Dict[str, Any]], timeout: int = 120) -> Dict[str, Any]:
+def call_remote_classifier(batch: List[Dict[str, Any]], timeout: int = 180, retries: int = 2) -> Dict[str, Any]:
     user_content = "Classifique os seguintes módulos e suas funções:\n" + json.dumps(batch, indent=2, ensure_ascii=False)
     
     payload = {
@@ -165,17 +165,23 @@ def call_remote_classifier(batch: List[Dict[str, Any]], timeout: int = 120) -> D
         "response_format": {"type": "json_object"}
     }
 
-    req = urllib.request.Request(
-        LLAMA_URL,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"}
-    )
-    
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        body = resp.read().decode("utf-8")
-        data = json.loads(body)
-        raw_msg = data["choices"][0]["message"]["content"]
-        return json.loads(raw_msg)
+    last_err = None
+    for attempt in range(retries):
+        try:
+            req = urllib.request.Request(
+                LLAMA_URL,
+                data=json.dumps(payload).encode("utf-8"),
+                headers={"Content-Type": "application/json"}
+            )
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                body = resp.read().decode("utf-8")
+                data = json.loads(body)
+                raw_msg = data["choices"][0]["message"]["content"]
+                return json.loads(raw_msg)
+        except Exception as e:
+            last_err = e
+            time.sleep(2)
+    raise last_err
 
 def save_classifications(db_path: Path, result: Dict[str, Any], batch_meta: List[Dict[str, Any]]):
     meta_lookup = {m["module_path"]: m for m in batch_meta}
@@ -275,8 +281,8 @@ def main():
             dt = time.time() - t0
             return (False, idx, m_names, dt, str(e))
 
-    # Executar com pool de 3 threads
-    with ThreadPoolExecutor(max_workers=3) as executor:
+    # Executar sequencialmente (o llama-server opera com -np 1)
+    with ThreadPoolExecutor(max_workers=1) as executor:
         futures = {executor.submit(process_batch, i, b): (i, b) for i, b in enumerate(batches)}
         for fut in as_completed(futures):
             ok, idx, m_names, dt, err = fut.result()
