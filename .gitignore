@@ -31,3 +31,9 @@ htmlcov/
 # Operating system files
 # -----------------------------------------------------------------------------
 .DS_Store
+
+# Local audit databases and logs
+# -----------------------------------------------------------------------------
+audit_delegation_core.db*
+*.pid
+audit_pipeline.log

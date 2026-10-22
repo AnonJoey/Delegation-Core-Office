@@ -88,6 +88,7 @@ import faulthandler
 import functools
 import json
 import logging
+import signal
 import sys
 import threading
 from datetime import datetime
@@ -1630,6 +1631,22 @@ def run_server(cfg: Config):
             pass
         _cleanup_own_session_file()
     atexit.register(_cleanup)
+
+    def _sigterm_handler(signum, frame):
+        logger.info("Sinal %s recebido no daemon delegation-core; executando parada graciosa...", signum)
+        try:
+            if "_worker" in globals() and _worker:
+                _worker.stop()
+        except Exception:
+            pass
+        _cleanup()
+        sys.exit(0)
+
+    try:
+        signal.signal(signal.SIGTERM, _sigterm_handler)
+        signal.signal(signal.SIGINT, _sigterm_handler)
+    except (ValueError, AttributeError):
+        pass  # Ignora caso executado fora da thread principal (ex: em fixtures de teste)
 
     mcp.add_middleware(_ClientTrackingMiddleware())
 

@@ -102,6 +102,7 @@ _vault = None   # set once in run() — VaultManager, shared across every reques
 _token = ""     # bearer token every request must present; empty rejects everything.
 _tracker = None  # set once in run() — ProcessTracker, same shared-instance reasoning
 _engine = None   # lazy DelegationEngine, only for llama.cpp start/stop — see _get_engine()
+_engine_lock = threading.Lock()
 
 
 def _get_engine():
@@ -123,9 +124,11 @@ def _get_engine():
     """
     global _engine
     if _engine is None:
-        from .engine import DelegationEngine
-        _engine = DelegationEngine(_cfg)
-        atexit.unregister(_engine._shutdown)
+        with _engine_lock:
+            if _engine is None:
+                from .engine import DelegationEngine
+                _engine = DelegationEngine(_cfg)
+                atexit.unregister(_engine._shutdown)
     return _engine
 
 
