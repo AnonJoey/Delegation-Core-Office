@@ -35,5 +35,6 @@ htmlcov/
 # Local audit databases and logs
 # -----------------------------------------------------------------------------
 audit_delegation_core.db*
+repo_classification.db*
 *.pid
 audit_pipeline.log
