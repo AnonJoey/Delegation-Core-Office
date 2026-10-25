@@ -41,6 +41,7 @@ def fake_stef(monkeypatch):
     FakeSTEF.fail_on = ()
     FakeSTEF.constructions = []
     monkeypatch.setattr(embeddings, "EmbedderSentenceTransformer", FakeSTEF)
+    monkeypatch.setattr(embeddings, "_importar_sentence_transformers", lambda: None)
     return FakeSTEF
 
 
