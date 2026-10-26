@@ -175,10 +175,15 @@ def _effective_max_seq_length(model_name: str, requested: int | None) -> int | N
         return None
     ceiling = profile_for(model_name).get("max_seq")
     if ceiling and requested > ceiling:
-        logger.warning(
-            "Configured max_seq_length=%d exceeds %s's %d-token window: clamping to %d",
-            requested, model_name, ceiling, ceiling,
-        )
+        # Uma vez por par modelo e valor: esta funcao roda a cada carga do modelo, e
+        # numa maquina medida em 26/10/2026 o mesmo aviso apareceu 1.055 vezes em 27 dias.
+        if (model_name, requested) not in _CLAMPS_JA_AVISADOS:
+            _CLAMPS_JA_AVISADOS.add((model_name, requested))
+            logger.warning(
+                "Configured max_seq_length=%d exceeds %s's %d-token window: clamping to %d "
+                "(set embed_max_seq_length to %d to silence this)",
+                requested, model_name, ceiling, ceiling, ceiling,
+            )
         return ceiling
     return requested
 
@@ -591,6 +596,21 @@ def construir_embedding_function(cfg, torch_builder):
                               batch_size=cfg.embed_batch_size,
                               device=getattr(cfg, "embed_device", "auto")),
         getattr(cfg, "embed_load_timeout_sec", 600))
+
+
+_CLAMPS_JA_AVISADOS: set[tuple[str, int]] = set()
+
+
+def sem_surrogatos(texto: str) -> str:
+    """Tira os caracteres substitutos soltos (U+D800 a U+DFFF) de um texto.
+
+    Texto extraido de PDF com fonte quebrada traz esses caracteres, e o tokenizador
+    nao os aceita: levanta `TypeError: TextEncodeInput must be Union[...]`, que nao
+    diz qual era o problema. Reproduzido em 26/10/2026 com `"a\\ud800b"`. O arquivo
+    inteiro ficava fora da busca por causa de um caractere."""
+    if not isinstance(texto, str):
+        return texto
+    return texto.encode("utf-8", "ignore").decode("utf-8")
 
 
 def chunk_text(text: str, max_chars: int = 4000, overlap: int = 200) -> list[str]:

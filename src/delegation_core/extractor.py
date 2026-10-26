@@ -332,6 +332,10 @@ def _html(path: Path) -> str:
 
 def _pdf(path: Path) -> str:
     import pypdf
+    # O pypdf avisa a cada fonte CFF e a cada objeto malformado: 5.282 e 733 linhas em 27
+    # dias numa maquina medida em 26/10/2026, em cima de um log de 14.799. Quem falha de
+    # verdade levanta excecao, e e essa que o chamador registra.
+    logging.getLogger("pypdf").setLevel(logging.ERROR)
     reader = pypdf.PdfReader(str(path))
     pages = []
     for i, page in enumerate(reader.pages):

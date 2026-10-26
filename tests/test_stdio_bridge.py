@@ -140,7 +140,7 @@ def test_o_token_vai_no_cabecalho_e_aponta_para_o_daemon(cfg, monkeypatch):
 def _modulo_fastmcp_falso(transporte):
     import types
     m = types.ModuleType("fastmcp")
-    m.Client = lambda t: ("cliente", t)
+    m.Client = lambda t, **kw: ("cliente", t, kw)
     return m
 
 

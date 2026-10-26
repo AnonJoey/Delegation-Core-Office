@@ -685,8 +685,13 @@ class IngestManager:
         return {"source": source_str, "removed_chunks": removed, "registry_entry_removed": had_entry}
 
 
-    def status(self) -> dict:
-        """Return the ingestion registry: which paths have been indexed, file counts and existence."""
+    def status(self, detalhe: bool = False) -> dict:
+        """Return the ingestion registry: which paths have been indexed, file counts and existence.
+
+        Por padrao cada fonte traz `file_count` e nao a lista de arquivos com carimbo:
+        numa maquina com 1.269 arquivos numa fonte so, a resposta inteira passava de
+        326 mil caracteres e o cliente MCP a recusava (26/10/2026). `detalhe=True`
+        devolve a lista, que e o que quem precisa de um arquivo especifico pede."""
         registry = _load_registry()
         sources_status = {}
         missing_sources = []
@@ -694,6 +699,8 @@ class IngestManager:
             exists = Path(src).exists()
             entry = dict(info) if isinstance(info, dict) else {"last_indexed": str(info)}
             entry["exists"] = exists
+            if not detalhe and isinstance(entry.get("files"), dict):
+                entry["file_count"] = len(entry.pop("files"))
             if not exists:
                 missing_sources.append(src)
             sources_status[src] = entry

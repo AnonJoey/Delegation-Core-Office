@@ -634,6 +634,21 @@ async def heartbeat(force: bool = False) -> str:
     Pass force=true to bypass the 5-minute vault_health cache and recalculate live.
     """
     cfg = _engine.cfg
+    # Na partida o BGE e o indice carregam numa thread, e get_stats() abaixo espera por
+    # eles. Numa maquina medida em 26/10/2026 isso levava cerca de 25 s depois de a porta
+    # abrir, e o Claude Code desiste de reconectar em cerca de 15 s: a primeira sessao do
+    # dia abria sem as ferramentas. Responder "starting" na hora deixa o cliente ver o
+    # daemon de pe e tentar de novo. So na primeira abertura, e so sem erro de init.
+    if (getattr(_vault, "ja_ficou_pronto", True) is False
+            and not getattr(_vault, "init_error", None)):
+        return json.dumps({
+            "status": "starting",
+            "timestamp": datetime.now().isoformat(),
+            "engine_mode": cfg.engine_mode,
+            "detail": "the embedding model and the index are still loading; search and "
+                      "the vault tools answer once that finishes, usually under a minute. "
+                      "Call heartbeat again.",
+        })
     # In agent mode there is no local model, so llama being "offline" is the
     # expected healthy state. In hybrid mode llama is started on demand for
     # big/bulk tasks, so "not running yet" is also healthy — only pure local
@@ -1282,9 +1297,12 @@ def ingest_configured_bg(name: str = "", force: bool = False) -> str:
 
 
 @mcp.tool()
-def ingest_status() -> str:
-    """Return the ingestion registry: which external paths have been indexed and when."""
-    return json.dumps(_ingest.status())
+def ingest_status(detalhe: bool = False) -> str:
+    """Return the ingestion registry: which external paths have been indexed and when.
+
+    Each source reports its `file_count`. Pass detalhe=True for the per-file list,
+    which on a large source is hundreds of KB."""
+    return json.dumps(_ingest.status(detalhe=detalhe))
 
 
 @mcp.tool()

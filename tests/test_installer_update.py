@@ -119,6 +119,57 @@ def test_arquivo_REALMENTE_customizado_e_preservado(arvore):
     assert (cfg / "AGENT_GUIDE.dist.md").read_text() == "guia v2\n"
 
 
+def _entregue(raiz, doc, *conteudos):
+    import json
+    hashes = [installer.hash_do_doc(c.encode()) for c in conteudos]
+    (raiz / "versoes_entregues_docs.json").write_text(json.dumps({doc: hashes}), encoding="utf-8")
+
+
+def test_copia_antiga_que_nunca_foi_editada_e_atualizada(arvore):
+    """26/10/2026: um CLAUDE_SYSTEM_PROMPT.md identico ao de 21/07 ficava parado, e o
+    AGENT_GUIDE.md local, 81 linhas atras, e o que o CLAUDE.md global carrega em toda sessao."""
+    raiz, cfg = arvore
+    (cfg / "AGENT_GUIDE.md").write_text("guia v1\n", encoding="utf-8")
+    _entregue(raiz, "AGENT_GUIDE.md", "guia v1\n", "guia v2\n")
+
+    r = installer.refresh_shipped_files(raiz)
+
+    assert "AGENT_GUIDE.md" in r["updated"] and "AGENT_GUIDE.md" not in r["kept_yours"]
+    assert (cfg / "AGENT_GUIDE.md").read_text() == "guia v2\n"
+    assert not (cfg / "AGENT_GUIDE.dist.md").exists()
+
+
+def test_copia_com_fim_de_linha_do_windows_ainda_e_reconhecida(arvore):
+    """O checkout no Windows grava CRLF; o hash do git e o do arquivo em disco nao batem sem normalizar."""
+    raiz, cfg = arvore
+    (cfg / "AGENT_GUIDE.md").write_bytes(b"guia v1\r\nlinha 2\r\n")
+    _entregue(raiz, "AGENT_GUIDE.md", "guia v1\nlinha 2\n", "guia v2\n")
+
+    assert "AGENT_GUIDE.md" in installer.refresh_shipped_files(raiz)["updated"]
+
+
+def test_copia_editada_continua_preservada_mesmo_com_a_lista_de_versoes(arvore):
+    raiz, cfg = arvore
+    (cfg / "AGENT_GUIDE.md").write_text("guia v1 com a minha linha\n", encoding="utf-8")
+    _entregue(raiz, "AGENT_GUIDE.md", "guia v1\n", "guia v2\n")
+
+    r = installer.refresh_shipped_files(raiz)
+
+    assert "AGENT_GUIDE.md" in r["kept_yours"] and not r["updated"]
+    assert (cfg / "AGENT_GUIDE.md").read_text() == "guia v1 com a minha linha\n"
+
+
+def test_versoes_dos_docs_cobrem_o_que_o_repo_entrega():
+    """Editar um doc sem regerar o JSON deixaria o proximo update cego para a versao que acabou de sair."""
+    from pathlib import Path
+    raiz = Path(__file__).resolve().parents[1]
+    v = installer.versoes_entregues_dos_docs(raiz)
+    assert v, "versoes_entregues_docs.json ausente ou vazio: rode scripts/regerar_versoes_dos_docs.py"
+    for doc in installer.SHIPPED_DOCS:
+        assert installer.hash_do_doc((raiz / doc).read_bytes()) in v.get(doc, set()), \
+            f"{doc}: rode scripts/regerar_versoes_dos_docs.py"
+
+
 def test_hooks_nao_sao_mais_copiados(arvore):
     """Desde a v0.15.0 os hooks rodam do pacote e sao registrados, nao copiados
     (clients.register_session_hooks). Uma arvore que ainda tenha hooks/ nao pode

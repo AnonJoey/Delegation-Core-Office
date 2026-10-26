@@ -113,6 +113,8 @@ def cmd_run(args):
             logging.StreamHandler(sys.stderr),
         ],
     )
+    from . import filtro_de_log
+    filtro_de_log.instalar()
 
     if cfg.budget_mode == "auto" and cfg.tok_sec == 0.0:
         from .engine import DelegationEngine
@@ -310,6 +312,7 @@ def cmd_post_install(args):
 
     docs = r["docs"]
     console.print(f"  docs: {len(docs['installed'])} installed, "
+                  f"{len(docs.get('updated', []))} updated, "
                   f"{len(docs['unchanged'])} unchanged, {len(docs['kept_yours'])} kept yours")
     ganchos = r["hooks"]
     console.print(f"  session hooks: {ganchos['status']}"

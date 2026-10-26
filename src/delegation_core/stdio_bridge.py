@@ -46,15 +46,31 @@ def build_proxy(cfg: Config):
     `claude_desktop_config.json`, which is the other reason not to write an HTTP
     entry there.
     """
+    from fastmcp.server import create_proxy
+
+    return create_proxy(cliente_da_ponte(cfg))
+
+
+def cliente_da_ponte(cfg: Config):
+    """O cliente que a ponte usa contra o daemon, com identidade propria.
+
+    Sem `client_info` o handshake sai com o nome padrao da biblioteca, e o
+    list_mcp_clients mostrava toda conexao vinda de um cliente stdio como
+    "mcp 0.1.0" (diagnostico de 26/10/2026). O nome do cliente real, o Claude
+    Desktop, nao e repassado: o proxy abre uma sessao nova por chamada e a API
+    para ler o handshake do lado de la varia entre versoes do fastmcp."""
     from fastmcp import Client
     from fastmcp.client.transports import StreamableHttpTransport
-    from fastmcp.server import create_proxy
+    from mcp.types import Implementation
+
+    from . import __version__
 
     transporte = StreamableHttpTransport(
         url=cfg.server_url,
         headers={"Authorization": f"Bearer {cfg.server_token}"},
     )
-    return create_proxy(Client(transporte))
+    return Client(transporte, client_info=Implementation(
+        name="delegation-core-stdio-bridge", version=__version__))
 
 
 def run(cfg: Config | None = None) -> int:

@@ -40,6 +40,7 @@ from .config import Config
 from .index_lock import abrir_cliente, close_chroma_client, index_lock_of, reads_index, uses_index
 from .embeddings import (
     chunk_text,
+    sem_surrogatos,
     effective_chunk_chars,
     construir_embedding_function,
     make_bge_embedding_function,
@@ -103,6 +104,8 @@ class VaultManager:
         self.collection = None
         self.ef = None
         self._initialized = False
+        #: True depois da primeira abertura e nunca mais False (o heartbeat diz "starting" so ate la).
+        self.ja_ficou_pronto = False
         #: Ultima falha ao subir BGE/ChromaDB, ou None. Lida pelo heartbeat.
         self.init_error: str | None = None
         self._init_lock = threading.Lock()
@@ -226,6 +229,7 @@ class VaultManager:
             # Taken after the open: a write landing mid-open shows up next call.
             self._disk_state = self._read_disk_state()
             self._initialized = True  # only reached on successful init
+            self.ja_ficou_pronto = True
             stats = self.get_stats()
             recuperacao.depois_de_abrir(self.cfg)
             logger.info("Index ready (%s): %d chunks across, %d indexed documents; "
@@ -541,6 +545,7 @@ class VaultManager:
         of it could not be found by any query.
         """
         self._ensure_ready()
+        content = sem_surrogatos(content)
         if not self.collection:
             # Silent until 2026-09-02, and it is the worst of the two failure
             # paths: every write path in the project reaches here, twenty of the

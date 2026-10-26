@@ -66,6 +66,21 @@ def log(msg: str) -> None:
         pass
 
 
+def log_sem_repetir(msg: str) -> None:
+    """Grava `msg` so se a ultima linha do log nao for a mesma mensagem.
+
+    O servidor local de uma maquina com MLX nao tem /slots: toda sessao caia na
+    guarda 3 e escrevia a mesma linha (49 vezes entre 06 e 25/10/2026, medido no
+    diagnostico de uma maquina macOS). A guarda continua valendo; so o ruido sai."""
+    try:
+        ultima = LOG.read_text(encoding="utf-8").rstrip("\n").rsplit("\n", 1)[-1]
+    except OSError:
+        ultima = ""
+    if ultima.endswith(" " + msg):
+        return
+    log(msg)
+
+
 def load_config() -> dict:
     try:
         return json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
@@ -191,12 +206,13 @@ def main(raw: str | None = None) -> int:
     binary = cfg.get("llama_binary", "llama-server")
 
     if http_json(f"http://127.0.0.1:{port}/health") is None:
-        log(f"guarda 2: nada respondendo em {port}, nada a fazer")
+        log_sem_repetir(f"guarda 2: nada respondendo em {port}, nada a fazer")
         return 0
 
     busy = is_busy(port)
     if busy is None:
-        log("guarda 3: /slots nao respondeu, nao da para saber se esta ocupado, nao paro")
+        log_sem_repetir("guarda 3: /slots nao respondeu (servidor sem /slots, como o mlx_lm.server), "
+                        "nao da para saber se esta ocupado, nao paro")
         return 0
     if busy:
         log("guarda 3: slot processando, deixo rodando")
