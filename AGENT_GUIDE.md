@@ -53,7 +53,7 @@ tool is right and this file is stale.
 
 ### `heartbeat()`
 Check that llama.cpp and the vector index are online.  
-Call this after `capabilities()`. If status is `degraded`, warn the user before proceeding.
+Call this after `capabilities()`. If status is `degraded`, warn the user before proceeding. If it is `starting`, the daemon just came up and is still loading the embedding model and the index: wait a few seconds and call it again, without warning the user.
 
 ```json
 → { "status": "healthy", "llama_cpp": "online", "vault": { "indexed_notes": 247, ... } }
@@ -100,9 +100,11 @@ writer beside the daemon.
 
 Valid folders are the `heartbeat()` → `vault.folder_counts` keys, and are matched
 **case-insensitively** — passing `write_note(folder="decisions")` or `write_note(folder="Decisions")`
-automatically resolves to the vault's configured folder casing. On this vault they are: `Projects`,
-`Decisions`, `Fixes`, `Sessions`, `Procedures`, `Reference`, `Tools`, `Scratch`,
-`Infrastructure`. There is no `research` folder — research notes go to `Reference`.
+automatically resolves to the vault's configured folder casing. The set differs
+from one vault to another, so read it from `heartbeat()` → `vault.folder_counts`
+rather than assuming one: a vault may have a `research` folder where another sends
+research notes to `Reference`. A folder that is not configured is refused, and the
+error lists the valid ones.
 
 ```json
 → { "status": "ok", "path": "2026-06-03-Q3-budget-decision.md", "folder": "Decisions" }

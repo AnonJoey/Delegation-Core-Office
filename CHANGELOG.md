@@ -13,6 +13,18 @@ This changelog is derived directly from the canonical versioning recorded across
 ### Fixed
 - **O indice SQLite deixa de ir para dentro do vault quando o vault esta numa pasta sincronizada, e passa a respeitar `index_path`.** Achado no diagnostico de 26/10/2026 de uma maquina cujo vault esta no OneDrive e cujo indice do Chroma mora em `~/.delegation_core/indice`: `Config.sqlite_path` era sempre `vault/.indice_sqlite` e ignorava `index_path`, entao `index-migrate` poria o indice de volta onde ele ja se corrompeu duas vezes. Agora, com `index_path`, o SQLite fica ao lado dele (`indice_sqlite`); sem `index_path` e com o vault sincronizado, vai para `~/.delegation_core/indice_sqlite`; um indice SQLite que ja existe dentro do vault continua valendo onde esta. `index-migrate` recusa destino em pasta sincronizada sem `--force`. Quatro testes novos e um de migracao; os dois que guardam o comportamento reprovam quando a regra e removida.
 
+- **Achados do diagnostico de 26/10/2026 (maquina macOS), os que sao codigo.** Cada um conferido antes de corrigir, com teste:
+  - `index_note` limpa caracteres substitutos soltos (U+D800 a U+DFFF) antes de dividir e embutir. Reproduzido: o tokenizador levanta `TypeError: TextEncodeInput must be Union[...]` com `"a\\ud800b"`, e o PDF inteiro ficava fora da busca por um caractere.
+  - `ingest_status` devolve `file_count` por fonte em vez da lista de arquivos (326 mil caracteres numa fonte de 1.269 arquivos, acima do limite do cliente); `detalhe=true` devolve a lista.
+  - `AGENT_GUIDE.md` deixa de listar as pastas de um vault especifico e manda ler `heartbeat().vault.folder_counts`.
+  - O hook de fim de sessao grava uma vez so a linha da guarda 3 quando o servidor local nao tem `/slots` (como o `mlx_lm.server`): eram 49 linhas iguais em 20 dias. A guarda segue valendo.
+  - Cliente MCP desconectando (`ClosedResourceError` e parentes) sai como INFO e nao como ERROR; o traceback fica.
+  - O aviso `clamping to 512` sai uma vez por modelo e valor, e diz qual `embed_max_seq_length` usar (eram 1.055 em 27 dias). O log do `pypdf` fica em ERROR e `fonttools` entra nas dependencias.
+  - A linha final da reconstrucao do indice separa fontes reingeridas, puladas e ja feitas antes de retomar.
+  - A ponte stdio se identifica como `delegation-core-stdio-bridge` com a versao, em vez de "mcp 0.1.0". O nome do cliente real (Claude Desktop) nao e repassado.
+  - `heartbeat` responde `status: "starting"` na partida, sem esperar o indice abrir, que levava cerca de 25 s numa maquina de 108 mil linhas e passava dos cerca de 15 s que o Claude Code espera.
+  - `update` troca `AGENT_GUIDE.md` e `CLAUDE_SYSTEM_PROMPT.md` quando a copia local e identica a uma versao que ja entregamos (hashes em `versoes_entregues_docs.json`, regerado por `scripts/regerar_versoes_dos_docs.py`); copia editada continua preservada com a nova ao lado em `.dist.md`.
+
 ### Added
 - **Multiple-path ingestion sources.** A declarative source can now use the
   legacy `path` form for one root or `paths` to group directories and files

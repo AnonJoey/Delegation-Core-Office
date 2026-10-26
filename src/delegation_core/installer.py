@@ -27,6 +27,7 @@ Nothing here touches the vault or the downloaded model weights. Ever.
 from __future__ import annotations
 
 import filecmp
+import hashlib
 import json
 import logging
 import shutil
@@ -163,6 +164,21 @@ def git_state(root: Path) -> dict:
 
 # ── shipped docs ─────────────────────────────────────────────────────────────
 
+VERSOES_ENTREGUES_DOCS = "versoes_entregues_docs.json"
+
+
+def versoes_entregues_dos_docs(root: Path) -> dict[str, set[str]]:
+    """Hash (sha256) de toda versao que ja entregamos de cada doc, ou vazio se o arquivo faltar.
+
+    Gerado por `scripts/regerar_versoes_dos_docs.py` a partir do historico do git. Sem ele
+    o instalador volta ao comportamento antigo: so preserva o que difere."""
+    try:
+        bruto = json.loads((Path(root) / VERSOES_ENTREGUES_DOCS).read_text(encoding="utf-8"))
+        return {k: set(v) for k, v in bruto.items() if isinstance(v, list)}
+    except (OSError, ValueError):
+        return {}
+
+
 def refresh_shipped_files(root: Path) -> dict:
     """Copy AGENT_GUIDE/CLAUDE_SYSTEM_PROMPT into CONFIG_DIR.
 
@@ -186,7 +202,8 @@ def refresh_shipped_files(root: Path) -> dict:
     doing the same job correctly, had produced no `.dist.py` at all.
     """
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    resultado: dict = {"installed": [], "kept_yours": [], "unchanged": [], "missing": []}
+    resultado: dict = {"installed": [], "kept_yours": [], "unchanged": [], "missing": [], "updated": []}
+    entregues = versoes_entregues_dos_docs(root)
 
     def _copiar(origem: Path, destino: Path, rotulo: str) -> None:
         if not origem.is_file():
@@ -198,6 +215,14 @@ def refresh_shipped_files(root: Path) -> dict:
             return
         if filecmp.cmp(origem, destino, shallow=False):
             resultado["unchanged"].append(rotulo)
+            return
+        if hashlib.sha256(destino.read_bytes()).hexdigest() in entregues.get(rotulo, set()):
+            # Nunca foi editado: e uma versao antiga que NOS entregamos. Tratar como
+            # personalizacao deixava a copia local parada para sempre (medido em 26/10/2026:
+            # um CLAUDE_SYSTEM_PROMPT.md identico ao de 21/07 e um AGENT_GUIDE.md 81 linhas
+            # atras, e e o segundo que o CLAUDE.md global carrega em toda sessao).
+            shutil.copyfile(origem, destino)
+            resultado["updated"].append(rotulo)
             return
         lado = destino.with_suffix(f".dist{destino.suffix}")
         shutil.copyfile(origem, lado)

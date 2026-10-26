@@ -227,3 +227,17 @@ def test_concurrent_ingests_do_not_overwrite_each_others_registry_entries(cfg, t
     assert fast_key in status["sources"]
     assert long_key in status["sources"]
     assert status["count"] == 2
+
+
+def test_status_resume_os_arquivos_por_padrao_e_so_lista_quando_pedido(cfg, tmp_path):
+    """Uma fonte de 1.269 arquivos fazia o ingest_status passar de 326 mil caracteres."""
+    manager = IngestManager(FakeVault(cfg))
+    src = tmp_path / "grande"
+    src.mkdir()
+    for i in range(5):
+        (src / f"n{i}.md").write_text(f"# nota {i}\n" + "texto " * 40)
+    manager.ingest(str(src))
+    chave = str(src.resolve())
+    resumo = manager.status()["sources"][chave]
+    assert resumo["file_count"] == 5 and "files" not in resumo
+    assert len(manager.status(detalhe=True)["sources"][chave]["files"]) == 5

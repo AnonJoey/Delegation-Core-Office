@@ -321,6 +321,13 @@ def reconstruir(vault, ingest) -> dict:
     caminho_do_pedido().unlink(missing_ok=True)
     resultado["status"] = "reconstruido"
     resultado["quarentena"] = pedido.get("quarentena")
-    logger.info("Reconstrucao do indice concluida: %s notas, %s fontes",
-                resultado["notas"], len(resultado["fontes"]))
+    # Reingeridas e puladas separadas: a linha antiga somava as duas e dizia "N fontes", o
+    # que fazia uma fonte que sumiu contar como reingerida. `ja_feitas` sao as que uma
+    # execucao anterior concluiu antes de o daemon cair.
+    puladas = sum(1 for f in resultado["fontes"] if "error" in f)
+    reingeridas = len(resultado["fontes"]) - puladas
+    ja_feitas = len(feitas) - len(resultado["fontes"])
+    logger.info("Reconstrucao do indice concluida: %s notas; fontes: %d reingeridas, "
+                "%d puladas por nao existirem, %d ja feitas antes de retomar",
+                resultado["notas"], reingeridas, puladas, ja_feitas)
     return resultado

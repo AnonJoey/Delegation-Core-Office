@@ -401,6 +401,15 @@ def test_reconstrucao_reindexa_tudo_e_reingere_cada_fonte(tmp_path):
     assert recuperacao.reconstrucao_pendente() is None
 
 
+def test_log_da_reconstrucao_separa_reingeridas_de_puladas(tmp_path, caplog):
+    """A fonte que sumiu entrava na conta de "N fontes" como se tivesse sido reingerida."""
+    _pedido(tmp_path)
+    with caplog.at_level("INFO"):
+        recuperacao.reconstruir(_VaultFalso(), _IngestFalso())
+    linha = next(r.getMessage() for r in caplog.records if "Reconstrucao do indice concluida" in r.getMessage())
+    assert "2 reingeridas" in linha and "1 puladas" in linha and "0 ja feitas" in linha
+
+
 def test_reconstrucao_retoma_de_onde_parou(tmp_path):
     a, b = _pedido(tmp_path)
     pedido = recuperacao.reconstrucao_pendente()
