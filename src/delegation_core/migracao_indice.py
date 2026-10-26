@@ -33,6 +33,7 @@ from datetime import datetime
 from pathlib import Path
 
 import numpy as np
+from .config import em_pasta_sincronizada
 from .procs import sem_janela
 
 logger = logging.getLogger("migracao_indice")
@@ -325,6 +326,11 @@ def migrar(cfg, *, origem: Path | None = None, destino: Path | None = None,
 
     origem = Path(origem or cfg.chroma_path)
     destino = Path(destino or cfg.sqlite_path)
+    if em_pasta_sincronizada(destino) and not forcar:
+        raise RuntimeError(
+            f"o destino {destino} fica dentro de uma pasta sincronizada por cliente de nuvem, "
+            "e e la que o indice ja se corrompeu duas vezes. Configure `index_path` fora dela "
+            "(por exemplo em ~/.delegation_core) ou passe --force por sua conta e risco.")
     if not (origem / "chroma.sqlite3").exists():
         raise RuntimeError(f"nao ha indice do Chroma em {origem}")
     em_uso = origem.resolve() == Path(cfg.chroma_path).resolve()

@@ -50,6 +50,14 @@ def test_migra_todas_as_colecoes_e_o_resultado_e_identico(tmp_path, cfg):
     assert (destino / "migracao.json").exists()
 
 
+def test_recusa_destino_dentro_de_pasta_sincronizada(tmp_path, cfg):
+    origem = _chroma(tmp_path)
+    destino = tmp_path / "OneDrive" / "vault" / ".indice_sqlite"
+    with pytest.raises(RuntimeError, match="sincronizada"):
+        mig.migrar(cfg, origem=origem, destino=destino, amostra=5, pasta_de_trabalho=tmp_path / "t")
+    assert not destino.exists()
+
+
 def test_o_conteudo_do_chroma_de_origem_nao_muda(tmp_path, cfg):
     """Comparado pelo conteudo: abrir o Chroma regrava arquivos dele (medido), entao
     byte a byte nao serve. O que a migracao promete e nao escrever linha nenhuma la."""

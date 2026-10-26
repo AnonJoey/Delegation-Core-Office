@@ -443,8 +443,25 @@ class Config:
 
     @property
     def sqlite_path(self) -> Path:
-        """Pasta do indice SQLite: ao lado do indice do Chroma, nunca por cima dele."""
-        return self.vault / ".indice_sqlite"
+        """Pasta do indice SQLite: ao lado do indice do Chroma, nunca por cima dele.
+
+        Com `index_path` configurado ela fica ao lado dele, e com o vault numa pasta
+        sincronizada vai para a pasta de estado: o indice nao pode morar onde um
+        cliente de nuvem copia arquivo no meio da escrita, que e o que corrompeu o
+        Chroma duas vezes num Mac em 23 e 29/09/2026. Um indice SQLite que ja existe
+        dentro do vault continua sendo usado onde esta, para nao esvaziar quem migrou
+        antes desta regra."""
+        legado = self.vault / ".indice_sqlite"
+        if str(self.index_path or "").strip():
+            base = Path(self.index_path).expanduser()
+            novo = base.with_name(f"{base.name}_sqlite")
+        elif em_pasta_sincronizada(self.vault):
+            novo = Path(CONFIG_DIR) / "indice_sqlite"
+        else:
+            return legado
+        if not (novo / "indice.db").exists() and (legado / "indice.db").exists():
+            return legado
+        return novo
 
     @property
     def index_dir(self) -> Path:
