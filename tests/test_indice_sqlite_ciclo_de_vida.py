@@ -13,6 +13,34 @@ def _cfg(tmp_path, **kw):
     return Config(vault_path=str(tmp_path / "vault"), **kw)
 
 
+# -- onde mora o indice SQLite (achado do Saad, 26/10/2026) --------------------
+
+def test_sqlite_com_index_path_fica_ao_lado_dele_e_nao_no_vault(tmp_path):
+    cfg = _cfg(tmp_path, index_path=str(tmp_path / "estado" / "indice"))
+    assert cfg.sqlite_path == tmp_path / "estado" / "indice_sqlite"
+    assert cfg.vault not in cfg.sqlite_path.parents
+
+
+def test_sqlite_sem_index_path_segue_no_vault_quando_ele_nao_e_sincronizado(tmp_path):
+    assert _cfg(tmp_path).sqlite_path == tmp_path / "vault" / ".indice_sqlite"
+
+
+def test_vault_em_pasta_sincronizada_leva_o_sqlite_para_a_pasta_de_estado(tmp_path, monkeypatch):
+    monkeypatch.setattr("delegation_core.config.CONFIG_DIR", tmp_path / "estado")
+    cfg = Config(vault_path=str(tmp_path / "OneDrive" / "Bank" / "vault"))
+    assert cfg.sqlite_path == tmp_path / "estado" / "indice_sqlite"
+
+
+def test_sqlite_que_ja_existe_no_vault_continua_valendo(tmp_path, monkeypatch):
+    """Quem migrou antes da regra nao pode voltar para um indice vazio nem para o Chroma."""
+    monkeypatch.setattr("delegation_core.config.CONFIG_DIR", tmp_path / "estado")
+    cfg = Config(vault_path=str(tmp_path / "OneDrive" / "vault"), index_path=str(tmp_path / "estado" / "indice"))
+    legado = tmp_path / "OneDrive" / "vault" / ".indice_sqlite"
+    legado.mkdir(parents=True)
+    (legado / "indice.db").write_bytes(b"x")
+    assert cfg.sqlite_path == legado and cfg.usa_sqlite is True
+
+
 # -- escolha automatica do backend ---------------------------------------------
 
 def test_instalacao_nova_usa_sqlite(tmp_path):
