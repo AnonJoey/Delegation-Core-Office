@@ -567,7 +567,7 @@ def check_fts_integrity(cfg) -> dict:
             "check": "fts_integrity",
             "status": "error",
             "detail": f"full-text search index is corrupt: {e}",
-            "fix": "run: delegation-core doctor --rebuild-fts",
+            "fix": "stop the daemon first (delegation-core service stop), run: delegation-core doctor --rebuild-fts, then delegation-core service start",
         }
     return {"check": "fts_integrity", "status": "ok", "detail": "full-text search index is healthy"}
 

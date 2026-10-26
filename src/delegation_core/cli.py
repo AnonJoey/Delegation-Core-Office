@@ -1661,6 +1661,19 @@ def cmd_doctor(args):
         console.print("[yellow]Not configured.[/yellow] Run: delegation-core setup")
         sys.exit(1)
 
+    # Os dois comandos abaixo escrevem no indice. Com o daemon no ar isso e um segundo
+    # escritor no mesmo arquivo, que e o cenario que corrompeu o indice de duas maquinas
+    # em 2026. Recusa em vez de avisar: quem chega aqui por uma linha `fix` do doctor nao
+    # leu o resto do texto.
+    from . import daemon
+    if (getattr(args, "clean_orphans", False) or getattr(args, "rebuild_fts", False)) \
+            and daemon.is_listening(cfg):
+        console.print("[red]✗[/red]  o daemon esta no ar e segura o indice aberto. Pare-o, rode de "
+                      "novo e religue:\n      delegation-core service stop\n"
+                      "      delegation-core doctor --rebuild-fts   (ou --clean-orphans)\n"
+                      "      delegation-core service start")
+        sys.exit(1)
+
     if getattr(args, "clean_orphans", False):
         incluir = bool(getattr(args, "include_backups", False))
         cleaned = doctor.clean_orphan_segments(cfg, include_backups=incluir)
