@@ -26,3 +26,12 @@ durable project-context layer.
 - When the session produced reusable implementation knowledge, call `export_session` with a concise title, outcome, and the relevant repository/project context.
 - The automatic session transcript policy is configured in delegation-core-office. In `manual` mode, a local operator must first run `delegation-core session capture-next --client <codex|claude>`, naming the client that is running; never assume a transcript was saved merely because an export was requested.
 - Do not export raw transcripts if they could contain secrets or sensitive customer data. Prefer a concise, sanitized summary.
+
+## When the service or the index misbehaves
+
+- Diagnose with `heartbeat` and `delegation-core doctor`; each failing check prints a remedy. Measure the cause before naming it.
+- `starting` in `heartbeat` is normal for up to about a minute after the daemon comes up. Wait and call it again.
+- Only the daemon may hold the index open. Anything that writes to it (`doctor --rebuild-fts`, `doctor --clean-orphans`, `recover-index`, `index-migrate`) needs `delegation-core service stop` first and `service start` after. Do not bypass a refusal with `--force`.
+- Never delete an index folder, an index backup, or a vault note to clear an error, and do not edit the installed package: a code defect is reported, not patched.
+- Ask the user before restarting the daemon or deleting anything. After two failed attempts, stop and report.
+- The full symptom table and the reporting format are in the `AGENT_GUIDE.md` section "When something on this machine is wrong".

@@ -25,6 +25,9 @@ This changelog is derived directly from the canonical versioning recorded across
   - `heartbeat` responde `status: "starting"` na partida, sem esperar o indice abrir, que levava cerca de 25 s numa maquina de 108 mil linhas e passava dos cerca de 15 s que o Claude Code espera.
   - `update` troca `AGENT_GUIDE.md` e `CLAUDE_SYSTEM_PROMPT.md` quando a copia local e identica a uma versao que ja entregamos (hashes em `versoes_entregues_docs.json`, regerado por `scripts/regerar_versoes_dos_docs.py`); copia editada continua preservada com a nova ao lado em `.dist.md`.
 
+- **`AGENT_GUIDE.md` ganha a secao "When something on this machine is wrong".** Diz a qualquer IA que se depare com um problema local como diagnosticar (`heartbeat`, `doctor`, `status`, `update --check`), as regras que valem para todo reparo (so o daemon segura o indice, nada de apagar indice, backup ou nota, indice fora de pasta sincronizada, nao editar o pacote instalado, duas tentativas e reportar), uma tabela de sintoma para acao e o que escrever numa nota `Fixes/` quando a causa e do codigo. Cada comando citado foi conferido contra a CLI.
+- **`doctor --rebuild-fts` e `--clean-orphans` recusam com o daemon no ar**, como `index-migrate` e `recover-index` ja faziam: sao o segundo escritor no indice. A linha `fix` do check `fts_integrity` agora manda parar o daemon antes.
+
 ### Added
 - **Multiple-path ingestion sources.** A declarative source can now use the
   legacy `path` form for one root or `paths` to group directories and files

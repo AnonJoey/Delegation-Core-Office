@@ -743,6 +743,72 @@ Avoid vague titles like "Meeting notes" or "Research". Use specific titles like
 
 ---
 
+## When something on this machine is wrong
+
+Some problems are in this machine's state or configuration (a damaged index file, a
+config value, an out-of-date copy of a document), and some are defects in the code. You
+can fix the first kind. You report the second kind and do not patch around it. Read this
+before changing anything.
+
+### Diagnose first
+
+1. `heartbeat()` for the live state, then `delegation-core doctor` on the machine. Every
+   failing check prints a `->` line with the remedy. The status of each check is measured, so
+   believe it over your own guess. `delegation-core status` and `delegation-core update --check`
+   say what is running and whether it is current.
+2. Measure before naming a cause. Run the command that would show it. A cause you only
+   deduced from reading is the usual source of a wrong fix.
+3. Tell the user what you found before you change anything, and ask before anything that
+   deletes, restarts the daemon, or touches the vault.
+
+### Rules that hold for every local fix
+
+- **The daemon is the only process that may hold the index open.** Anything that writes to it
+  (`doctor --rebuild-fts`, `doctor --clean-orphans`, `recover-index`, `index-migrate`) needs
+  `delegation-core service stop` first and `delegation-core service start` after. The commands
+  refuse to run with the daemon up. Do not work around the refusal with `--force`. A second
+  writer on the index is the cause of the corruption these fixes repair.
+- **Never delete an index folder, an index backup (`.chroma*-backup-*`), or any vault note** to
+  make an error go away. Backups are the way back. `doctor --clean-orphans` keeps them unless
+  `--include-backups` is passed, and you do not pass it without the user's say.
+- **The index lives outside cloud-synced folders** (OneDrive, iCloud Drive, Dropbox, Google
+  Drive). If `doctor` warns on `index_location`, move it with
+  `delegation-core recover-index --index-path ~/.delegation_core/indice` (daemon stopped; start it
+  afterwards and it rebuilds the index there from the vault and the ingest sources). Do not run
+  `index-migrate` on a vault inside a synced folder without an `index_path` set.
+- **Do not edit files inside the installed package** (the venv's `site-packages`). It is a copy:
+  your edit is lost at the next `delegation-core update` and the machine then differs from the
+  source. A code defect goes to the developers with the evidence below.
+- Do not retry a failing command in a loop. Two attempts, then report.
+
+### Symptoms and what to do
+
+| Symptom | What it means | What to do |
+|---------|---------------|------------|
+| `heartbeat` returns `starting` | The daemon just came up and is loading the embedding model and the index. Normal after a reboot, up to about a minute. | Wait a few seconds and call it again. Do not restart anything and do not warn the user. |
+| `doctor`: `fts_integrity` error ("malformed inverted index") | The full-text table inside the index is damaged. Semantic search still works; text search does not. Local state. | `delegation-core service stop`, `delegation-core doctor --rebuild-fts`, `delegation-core service start`, then `doctor` again. If it comes back, it is also a code question: report it with the evidence below. |
+| `doctor`: `index_location` warns that the index is inside a synced folder | The cloud client can copy the index mid-write, which has corrupted it before. | `delegation-core recover-index --index-path ~/.delegation_core/indice` with the daemon stopped, then `service start`. The rebuild takes a while and search fills in as it goes. |
+| `heartbeat` carries `index_recovery` | See the error table above. The daemon is already rebuilding. | Wait. Do not start another reindex. |
+| `heartbeat` says `degraded` and `embeddings` is `unavailable` | The embedding model or the index did not open; the error text is in `embeddings.error`. | Read it, run `doctor`, follow its `fix` lines. Do not retry in a loop. |
+| `.dist.md` files beside `AGENT_GUIDE.md` or `CLAUDE_SYSTEM_PROMPT.md` in `~/.delegation_core` | The installed copy differs from the shipped one. `update` replaces a copy nobody edited and keeps one the user changed. | Diff the two. If the user's copy only lags behind, replace it with the `.dist.md`. If it has their edits, merge by hand and ask. |
+| Log line `clamping to 512` | `embed_max_seq_length` in `config.json` is above the embedding model's window. Harmless, noisy. | Set `embed_max_seq_length` (and `vault_chunk_size`, `ingest_chunk_size`) to what the model supports. The log line says the value. |
+| Log line `index_note: ... was NOT indexed` | One file is invisible to search. | Read the error, name the file to the user, report it as a defect if it is not a plain I/O error. This is not a local fix. |
+| An ingest source is stale (`ingest_status` shows an old `last_indexed`) | Nothing reingests an external folder by itself unless it is configured in `ingest_sources`. | `delegation-core ingest --configured`, or add the folder to `ingest_sources` in `config.json`. |
+| `llama_stop.log` fills with `guarda 3` | The local model server has no `/slots` (an MLX server). The session-end hook cannot tell it is idle, so it leaves it running, which is correct. | Nothing to fix. To stop the attempts altogether, create `~/.delegation_core/no_auto_llama_stop`. |
+| `doctor`: `embed_backend` warning | The embedding model runs in torch next to the language model. Works, but is heavier. | Optional: `delegation-core embed-llama setup`. The index stays the same, no reindex. |
+| The daemon does not answer right after a reboot | The service starts at login and can take up to about a minute. | `delegation-core service status`, wait, then retry. Restart only if it is still down after that. |
+
+### Reporting a defect
+
+When the cause is in the code or you could not find it, write a `Fixes/` note with
+`write_note` and tell the user. Put in it: the exact command and its full output, the
+`doctor` output, `delegation-core status`, the installed version and commit, the OS, which
+backend the index uses, whether the vault or the index is in a synced folder, what you
+changed on the machine and what you left alone. Facts only: what you ran and what came back.
+Do not write a cause you did not measure.
+
+---
+
 ## Limits
 
 | Parameter | Limit |
