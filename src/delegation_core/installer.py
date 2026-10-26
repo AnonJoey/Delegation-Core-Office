@@ -167,6 +167,12 @@ def git_state(root: Path) -> dict:
 VERSOES_ENTREGUES_DOCS = "versoes_entregues_docs.json"
 
 
+def hash_do_doc(conteudo: bytes) -> str:
+    """sha256 com o fim de linha normalizado: o checkout no Windows converte para CRLF e o
+    hash do arquivo em disco deixava de bater com o do git (CI do Windows, 26/10/2026)."""
+    return hashlib.sha256(conteudo.replace(b"\r\n", b"\n")).hexdigest()
+
+
 def versoes_entregues_dos_docs(root: Path) -> dict[str, set[str]]:
     """Hash (sha256) de toda versao que ja entregamos de cada doc, ou vazio se o arquivo faltar.
 
@@ -216,7 +222,7 @@ def refresh_shipped_files(root: Path) -> dict:
         if filecmp.cmp(origem, destino, shallow=False):
             resultado["unchanged"].append(rotulo)
             return
-        if hashlib.sha256(destino.read_bytes()).hexdigest() in entregues.get(rotulo, set()):
+        if hash_do_doc(destino.read_bytes()) in entregues.get(rotulo, set()):
             # Nunca foi editado: e uma versao antiga que NOS entregamos. Tratar como
             # personalizacao deixava a copia local parada para sempre (medido em 26/10/2026:
             # um CLAUDE_SYSTEM_PROMPT.md identico ao de 21/07 e um AGENT_GUIDE.md 81 linhas

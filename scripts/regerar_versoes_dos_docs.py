@@ -20,6 +20,11 @@ DOCS = ("AGENT_GUIDE.md", "CLAUDE_SYSTEM_PROMPT.md")
 ALVO = RAIZ / "versoes_entregues_docs.json"
 
 
+def hash_do_doc(conteudo: bytes) -> str:
+    """Igual ao do instalador: fim de linha normalizado, porque o checkout no Windows usa CRLF."""
+    return hashlib.sha256(conteudo.replace(b"\r\n", b"\n")).hexdigest()
+
+
 def historico(doc: str) -> set[str]:
     hashes = set()
     commits = subprocess.run(["git", "log", "--format=%H", "--", doc], cwd=RAIZ, capture_output=True,
@@ -27,7 +32,7 @@ def historico(doc: str) -> set[str]:
     for c in commits:
         r = subprocess.run(["git", "show", f"{c}:{doc}"], cwd=RAIZ, capture_output=True, check=False)
         if r.returncode == 0:
-            hashes.add(hashlib.sha256(r.stdout).hexdigest())
+            hashes.add(hash_do_doc(r.stdout))
     return hashes
 
 
@@ -35,7 +40,7 @@ def main() -> None:
     atual = {k: set(v) for k, v in json.loads(ALVO.read_text(encoding="utf-8")).items()} if ALVO.exists() else {}
     for doc in DOCS:
         atual.setdefault(doc, set()).update(historico(doc))
-        atual[doc].add(hashlib.sha256((RAIZ / doc).read_bytes()).hexdigest())
+        atual[doc].add(hash_do_doc((RAIZ / doc).read_bytes()))
     ALVO.write_text(json.dumps({k: sorted(v) for k, v in sorted(atual.items())}, indent=1) + "\n", encoding="utf-8")
     for k, v in sorted(atual.items()):
         print(len(v), k)
