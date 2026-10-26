@@ -40,7 +40,7 @@ from .config import Config
 from .index_lock import abrir_cliente, close_chroma_client, index_lock_of, reads_index, uses_index
 from .embeddings import (
     chunk_text,
-    sem_surrogatos,
+    texto_indexavel,
     effective_chunk_chars,
     construir_embedding_function,
     make_bge_embedding_function,
@@ -545,7 +545,7 @@ class VaultManager:
         of it could not be found by any query.
         """
         self._ensure_ready()
-        content = sem_surrogatos(content)
+        content = texto_indexavel(content)
         if not self.collection:
             # Silent until 2026-09-02, and it is the worst of the two failure
             # paths: every write path in the project reaches here, twenty of the

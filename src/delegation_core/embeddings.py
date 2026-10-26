@@ -613,6 +613,22 @@ def sem_surrogatos(texto: str) -> str:
     return texto.encode("utf-8", "ignore").decode("utf-8")
 
 
+def texto_indexavel(texto: str) -> str:
+    """O texto como o indice o aceita: sem substitutos soltos e sem NUL.
+
+    Um NUL (U+0000) no meio de um documento corrompe o FTS5 que o ChromaDB mantem
+    no proprio SQLite, e o dano aparece no `add`, sem concorrencia: medido em
+    26/10/2026 com o chromadb 1.5.9, um documento de 12 caracteres com NUL no meio
+    deixa `integrity-check` em "database disk image is malformed". NUL no fim do
+    texto nao faz mal, no meio e no inicio fazem. Texto extraido de PDF traz NUL de
+    glifo sem mapa (1 de 396 PDFs desta maquina). Vira espaco, para nao colar as
+    palavras vizinhas. O indice SQLite proprio aceita o NUL, mas o texto fica
+    igual nos dois backends."""
+    if not isinstance(texto, str):
+        return texto
+    return sem_surrogatos(texto).replace("\x00", " ")
+
+
 def chunk_text(text: str, max_chars: int = 4000, overlap: int = 200) -> list[str]:
     """Split text into overlapping chunks for better embedding coverage of long documents.
 

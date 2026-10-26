@@ -547,6 +547,24 @@ def clean_orphan_segments(cfg, include_backups: bool = False) -> int:
     return removed
 
 
+def documentos_com_nul(db_path) -> int | None:
+    """Quantos documentos guardados no ChromaDB tem um NUL no texto (so leitura).
+
+    E o que corrompe o FTS5 do Chroma na hora de gravar (ver `texto_indexavel`).
+    `None` quando o banco nao deixa contar: o check segue sem a informacao."""
+    import sqlite3
+    try:
+        con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=5)
+        try:
+            return con.execute(
+                "SELECT COUNT(*) FROM embedding_metadata WHERE key='chroma:document' "
+                "AND instr(CAST(string_value AS BLOB), x'00') > 0").fetchone()[0]
+        finally:
+            con.close()
+    except Exception:
+        return None
+
+
 def check_fts_integrity(cfg) -> dict:
     """Check whether Chroma SQLite FTS5 fulltext search table is healthy or malformed."""
     if cfg.usa_sqlite:
@@ -563,11 +581,28 @@ def check_fts_integrity(cfg) -> dict:
                 return {"check": "fts_integrity", "status": "ok", "detail": "no full-text search table"}
             cur.execute("INSERT INTO embedding_fulltext_search(embedding_fulltext_search) VALUES('integrity-check')")
     except Exception as e:
+        com_nul = documentos_com_nul(db_path)
+        causa = ""
+        if com_nul:
+            causa = (f" {com_nul} stored document(s) contain a NUL character, which is what "
+                     "corrupts this index when it is written (measured 26/10/2026, chromadb "
+                     "1.5.9): after the rebuild, re-ingest their sources with --force on a "
+                     "version that strips it, or the index corrupts again on the next ingest.")
         return {
             "check": "fts_integrity",
             "status": "error",
-            "detail": f"full-text search index is corrupt: {e}",
+            "detail": f"full-text search index is corrupt: {e}.{causa}",
             "fix": "stop the daemon first (delegation-core service stop), run: delegation-core doctor --rebuild-fts, then delegation-core service start",
+        }
+    com_nul = documentos_com_nul(db_path)
+    if com_nul:
+        return {
+            "check": "fts_integrity",
+            "status": "warn",
+            "detail": f"full-text search index is healthy, but {com_nul} stored document(s) contain a "
+                      "NUL character; writing one corrupts it",
+            "fix": "update delegation-core (the fix strips the NUL before indexing), then re-ingest "
+                   "the sources of those documents with --force",
         }
     return {"check": "fts_integrity", "status": "ok", "detail": "full-text search index is healthy"}
 
