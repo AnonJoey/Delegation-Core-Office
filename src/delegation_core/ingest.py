@@ -529,6 +529,7 @@ class IngestManager:
                     getattr(self._cfg, "client_path_roots", None),
                     getattr(self._cfg, "client_aliases", None),
                 )
+                gravou = True
                 for i, chunk in enumerate(chunks):
                     chunk_id = f"{f}::chunk_{i}" if len(chunks) > 1 else str(f)
                     meta = {
@@ -543,7 +544,14 @@ class IngestManager:
                     }
                     if client:
                         meta["client"] = client
-                    self._vault.index_note(chunk, meta, doc_id=chunk_id)
+                    # `is False`: um vault que devolve None (dublê, versao antiga) nao falhou.
+                    if self._vault.index_note(chunk, meta, doc_id=chunk_id) is False:
+                        gravou = False
+                if not gravou:
+                    # O erro de verdade esta no log do daemon (`index_note ... NOT indexed`).
+                    # Sem isto a CLI dizia "indexado, 0 erros" para o arquivo que nao entrou.
+                    errors.append(f"{f.name}: not indexed, the index refused the write (see the daemon log)")
+                    continue
                 indexed.append(f_str)
                 new_cached_files[f_str] = [f_mtime, f_size]
             except DatalessFileError as e:
