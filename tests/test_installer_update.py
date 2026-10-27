@@ -425,3 +425,81 @@ def test_update_chama_o_fim_no_codigo_novo_depois_do_pip(cenario, monkeypatch):
     installer.update()
     d = cenario["diario"]
     assert d.index("pip") < d.index("fim_novo") < d.index("start")
+
+
+# ── --check compara o instalado com a fonte, nao so o checkout com o upstream ──
+
+def _arvore(base, arquivos):
+    for nome, conteudo in arquivos.items():
+        alvo = base / nome
+        alvo.parent.mkdir(parents=True, exist_ok=True)
+        alvo.write_bytes(conteudo)
+    return base
+
+
+def test_instalado_igual_a_fonte_nao_difere(tmp_path):
+    raiz = tmp_path / "co"
+    _arvore(raiz / "src" / "delegation_core", {"a.py": b"x = 1\n", "sub/b.py": b"y = 2\n"})
+    inst = _arvore(tmp_path / "site", {"a.py": b"x = 1\n", "sub/b.py": b"y = 2\n"})
+    assert installer.instalado_difere_da_fonte(raiz, inst) == []
+
+
+def test_instalado_atras_da_fonte_lista_o_arquivo(tmp_path):
+    """O caso de 27/10/2026: a fonte tem a correcao, a copia instalada nao."""
+    raiz = tmp_path / "co"
+    _arvore(raiz / "src" / "delegation_core", {"a.py": b"novo\n", "so_na_fonte.py": b"z\n"})
+    inst = _arvore(tmp_path / "site", {"a.py": b"velho\n", "so_instalado.py": b"w\n"})
+    assert installer.instalado_difere_da_fonte(raiz, inst) == [
+        "a.py", "so_instalado.py", "so_na_fonte.py"]
+
+
+def test_fim_de_linha_do_windows_nao_conta_como_diferenca(tmp_path):
+    raiz = tmp_path / "co"
+    _arvore(raiz / "src" / "delegation_core", {"a.py": b"x = 1\r\ny = 2\r\n"})
+    inst = _arvore(tmp_path / "site", {"a.py": b"x = 1\ny = 2\n"})
+    assert installer.instalado_difere_da_fonte(raiz, inst) == []
+
+
+def test_pycache_nao_conta(tmp_path):
+    raiz = tmp_path / "co"
+    _arvore(raiz / "src" / "delegation_core", {"a.py": b"x\n"})
+    inst = _arvore(tmp_path / "site", {"a.py": b"x\n", "__pycache__/a.cpython-314.pyc": b"\x00\x01"})
+    assert installer.instalado_difere_da_fonte(raiz, inst) == []
+
+
+def test_sem_pasta_de_fonte_nao_da_para_comparar(tmp_path):
+    inst = _arvore(tmp_path / "site", {"a.py": b"x\n"})
+    assert installer.instalado_difere_da_fonte(tmp_path / "vazio", inst) is None
+
+
+def test_check_avisa_quando_o_instalado_difere_mesmo_com_o_checkout_em_dia(cenario, monkeypatch):
+    """Antes: `up_to_date`, porque so o checkout era comparado com o upstream."""
+    monkeypatch.setattr(installer, "git_state", lambda _: {"git": True, "behind": 0, "ahead": 0})
+    monkeypatch.setattr(installer, "instalado_difere_da_fonte", lambda raiz: ["embeddings.py"])
+    r = installer.update(check_only=True)
+    assert r["status"] == "installed_differs"
+    assert r["installed_differs"] == ["embeddings.py"]
+    assert cenario["diario"] == [], "o --check tocou no sistema"
+
+
+def test_check_em_dia_e_igual_diz_up_to_date(cenario, monkeypatch):
+    monkeypatch.setattr(installer, "git_state", lambda _: {"git": True, "behind": 0, "ahead": 0})
+    monkeypatch.setattr(installer, "instalado_difere_da_fonte", lambda raiz: [])
+    assert installer.update(check_only=True)["status"] == "up_to_date"
+
+
+def test_check_atras_do_upstream_continua_behind(cenario, monkeypatch):
+    monkeypatch.setattr(installer, "git_state", lambda _: {"git": True, "behind": 2, "ahead": 0})
+    monkeypatch.setattr(installer, "instalado_difere_da_fonte", lambda raiz: ["a.py"])
+    assert installer.update(check_only=True)["status"] == "behind"
+
+
+def test_instalacao_editavel_nao_compara_copia(cenario, monkeypatch):
+    """Editavel e o proprio checkout: nao existe copia para divergir."""
+    monkeypatch.setattr(installer, "is_editable", lambda: True)
+    monkeypatch.setattr(installer, "git_state", lambda _: {"git": True, "behind": 0, "ahead": 0})
+
+    def _nao_deve_ser_chamada(raiz):
+        raise AssertionError("comparou copia numa instalacao editavel")
+    monkeypatch.setattr(installer, "instalado_difere_da_fonte", _nao_deve_ser_chamada)
+    assert installer.update(check_only=True)["status"] == "up_to_date"
