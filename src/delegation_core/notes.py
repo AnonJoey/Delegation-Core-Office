@@ -58,7 +58,10 @@ _EXTRA_CHUNK_SUFFIX_RE = re.compile(r"::chunk_(?!0$)\d+$")
 # examples in it as "broken links". Lookarounds pin the run to its exact length so
 # ``` never closes against one backtick of a longer run.
 _CODE_SPAN_RE = re.compile(r"(?<!`)(`+)(?!`)(?:.*?)(?<!`)\1(?!`)", re.DOTALL)
-_WIKILINK_TARGET_RE = re.compile(r"\[\[([^\]\|#]+)")
+# O alvo so conta se o link FECHA com ]] na mesma linha (medido em 19/10/2026 num vault de
+# 39.878 notas: 5 dos 103 "quebrados" nao tinham ocorrencia fechada). O `\|` de tabela
+# do Obsidian (`[[a\|b]]`) entrega `a`, nao `a\`.
+_WIKILINK_TARGET_RE = re.compile(r"\[\[([^\]\|#\n]+?)\\?(?:#[^\]\|\n]*)?(?:\|[^\]\n]*)?\]\]")
 
 
 def _countable_wikilinks(content: str) -> list[str]:
