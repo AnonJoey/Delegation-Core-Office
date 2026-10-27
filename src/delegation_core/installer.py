@@ -162,6 +162,34 @@ def git_state(root: Path) -> dict:
     }
 
 
+def _hash_arquivo(caminho: Path) -> str:
+    """sha256 do arquivo com o fim de linha normalizado (o checkout do Windows grava CRLF)."""
+    return hashlib.sha256(caminho.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
+
+
+def instalado_difere_da_fonte(raiz: Path, instalado: Path | None = None) -> list[str] | None:
+    """Arquivos do pacote instalado que diferem do codigo-fonte, ou None se nao da para comparar.
+
+    `update --check` sozinho compara o CHECKOUT com o upstream dele. Numa instalacao
+    nao editavel o pip COPIA o pacote para o site-packages, e essa copia fica atras do
+    checkout sem que o git diga nada: em 27/10/2026 o --check respondeu "up to date" com
+    o instalado sem duas correcoes ja mescladas. Aqui se compara arquivo a arquivo.
+    """
+    fonte = raiz / "src" / "delegation_core"
+    if instalado is None:
+        instalado = Path(__file__).resolve().parent
+    if not fonte.is_dir() or not instalado.is_dir():
+        return None
+
+    def _mapa(base: Path) -> dict[str, str]:
+        return {str(f.relative_to(base)).replace("\\", "/"): _hash_arquivo(f)
+                for f in base.rglob("*")
+                if f.is_file() and "__pycache__" not in f.parts and f.suffix != ".pyc"}
+
+    a, b = _mapa(fonte), _mapa(instalado)
+    return sorted(k for k in a.keys() | b.keys() if a.get(k) != b.get(k))
+
+
 # ── shipped docs ─────────────────────────────────────────────────────────────
 
 VERSOES_ENTREGUES_DOCS = "versoes_entregues_docs.json"
@@ -315,11 +343,17 @@ def update(check_only: bool = False, restart: bool = True,
 
     if check_only:
         atras = estado.get("behind")
+        status = (("behind" if atras else "up_to_date") if estado.get("git")
+                  else "unknown_not_a_checkout")
+        # Instalacao editavel e o proprio checkout: nao ha copia para divergir.
+        diferem = None if is_editable() else instalado_difere_da_fonte(raiz)
+        if diferem and status != "behind":
+            status = "installed_differs"
         return {
-            "status": ("behind" if atras else "up_to_date") if estado.get("git")
-                      else "unknown_not_a_checkout",
+            "status": status,
             "version": versao_antes,
             "root": str(raiz),
+            "installed_differs": diferem,
             "steps": passos,
         }
 

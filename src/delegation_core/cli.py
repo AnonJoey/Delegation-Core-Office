@@ -172,9 +172,16 @@ def cmd_update(args):
             elif atras:
                 console.print(f"[yellow]{atras} commit(s) behind {passo['upstream']}[/yellow]")
             else:
-                console.print("[green]up to date[/green]")
+                console.print("[green]source checkout is up to date with its upstream[/green]")
         else:
             console.print("[yellow]not a git checkout: cannot tell whether it is current[/yellow]")
+        diferem = resultado.get("installed_differs")
+        if diferem:
+            amostra = ", ".join(diferem[:3]) + (", ..." if len(diferem) > 3 else "")
+            console.print(f"[yellow]the INSTALLED package differs from the source in {len(diferem)} "
+                          f"file(s) ({amostra}): run `delegation-core update`[/yellow]")
+        elif diferem is not None:
+            console.print("[green]installed package matches the source[/green]")
         return 0
 
     for passo in resultado.get("steps", []):
