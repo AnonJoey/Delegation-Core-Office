@@ -19,7 +19,7 @@ import re
 from datetime import datetime
 from pathlib import Path, PurePosixPath, PureWindowsPath
 
-from .notes import frontmatter_aliases  # noqa: F401  (mora no notes; reexportada)
+from .notes import _aliases_em_ordem, frontmatter_aliases, yaml_quote_scalar  # noqa: F401  (mora no notes; reexportada)
 
 logger = logging.getLogger("linker")
 
@@ -120,10 +120,26 @@ def strip_frontmatter(content: str) -> str:
     return content[m.end():] if m else content
 
 
+def _alias_item(alias: str) -> str:
+    """O alias como item de lista YAML: sem aspas se o YAML o le de volta igual.
+
+    Medido em 04/11/2026: com a regra antiga (aspas so se tiver `:#[]`, sem
+    escapar aspas internas), `@x`, `*x`, `!x`, `%x`, `'x`, `>x`, `|x`, `` `x ``
+    e `Decisao: servidor "x"` quebravam o frontmatter da nota inteira. Texto que
+    o YAML leria como outro tipo (`null`, `true`, `123`) tambem vai entre aspas.
+    """
+    import yaml
+    try:
+        if yaml.safe_load(f"- {alias}") == [alias]:
+            return alias
+    except yaml.YAMLError:
+        pass
+    return yaml_quote_scalar(alias)
+
+
 def _alias_block(aliases: list) -> str:
     """Render an `aliases:` YAML block list, quoting values that need it."""
-    body = "\n".join(f'  - "{a}"' if any(c in a for c in ':#[]') else f"  - {a}"
-                     for a in aliases)
+    body = "\n".join(f"  - {_alias_item(a)}" for a in aliases)
     return f"aliases:\n{body}"
 
 
@@ -131,7 +147,7 @@ def ensure_aliases(content: str, new_aliases: list) -> str:
     """Merge entries into the note's `aliases:` frontmatter (creating frontmatter
     if absent). So `[[Human Title]]` resolves in Obsidian even though the file is
     named `YYYY-MM-DD-slug.md`. Never drops existing aliases; idempotent."""
-    have = frontmatter_aliases(content)
+    have = _aliases_em_ordem(content)
     add: list = []
     for a in new_aliases:                            # dedup vs existing AND within add
         a = a.strip()

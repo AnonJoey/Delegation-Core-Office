@@ -351,6 +351,10 @@ def sanitize_note(raw: str) -> str:
             else:
                 cleaned = cleaned.rstrip() + "\n---\n"
     cleaned = _quote_frontmatter_fields(cleaned)
+    # Rede de seguranca para o resto do bloco (tags, subtitle...): so age se o
+    # frontmatter nao abre, e devolve o texto original se nao houver reparo seguro.
+    from .reparo_frontmatter import reparar_frontmatter
+    cleaned = reparar_frontmatter(cleaned).texto
     return cleaned
 
 
