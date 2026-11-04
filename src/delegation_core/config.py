@@ -118,6 +118,9 @@ class Config:
     llama_port: int = 8181
     llama_ctx: int = 4096
     llama_ngl: int = 999   # GPU layers to offload (999 = all)
+    #: Pedidos atendidos ao mesmo tempo pelo llama-server (`--parallel`).
+    #: 1 nao manda a flag. O contexto (`llama_ctx`) e dividido entre os slots.
+    llama_parallel: int = 1
     #: Onde o modelo local roda, separado de onde roda o BGE (`embed_device`).
     #: "auto": o llama.cpp decide pelas camadas de `llama_ngl` e pela VRAM livre.
     #: "gpu": igual, e o processo do modelo nunca herda uma placa escondida.
