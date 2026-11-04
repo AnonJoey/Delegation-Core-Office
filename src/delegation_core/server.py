@@ -478,6 +478,13 @@ async def search_vault(query: str, limit: int = 5, use_local: bool = False,
         output_empty = not summary or len(summary.strip()) < 20
         return json.dumps({
             "query": query, "summary": summary, "sources": hits, "scope": scope_used,
+            # Medido em 2026-11-04 num Mac em modo local: o resumo inventou uma
+            # data e so o verificador percebeu. Quem le precisa saber que o texto
+            # vem de um modelo menor que ele, e o que fazer com isso.
+            "summary_source": "local_model",
+            "summary_warning": ("Written by the local model, which is smaller than you. Treat it as "
+                                "a lead: check dates and numbers against the sources before "
+                                "repeating them."),
             "quality": {"confidence": confidence, "top_similarity": top_sim,
                         "sources_found": len(hits), "output_empty": output_empty},
         })

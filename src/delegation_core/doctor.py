@@ -148,11 +148,31 @@ def check_engine_mode(cfg) -> dict:
         return {"check": "engine_mode", "status": "error",
                 "detail": f"engine_mode={cfg.engine_mode} but missing: {', '.join(missing)}",
                 "fix": 'set engine_mode to "agent", or fix the paths in config.json'}
-    return {"check": "engine_mode", "status": "ok",
-            "detail": f"{cfg.engine_mode} ({'mlx' if cfg.motor_e_mlx else 'llama.cpp'}): binary and model present"}
+    detalhe = f"{cfg.engine_mode} ({'mlx' if cfg.motor_e_mlx else 'llama.cpp'}): binary and model present"
+    if cfg.engine_mode == "local":
+        # Nao e defeito, e escolha de quem quer tudo offline. Mas o efeito nao e
+        # obvio: toda busca passa por um resumo de modelo menor que o agente.
+        detalhe += ("; every search_vault summary is written by the local model "
+                    "(hybrid returns the sources for the agent to read)")
+    return {"check": "engine_mode", "status": "ok", "detail": detalhe}
 
 
-def check_ingest_registry() -> dict:
+#: Dias sem nova carga a partir dos quais uma fonte ingerida e dada como parada.
+DIAS_FONTE_PARADA = 14
+#: Parcela de erros na ultima carga a partir da qual ela e dada como falha.
+TAXA_ERRO_FONTE = 0.25
+
+
+def check_ingest_registry(agora=None, dias_parada: int = DIAS_FONTE_PARADA) -> dict:
+    """Cada fonte ingerida ainda existe, foi carregada faz pouco e carregou bem?
+
+    O check antigo so via se o caminho existia. Uma pasta parada ha 36 dias, com
+    791 erros na ultima carga, passava como `ok` e o material novo nunca entrava
+    no indice. Fonte parada nao e erro de ninguem, e silencio: so aparece aqui.
+    """
+    from datetime import datetime
+
+    agora = agora or datetime.now()
     reg_path = CONFIG_DIR / "ingested_sources.json"
     if not reg_path.exists():
         return {"check": "ingest_registry", "status": "ok", "detail": "no external folders ingested"}
@@ -166,8 +186,100 @@ def check_ingest_registry() -> dict:
         return {"check": "ingest_registry", "status": "warn",
                 "detail": f"{len(gone)} ingested path(s) no longer exist: {gone[:3]}",
                 "fix": "ingest_forget(<path>) to drop their rows from the index"}
-    return {"check": "ingest_registry", "status": "ok",
-            "detail": f"{len(registry)} ingested path(s), all still present"}
+
+    paradas, com_erro, sem_data = [], [], 0
+    for caminho, info in registry.items():
+        if not isinstance(info, dict) or not info.get("last_indexed"):
+            sem_data += 1
+            continue
+        try:
+            dias = (agora - datetime.fromisoformat(str(info["last_indexed"]))).days
+        except ValueError:
+            sem_data += 1
+            continue
+        if dias > dias_parada:
+            paradas.append((dias, caminho))
+        erros = int(info.get("error_count") or 0)
+        total = erros + int(info.get("indexed_count") or 0) + int(info.get("skipped_unchanged_count") or 0)
+        if erros and total and erros / total >= TAXA_ERRO_FONTE:
+            com_erro.append((erros, total, caminho))
+
+    if paradas or com_erro:
+        partes = []
+        if paradas:
+            dias, caminho = max(paradas)
+            partes.append(f"{len(paradas)} source(s) not re-ingested for more than {dias_parada} days "
+                          f"(oldest: {caminho}, {dias} days)")
+        if com_erro:
+            erros, total, caminho = max(com_erro)
+            partes.append(f"{len(com_erro)} source(s) failing on the last load "
+                          f"(worst: {caminho}, {erros} errors of {total} files)")
+        return {"check": "ingest_registry", "status": "warn", "detail": "; ".join(partes),
+                "fix": "delegation-core ingest --configured  (or add the folder to ingest_sources "
+                       "and schedule it); read the errors with ingest_status()"}
+
+    detalhe = f"{len(registry)} ingested path(s), all still present and recently loaded"
+    if sem_data:
+        detalhe += f"; {sem_data} sem data de carga (rebuilt from the index)"
+    return {"check": "ingest_registry", "status": "ok", "detail": detalhe}
+
+
+#: Bytes que o CLAUDE.md global (com seus imports) pode somar antes do aviso.
+#: 16 KB sao uns 4 mil tokens, carregados antes de a pessoa escrever qualquer coisa.
+LIMITE_CONTEXTO_BYTES = 16_000
+
+
+def _imports_do_claude_md(texto: str, base: Path) -> list[Path]:
+    """Os `@caminho` que ficam sozinhos no inicio de uma linha, como o Claude Code os le."""
+    achados = []
+    for linha in texto.splitlines():
+        linha = linha.strip()
+        if not linha.startswith("@") or len(linha) < 2 or " " in linha:
+            continue
+        alvo = Path(linha[1:]).expanduser()
+        achados.append(alvo if alvo.is_absolute() else base / alvo)
+    return achados
+
+
+def check_context_weight(claude_md: Path | None = None,
+                         limite_bytes: int = LIMITE_CONTEXTO_BYTES) -> dict:
+    """Quanto o ~/.claude/CLAUDE.md carrega em toda sessao, contando os `@imports`.
+
+    O guia do produto importado inteiro tinha 40 KB num Mac e 47 KB em outra
+    maquina: uns 10 mil tokens disputando atencao antes da primeira pergunta.
+    Medir e a unica forma de a pessoa saber, porque o arquivo parece pequeno:
+    o peso esta no que ele aponta.
+    """
+    raiz = claude_md or (Path.home() / ".claude" / "CLAUDE.md")
+    if not raiz.is_file():
+        return {"check": "context_weight", "status": "ok",
+                "detail": f"{raiz} not found, nothing is loaded from it"}
+    vistos: dict[Path, int] = {}
+
+    def percorre(arquivo: Path, fundo: int):
+        try:
+            arquivo = arquivo.resolve()
+            if arquivo in vistos or fundo > 5 or not arquivo.is_file():
+                return
+            texto = arquivo.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            return
+        vistos[arquivo] = len(texto.encode("utf-8"))
+        for alvo in _imports_do_claude_md(texto, arquivo.parent):
+            percorre(alvo, fundo + 1)
+
+    percorre(raiz, 0)
+    total = sum(vistos.values())
+    maiores = sorted(vistos.items(), key=lambda kv: kv[1], reverse=True)[:3]
+    resumo = ", ".join(f"{a.name} {b / 1000:.0f} KB" for a, b in maiores)
+    detalhe = f"{total / 1000:.0f} KB loaded every session through {raiz.name} ({resumo})"
+    if total <= limite_bytes:
+        return {"check": "context_weight", "status": "ok", "detail": detalhe}
+    do_guia = any(a.name == "AGENT_GUIDE.md" and a.parent == CONFIG_DIR.resolve() for a in vistos)
+    fix = (f"import {CONFIG_DIR / 'AGENT_GUIDE_CURTO.md'} instead of AGENT_GUIDE.md in {raiz}; "
+           "the full guide stays on disk for consultation"
+           if do_guia else f"shorten what {raiz} imports; keep the long reference outside it")
+    return {"check": "context_weight", "status": "warn", "detail": detalhe, "fix": fix}
 
 
 def check_graph_registry(cfg) -> dict:
@@ -791,6 +903,7 @@ def run_all(cfg) -> dict:
         check_hooks(),
         check_graph_extra(),
         check_ingest_registry(),
+        check_context_weight(),
         check_graph_registry(cfg),
         check_orphan_segments(cfg),
         check_fts_integrity(cfg),

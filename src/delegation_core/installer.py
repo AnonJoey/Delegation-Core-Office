@@ -43,7 +43,7 @@ logger = logging.getLogger("installer")
 
 #: Documents copied to CONFIG_DIR so the MCP clients can point at a stable path
 #: regardless of where the source checkout lives.
-SHIPPED_DOCS = ("AGENT_GUIDE.md", "CLAUDE_SYSTEM_PROMPT.md")
+SHIPPED_DOCS = ("AGENT_GUIDE.md", "AGENT_GUIDE_CURTO.md", "CLAUDE_SYSTEM_PROMPT.md")
 
 
 # ── where this install came from ─────────────────────────────────────────────
@@ -477,6 +477,7 @@ REMOVE_FILES = (
     "config.json", "processes.json", "graphs_registry.json",
     "last_brief.json", "vault_health.json",
     "AGENT_GUIDE.md", "AGENT_GUIDE.dist.md",
+    "AGENT_GUIDE_CURTO.md", "AGENT_GUIDE_CURTO.dist.md",
     "CLAUDE_SYSTEM_PROMPT.md", "CLAUDE_SYSTEM_PROMPT.dist.md",
 )
 
