@@ -697,8 +697,17 @@ class IngestManager:
         answering searches with paths that no longer resolve. Matches the source
         folder strictly or any file contained beneath it.
         """
+        # Duas grafias da mesma fonte: a que o chamador escreveu e a resolvida.
+        # `resolve()` segue link simbolico, e a chave do registro pode ter sido
+        # gravada com o caminho do link. Medido em 04/11/2026 no servidor gss:
+        # `/home/joey` e um link para `/home/GrimstoneSolutions`, `forget` so
+        # procurava a grafia resolvida e respondia `registry_entry_removed: false`
+        # para as 19 fontes mortas.
+        bruto = Path(os.path.abspath(os.path.expanduser(source_path)))
         source_p = Path(source_path).expanduser().resolve()
         source_str = str(source_p)
+        grafias = {str(bruto), source_str}
+        pais = [bruto, source_p]
         collection = getattr(self._vault, "collection", None)
         if collection is None:
             self._vault._ensure_ready()
@@ -712,7 +721,7 @@ class IngestManager:
             ids = []
             for doc_id, meta in zip(rows.get("ids") or [], rows.get("metadatas") or []):
                 meta = meta or {}
-                if meta.get("source_folder") == source_str:
+                if meta.get("source_folder") in grafias:
                     ids.append(doc_id)
                     continue
                 p_str = meta.get("path", "")
@@ -720,7 +729,7 @@ class IngestManager:
                     try:
                         p = Path(p_str)
                         # Exact match or parent directory containment (not loose string startswith)
-                        if p == source_p or source_p in p.parents:
+                        if any(p == base or base in p.parents for base in pais):
                             ids.append(doc_id)
                     except Exception:
                         pass
@@ -734,7 +743,9 @@ class IngestManager:
             logger.warning("Ingest forget failed for %s: %s", source_str, e)
             return {"error": str(e)}
 
-        had_entry = _remove_source_entry(source_str)
+        had_entry = False
+        for chave in sorted(grafias):
+            had_entry = _remove_source_entry(chave) or had_entry
         return {"source": source_str, "removed_chunks": removed, "registry_entry_removed": had_entry}
 
 
