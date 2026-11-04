@@ -503,3 +503,78 @@ def test_instalacao_editavel_nao_compara_copia(cenario, monkeypatch):
         raise AssertionError("comparou copia numa instalacao editavel")
     monkeypatch.setattr(installer, "instalado_difere_da_fonte", _nao_deve_ser_chamada)
     assert installer.update(check_only=True)["status"] == "up_to_date"
+
+
+# ── o build velho do setuptools nao entra no pacote ─────────────────────────
+
+def _checkout_com_build_velho(tmp_path):
+    raiz = tmp_path / "checkout"
+    (raiz / "src" / "delegation_core").mkdir(parents=True)
+    (raiz / "src" / "delegation_core" / "recuperacao.py").write_text("def novo(): ...\n", encoding="utf-8")
+    velho = raiz / "build" / "lib" / "delegation_core" / "recuperacao"
+    velho.mkdir(parents=True)
+    (velho / "__init__.py").write_text("# pacote que a fonte nao tem mais\n", encoding="utf-8")
+    (raiz / "build" / "bdist.linux-x86_64").mkdir()
+    (raiz / "build" / "anotacoes.txt").write_text("do usuario\n", encoding="utf-8")
+    return raiz
+
+
+def test_limpa_a_saida_velha_do_setuptools_e_so_ela(tmp_path):
+    """Medido em 2026-11-04: o `build/` do checkout (ignorado pelo git, de 05/10) levava uma pasta
+    `recuperacao/` que a fonte ja tinha trocado por `recuperacao.py`. O pip a instalou ao lado do
+    arquivo novo, a pasta venceu na importacao e o `heartbeat` do daemon passou a falhar com
+    "no attribute 'reconstrucao_pendente'"."""
+    raiz = _checkout_com_build_velho(tmp_path)
+    removidos = installer.limpar_build_do_setuptools(raiz)
+    assert not (raiz / "build" / "lib").exists()
+    assert not (raiz / "build" / "bdist.linux-x86_64").exists()
+    assert (raiz / "build" / "anotacoes.txt").exists(), "apagou arquivo que nao e saida do setuptools"
+    assert set(removidos) == {"build/lib", "build/bdist.linux-x86_64"}
+
+
+def test_sem_build_nao_ha_o_que_limpar(tmp_path):
+    assert installer.limpar_build_do_setuptools(tmp_path) == []
+
+
+def test_o_pip_so_roda_depois_da_limpeza(tmp_path, monkeypatch):
+    raiz = _checkout_com_build_velho(tmp_path)
+    vistos = []
+
+    class _P:
+        returncode, stdout, stderr = 0, "", ""
+
+    def pip(cmd, **kw):
+        vistos.append((raiz / "build" / "lib").exists())
+        return _P()
+
+    monkeypatch.setattr(installer.subprocess, "run", pip)
+    ok, _ = installer._pip_install(raiz)
+    assert ok and vistos == [False], f"o pip viu o build velho: {vistos}"
+
+
+def test_arquivos_so_no_instalado_sao_os_que_a_fonte_nao_tem(tmp_path):
+    raiz = _checkout_com_build_velho(tmp_path)
+    instalado = tmp_path / "site-packages" / "delegation_core"
+    (instalado / "recuperacao").mkdir(parents=True)
+    (instalado / "recuperacao" / "__init__.py").write_text("# velho\n", encoding="utf-8")
+    (instalado / "recuperacao.py").write_text("def novo(): ...\n", encoding="utf-8")
+    (instalado / "dados.db").write_text("alterado em runtime\n", encoding="utf-8")
+    (raiz / "src" / "delegation_core" / "dados.db").write_text("original\n", encoding="utf-8")
+    # modulo que a fonte ganhou e o pacote ainda nao tem: nao e arquivo velho, e atraso
+    (raiz / "src" / "delegation_core" / "modulo_novo.py").write_text("x = 1\n", encoding="utf-8")
+    assert installer.arquivos_so_no_instalado(raiz, instalado) == ["recuperacao/__init__.py"]
+
+
+def test_fim_do_update_avisa_arquivo_velho_no_instalado(tmp_path, monkeypatch):
+    raiz = _checkout_com_build_velho(tmp_path)
+    monkeypatch.setattr(installer, "refresh_shipped_files", lambda r: {})
+    monkeypatch.setattr(installer, "is_editable", lambda: False)
+    monkeypatch.setattr(installer, "arquivos_so_no_instalado",
+                        lambda r, i=None: ["recuperacao/__init__.py"])
+    import delegation_core.clients as clients
+    monkeypatch.setattr(clients, "register_session_hooks", lambda: {"status": "ok"})
+    monkeypatch.setattr(clients, "register_codex_session_hook", lambda: {"status": "ok"})
+    monkeypatch.setattr(installer.service, "install", lambda: {"status": "installed"})
+    passos = {p["step"]: p for p in installer.finish_update(raiz)}
+    assert passos["verify_install"]["ok"] is False
+    assert passos["verify_install"]["installed_only"] == ["recuperacao/__init__.py"]

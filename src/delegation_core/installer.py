@@ -285,8 +285,52 @@ def stale_dist_copies() -> list[str]:
 
 # ── the update itself ────────────────────────────────────────────────────────
 
+def limpar_build_do_setuptools(root: Path) -> list[str]:
+    """Apaga a saida velha do setuptools no checkout (`build/lib`, `build/bdist.*`).
+
+    O pip constroi dentro do checkout e o setuptools reaproveita `build/lib`: o que ja
+    estava la entra no pacote, mesmo depois de a fonte apagar ou trocar o arquivo. Medido
+    em 2026-11-04: um `build/` de 05/10 levava uma pasta `recuperacao/` que a fonte ja
+    tinha trocado por `recuperacao.py`. O pip instalou as duas, a pasta venceu na
+    importacao e o `heartbeat` do daemon quebrou com "no attribute 'reconstrucao_pendente'".
+
+    So o que o setuptools gera: o resto de `build/` (de outra ferramenta, ou do usuario)
+    fica. Devolve o que removeu, relativo a `root`.
+    """
+    build = Path(root) / "build"
+    if not build.is_dir():
+        return []
+    removidos = []
+    for alvo in [build / "lib", *sorted(build.glob("bdist.*"))]:
+        if alvo.is_dir():
+            shutil.rmtree(alvo, ignore_errors=True)
+            removidos.append(alvo.relative_to(root).as_posix())
+    return removidos
+
+
+def arquivos_so_no_instalado(raiz: Path, instalado: Path | None = None) -> list[str]:
+    """Arquivos .py que existem no pacote instalado e a fonte nao tem.
+
+    E a assinatura do build velho: arquivo que o pip instalou sem que o checkout o
+    tenha. Diferente de `instalado_difere_da_fonte`, ignora os arquivos que existem
+    nos dois lados com conteudo diferente (bancos de dados que mudam em runtime).
+    """
+    fonte = Path(raiz) / "src" / "delegation_core"
+    if instalado is None:
+        instalado = Path(__file__).resolve().parent
+    if not fonte.is_dir() or not instalado.is_dir():
+        return []
+
+    def _py(base: Path) -> set[str]:
+        return {f.relative_to(base).as_posix() for f in base.rglob("*.py")
+                if "__pycache__" not in f.parts}
+
+    return sorted(_py(instalado) - _py(fonte))
+
+
 def _pip_install(root: Path) -> tuple[bool, str]:
     """Reinstall the package from `root`, with the optional extras if they build."""
+    limpar_build_do_setuptools(root)
     base = [sys.executable, "-m", "pip", "install", "--quiet"]
     for alvo in (f"{root}[graph,web]", str(root)):
         try:
@@ -432,6 +476,13 @@ def finish_update(root: Path) -> list[dict]:
     codex_hooks = register_codex_session_hook()
     passos.append({"step": "register_codex_hooks", "ok": codex_hooks["status"] != "error", **codex_hooks})
     passos.append({"step": "register_service", "ok": True, **service.install()})
+    if not is_editable():
+        # Roda no codigo novo (processo filho): `__file__` aqui e o pacote recem instalado.
+        velhos = arquivos_so_no_instalado(root)
+        passos.append({"step": "verify_install", "ok": not velhos, "installed_only": velhos[:20],
+                       **({"detail": "arquivos no pacote instalado que a fonte nao tem; um deles "
+                                     "pode sobrepor um modulo novo. Apague build/ no checkout e rode "
+                                     "`delegation-core update` de novo"} if velhos else {})})
     return passos
 
 
