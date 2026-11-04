@@ -187,3 +187,15 @@ def test_passo_do_bge_com_modelo_sem_gguf_fica_no_torch_sem_perguntar(monkeypatc
     monkeypatch.setattr(wizard.console, "input", lambda *a, **k: perguntou.append(a) or "")
     wizard._step_embed_llama(cfg)
     assert perguntou == []
+
+
+def test_a_tela_final_manda_importar_o_guia_curto_e_nao_o_completo(monkeypatch):
+    """O guia completo (~47 KB) em toda sessao foi o maior peso fixo medido em 2026-11-04."""
+    from pathlib import Path
+    monkeypatch.setattr(wizard, "CONFIG_DIR", Path("/cfg"))  # caminho curto: o painel nao quebra a linha
+    with wizard.console.capture() as cap:
+        wizard._completion(Config(vault_path="/v"), {"daemon": "running", "clients": {"claude_code": "installed"}})
+    texto = cap.get()
+    assert "@" in texto and "AGENT_GUIDE_CURTO.md" in texto
+    importado = [l for l in texto.splitlines() if l.strip().strip("│ ").startswith("@")]
+    assert importado and all("AGENT_GUIDE_CURTO.md" in l for l in importado), importado

@@ -272,6 +272,28 @@ def is_excluded(path: Path, source: Path, patterns: list[str]) -> bool:
     return False
 
 
+def raizes_de_sessao_de_agentes() -> list[Path]:
+    """Pastas onde Claude Code e Codex guardam a transcricao bruta de cada sessao.
+
+    O hook de fim de sessao ja leva um resumo e a transcricao para `Sessions/`
+    no vault. Ingerir estas pastas como fonte externa duplica o conteudo e
+    enche a busca de arquivos de configuracao e de ferramenta, medido em
+    2026-11-04 num Mac com 1.824 trechos assim no indice.
+    """
+    casa = Path.home()
+    return [casa / ".claude" / "projects", casa / ".codex" / "sessions"]
+
+
+def _raiz_de_sessao_que_contem(caminho: Path) -> Path | None:
+    """A raiz de sessao de agente que contem `caminho` (ou e ele), se houver."""
+    alvo = caminho.resolve()
+    for raiz in raizes_de_sessao_de_agentes():
+        raiz = raiz.resolve()
+        if alvo == raiz or raiz in alvo.parents:
+            return raiz
+    return None
+
+
 def _source_paths(entry: dict) -> list[dict]:
     """Expand one logical source into its physical paths.
 
@@ -404,6 +426,23 @@ class IngestManager:
         if configured_match is not None and not configured_source.get("enabled", True):
             return {"error": f"Configured source is disabled: {configured_source.get('name') or source}"}
 
+        # Uma pasta declarada em ingest_sources vence a regra: quem escreveu o
+        # caminho na configuracao quer aquele conteudo.
+        if configured_match is None:
+            dentro_de = _raiz_de_sessao_que_contem(source)
+            if dentro_de is not None:
+                return {
+                    "error": (
+                        f"{source} guarda transcricoes brutas de sessoes de agentes. "
+                        "Elas ja chegam ao vault em Sessions/ pelo hook de fim de sessao, "
+                        "e ingeri-las de novo duplica o conteudo e polui a busca. "
+                        "Se quiser mesmo assim, declare o caminho em ingest_sources."
+                    )
+                }
+        raizes_a_pular = [] if configured_match is not None else [
+            r.resolve() for r in raizes_de_sessao_de_agentes()]
+        sessoes_puladas: list[str] = []
+
         candidates: list[Path]
         unsupported: Counter[str] = Counter()
 
@@ -439,7 +478,9 @@ class IngestManager:
                     kept_directories = []
                     for directory in directories:
                         candidate_dir = root_path / directory
-                        if is_excluded(candidate_dir, source, patterns):
+                        if candidate_dir.resolve() in raizes_a_pular:
+                            sessoes_puladas.append(str(candidate_dir))
+                        elif is_excluded(candidate_dir, source, patterns):
                             excluded.append(candidate_dir.relative_to(source).as_posix())
                         else:
                             kept_directories.append(directory)
@@ -603,6 +644,10 @@ class IngestManager:
             # meant looks exactly like a folder with fewer files in it.
             result["excluded"] = len(excluded)
             result["excluded_files"] = excluded[:20]
+        if sessoes_puladas:
+            # Dito, nao calado: some uma pasta inteira e quem ingeriu a home
+            # precisa saber por que as sessoes nao estao la.
+            result["skipped_agent_sessions"] = sessoes_puladas
         if skipped_dataless:
             result["dataless_files"] = skipped_dataless
         if unsupported:

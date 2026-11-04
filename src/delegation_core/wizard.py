@@ -973,7 +973,8 @@ def _step_connect(cfg: Config, auto_start: bool) -> dict:
 
 def _completion(cfg: Config, conexao: dict | None = None):
     conexao = conexao or {}
-    agent_guide = CONFIG_DIR / "AGENT_GUIDE.md"
+    agent_guide = CONFIG_DIR / "AGENT_GUIDE_CURTO.md"
+    agent_guide_completo = CONFIG_DIR / "AGENT_GUIDE.md"
     system_prompt = CONFIG_DIR / "CLAUDE_SYSTEM_PROMPT.md"
 
     estado_do_daemon = {
@@ -1007,6 +1008,9 @@ def _completion(cfg: Config, conexao: dict | None = None):
         "Follow this protocol whenever delegation-core's MCP tools are available:\n\n"
         f"@{agent_guide}",
         title="[bold]~/.claude/CLAUDE.md[/bold]", border_style="blue"))
+    console.print("     [dim]This is the short protocol (about 2 KB). The complete reference stays at[/dim]")
+    console.print(f"     [dim]{agent_guide_completo} for consultation: importing it would add[/dim]")
+    console.print("     [dim]about 10 thousand tokens to every session.[/dim]")
     console.print()
     console.print("  [bold]3. Codex: review the session hooks[/bold]")
     console.print("     The installer registers them in [cyan]~/.codex/hooks.json[/cyan], whether or not")

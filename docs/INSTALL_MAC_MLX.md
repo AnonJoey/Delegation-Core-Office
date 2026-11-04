@@ -192,8 +192,8 @@ Por que cada campo:
 
 - Confirme que o instalador registrou `delegation-core` em `~/.claude.json`
   (`mcpServers`). Se não, registre com `claude mcp add` seguindo o README.
-- Copie `AGENT_GUIDE.md` para `~/.delegation_core/` se o instalador não copiou, e
-  garanta que `~/.claude/CLAUDE.md` o referencia.
+- Copie `AGENT_GUIDE_CURTO.md` para `~/.delegation_core/` se o instalador não copiou, e
+  garanta que `~/.claude/CLAUDE.md` o referencia (o `AGENT_GUIDE.md` completo fica só para consulta).
 - Rode `delegation-core doctor` e mostre a saída.
 - Reinicie o Claude Code e, numa sessão nova: `capabilities()`, `heartbeat()` (deve dar
   `healthy` com o motor online), e um `compress()` com um texto curto para provar que a

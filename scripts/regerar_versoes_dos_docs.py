@@ -16,7 +16,7 @@ import subprocess
 from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parents[1]
-DOCS = ("AGENT_GUIDE.md", "CLAUDE_SYSTEM_PROMPT.md")
+DOCS = ("AGENT_GUIDE.md", "AGENT_GUIDE_CURTO.md", "CLAUDE_SYSTEM_PROMPT.md")
 ALVO = RAIZ / "versoes_entregues_docs.json"
 
 
