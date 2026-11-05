@@ -726,6 +726,12 @@ class _Handler(BaseHTTPRequestHandler):
             if valor in ("auto", "cpu", "cuda", "mps"):
                 _cfg.embed_device = valor
 
+        if "llama_parallel" in data:
+            try:
+                _cfg.llama_parallel = max(1, int(data["llama_parallel"]))
+            except (ValueError, TypeError):
+                pass
+
         if "llama_ngl" in data:
             try:
                 _cfg.llama_ngl = int(data["llama_ngl"])

@@ -241,3 +241,33 @@ def test_status_resume_os_arquivos_por_padrao_e_so_lista_quando_pedido(cfg, tmp_
     resumo = manager.status()["sources"][chave]
     assert resumo["file_count"] == 5 and "files" not in resumo
     assert len(manager.status(detalhe=True)["sources"][chave]["files"]) == 5
+
+
+def test_forget_acha_a_fonte_registrada_por_um_caminho_com_link_simbolico(cfg, tmp_path):
+    """No servidor gss `/home/joey` e um link para `/home/GrimstoneSolutions`.
+
+    Medido em 04/11/2026: `forget("/home/joey/Projects/rtk")` resolvia o link e
+    procurava `/home/GrimstoneSolutions/Projects/rtk`, que nao e a chave do
+    registro. Resposta: `registry_entry_removed: false`, 0 trechos, e as 19
+    fontes mortas continuaram no `ingest_status`.
+    """
+    real = tmp_path / "real"
+    real.mkdir()
+    (tmp_path / "link").symlink_to(real, target_is_directory=True)
+    chave = str(tmp_path / "link" / "morta")          # nao existe em lugar nenhum
+    registro = tmp_path / "ingested_sources.json"
+    registro.write_text(json.dumps({chave: {"last_indexed": "2026-10-01", "files": {}}}))
+    vault = FakeVault(cfg, rows={
+        # So a pasta de origem casa com a grafia do link.
+        "ida": {"is_external": "true", "source_folder": chave, "path": "/em/outro/lugar/a.md"},
+        # So o caminho do arquivo esta abaixo da grafia do link.
+        "volta": {"is_external": "true", "source_folder": "/zzz", "path": f"{chave}/b.md"},
+        "alheia": {"is_external": "true", "source_folder": "/outra", "path": "/outra/c.md"},
+    })
+
+    result = IngestManager(vault).forget(chave)
+
+    assert result["registry_entry_removed"] is True
+    assert result["removed_chunks"] == 2
+    assert sorted(vault.collection.deleted) == ["ida", "volta"]
+    assert json.loads(registro.read_text()) == {}

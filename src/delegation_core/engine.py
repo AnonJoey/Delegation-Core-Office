@@ -599,6 +599,9 @@ class DelegationEngine:
         # failed 132 MiB short on the compute buffer, so this is the margin
         # between loading and not loading, not a tuning preference.
         cmd += ["-fa", "on", "-ctk", "q8_0", "-ctv", "q8_0"]
+        slots = int(getattr(self.cfg, "llama_parallel", 1) or 1)
+        if slots > 1:
+            cmd += ["--parallel", str(slots)]
         logger.info("Starting llama.cpp: %s", " ".join(cmd))
 
         # Take the card before spawning. BGE and a 12B model do not both fit,

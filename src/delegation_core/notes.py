@@ -359,32 +359,67 @@ def yaml_unquote_scalar(value: str) -> str:
 _LEADING_FRONTMATTER_RE = re.compile(r"^---\n(.*?)\n---\n", re.DOTALL)
 
 
-def frontmatter_aliases(content: str) -> set:
-    """Return the set of Obsidian `aliases:` declared in a note's frontmatter.
-    Supports both block-list and inline `[a, b]` forms. Empty set if none."""
+def _aliases_em_ordem(content: str) -> list:
+    """Os `aliases:` do frontmatter, na ordem em que estao escritos.
+
+    Tenta primeiro um leitor de YAML de verdade. A leitura antiga cortava as
+    aspas com `.strip('"')`, que arranca tambem a aspa que faz parte do texto
+    (o alias `A: "b"` voltava como `A: "b`) e nao desfazia o escape, que dobrava
+    a cada nova gravacao. O resultado era um alias com aspa aberta, gravado de
+    volta como linha solta (62 notas do vault com frontmatter ilegivel, medido
+    em 04/11/2026). Se o bloco nao abre (nota ja quebrada), cai na leitura por
+    linha de antes. Sem a palavra `aliases` no bloco nem chega a interpretar
+    YAML: a varredura de saude chama isto para o vault inteiro.
+    """
     if not content.startswith("---\n"):
-        return set()
+        return []
     close = content.find("\n---\n", 4)
     if close == -1:
-        return set()
+        return []
     fm = content[4:close]
+    if "aliases" not in fm:
+        return []
+    try:
+        import yaml
+        dados = yaml.safe_load(fm)
+    except Exception:  # noqa: BLE001 - bloco ilegivel: leitura por linha
+        dados = None
+    else:
+        if not isinstance(dados, dict):
+            return []
+        v = dados.get("aliases")
+        if v is None:
+            return []
+        itens = [v] if isinstance(v, str) else list(v) if isinstance(v, (list, tuple)) else []
+        vistos: list = []
+        for x in itens:
+            t = str(x).strip() if x is not None else ""
+            if t and t not in vistos:
+                vistos.append(t)
+        return vistos
     # [^\S\n]* = horizontal whitespace only, so it never crosses the newline into
     # the first block-list item (the bug that swallowed `- item` into group 1).
     m = re.search(r"^aliases:[^\S\n]*(.*)$", fm, re.MULTILINE)
     if not m:
-        return set()
-    out: set = set()
+        return []
+    out: list = []
     inline = m.group(1).strip()
     if inline.startswith("["):                       # aliases: [a, b]
-        out |= {x.strip().strip('"').strip("'") for x in inline[1:-1].split(",")}
+        out += [x.strip().strip('"').strip("'") for x in inline[1:-1].split(",")]
     else:                                            # block list under aliases:
         for line in fm[m.end():].splitlines():
             lm = re.match(r"[^\S\n]*-\s+(.*\S)", line)
             if lm:
-                out.add(lm.group(1).strip().strip('"').strip("'"))
+                out.append(lm.group(1).strip().strip('"').strip("'"))
             elif line.strip() and not line[:1].isspace():
                 break                                # next top-level key → stop
-    return {a for a in out if a}
+    return [a for i, a in enumerate(out) if a and a not in out[:i]]
+
+
+def frontmatter_aliases(content: str) -> set:
+    """Return the set of Obsidian `aliases:` declared in a note's frontmatter.
+    Supports both block-list and inline `[a, b]` forms. Empty set if none."""
+    return set(_aliases_em_ordem(content))
 
 
 def _frontmatter_parses(content: str) -> bool:

@@ -121,6 +121,43 @@ def check_vault_folders(cfg) -> dict:
             "detail": f"{len(configured)} folder(s) present, no case-variant shadows"}
 
 
+def check_config_keys(config_file: Path | None = None) -> dict:
+    """Chave do config.json que nao e campo do Config.
+
+    `Config.load` descarta essas chaves em silencio. Medido em 04/11/2026 no
+    servidor gss: `llama_parallel` estava no config.json e nao existia como
+    campo, entao a opcao nao valia e ninguem era avisado. Um erro de digitacao
+    (`llama_ctxx`) tem o mesmo efeito.
+    """
+    import difflib
+    import json
+
+    from .config import CONFIG_FILE, Config
+
+    caminho = Path(config_file) if config_file is not None else CONFIG_FILE
+    if not caminho.exists():
+        return {"check": "config_keys", "status": "ok", "detail": "sem config.json (valores padrao)"}
+    try:
+        dados = json.loads(caminho.read_text(encoding="utf-8"))
+        if not isinstance(dados, dict):
+            raise ValueError("a raiz nao e um objeto")
+    except (OSError, ValueError) as e:
+        return {"check": "config_keys", "status": "warn",
+                "detail": f"{caminho.name} ilegivel ({e}); o daemon sobe com os valores padrao",
+                "fix": f"corrigir o JSON de {caminho}"}
+    campos = list(Config.__dataclass_fields__)
+    soltas = sorted(k for k in dados if k not in Config.__dataclass_fields__)
+    if not soltas:
+        return {"check": "config_keys", "status": "ok", "detail": f"{len(dados)} chaves, todas conhecidas"}
+    partes = []
+    for k in soltas:
+        perto = difflib.get_close_matches(k, campos, n=1, cutoff=0.8)
+        partes.append(f"{k} (quis dizer {perto[0]}?)" if perto else k)
+    return {"check": "config_keys", "status": "warn",
+            "detail": "chaves ignoradas pelo Config: " + ", ".join(partes),
+            "fix": f"remover ou corrigir em {caminho}; chave desconhecida nao vale e nao da erro"}
+
+
 def check_graph_extra() -> dict:
     try:
         import tree_sitter  # noqa: F401
@@ -902,6 +939,7 @@ def run_all(cfg) -> dict:
         check_vault_folders(cfg),
         check_hooks(),
         check_graph_extra(),
+        check_config_keys(),
         check_ingest_registry(),
         check_context_weight(),
         check_graph_registry(cfg),

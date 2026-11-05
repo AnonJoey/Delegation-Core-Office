@@ -511,6 +511,50 @@ class VaultManager:
     # ── write / index ────────────────────────────────────────────────────────
 
     @uses_index
+    def _pedacos_da_nota(self, content: str) -> list[str]:
+        """Os trechos em que uma nota vira linhas do indice.
+
+        Um unico lugar para `index_note` e para `_indexada_igual`: se os dois
+        cortassem de jeito diferente, a comparacao diria "igual" ou "diferente"
+        por engano.
+        """
+        return chunk_text(content,
+                          max_chars=effective_chunk_chars(
+                              self.cfg.bge_model,
+                              self.cfg.vault_chunk_size,
+                              self.cfg.embed_max_seq_length),
+                          overlap=self.cfg.vault_chunk_overlap)
+
+    def _indexada_igual(self, rel: str, content: str) -> bool:
+        """O indice ja guarda exatamente o texto que `index_note` gravaria agora?
+
+        So a data de modificacao nao diz se a nota mudou: um relink em massa ou
+        um `touch` regrava o arquivo sem mudar uma letra. Medido em 04/11/2026
+        no servidor: 41.685 de 81.478 notas com data de 28 a 29/10, e o BGE-m3 na
+        CPU dele faz 1,18 trechos por segundo. Reembutir texto igual custaria
+        mais de dez horas.
+
+        Verdadeiro so se os ids e os textos batem com os trechos de agora, sem
+        sobra e sem falta. Qualquer duvida (erro de leitura, nota sem linhas,
+        trecho a mais de uma versao antiga) devolve falso e o reindex segue o
+        caminho de sempre.
+        """
+        if not self.collection or not content:
+            return False
+        try:
+            esperado_texto = texto_indexavel(content)
+            if not esperado_texto:
+                return False
+            esperado = {f"{rel}::chunk_{i}": c
+                        for i, c in enumerate(self._pedacos_da_nota(esperado_texto))}
+            guardado = self.collection.get(where={"path": rel}, include=["documents"])
+            ids = guardado.get("ids") or []
+            docs = guardado.get("documents") or []
+            return len(ids) == len(docs) and dict(zip(ids, docs)) == esperado
+        except Exception as e:  # noqa: BLE001 - na duvida, reembute
+            logger.debug("comparacao com o indice falhou em %s: %s", rel, e)
+            return False
+
     def index_note(self, content: str, metadata: dict, doc_id: str = "") -> bool:
         """Upsert content into ChromaDB. Returns True when the rows landed.
 
@@ -630,12 +674,7 @@ class VaultManager:
             # reconcile them here or a chunk sized for one model gets quietly
             # truncated by another (4000 chars against bge-base's 512-token
             # window loses roughly half of every chunk).
-            chunks = chunk_text(content,
-                                max_chars=effective_chunk_chars(
-                                    self.cfg.bge_model,
-                                    self.cfg.vault_chunk_size,
-                                    self.cfg.embed_max_seq_length),
-                                overlap=self.cfg.vault_chunk_overlap)
+            chunks = self._pedacos_da_nota(content)
             total = str(len(chunks))
             # ::chunk_0 even when there is exactly one chunk, unlike ingest.py's
             # bare-path special case. If the key shape depended on the content,
@@ -915,6 +954,7 @@ class VaultManager:
             descartou_o_estado = True
         count = 0
         skipped = 0
+        igual = 0
         on_disk: set[str] = set()
 
         for folder in self.cfg.vault_folders:
@@ -935,6 +975,11 @@ class VaultManager:
                     continue
                 try:
                     content = f.read_text(encoding="utf-8")
+                    if not force and self._indexada_igual(rel, content):
+                        # So a data mudou. Carimba a data nova e nao reembute.
+                        state[rel] = mtime
+                        igual += 1
+                        continue
                     fm = self._parse_frontmatter(content)
                     title = fm.get("title") or f.name[:-3]
                     # `content` reaches note_metadata so classify_subkind can read
@@ -1024,8 +1069,10 @@ class VaultManager:
             base[self._SCHEMA_KEY] = self._INDEX_SCHEMA
             return base
         self._update_index_state(resultado_da_passagem)
-        if skipped:
-            logger.info("Reindex: %d indexed, %d unchanged (skipped)", count, skipped)
+        if skipped or igual:
+            logger.info("Reindex: %d indexed, %d unchanged (skipped), "
+                        "%d with new mtime but same text (stamped only)",
+                        count, skipped, igual)
         return count
 
     # ── maintenance helpers ───────────────────────────────────────────────────
