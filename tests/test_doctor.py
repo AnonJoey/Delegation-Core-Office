@@ -361,7 +361,7 @@ def _chroma_com_um_segmento(cfg):
 
 
 def test_backup_do_indice_e_nomeado_no_aviso_e_poupado_pelo_clean_orphans(cfg):
-    """O Max recebeu "1 diretorio de indice legado" sem saber que era o backup que ele
+    """Um colega recebeu "1 diretorio de indice legado" sem saber que era o backup que ele
     mesmo fizera, e o remedio sugerido o teria apagado junto com o caminho de volta."""
     _chroma_com_um_segmento(cfg)
     backup = cfg.vault / ".chroma_bge-backup-20261015"

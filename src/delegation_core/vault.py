@@ -558,13 +558,11 @@ class VaultManager:
     def index_note(self, content: str, metadata: dict, doc_id: str = "") -> bool:
         """Upsert content into ChromaDB. Returns True when the rows landed.
 
-        The return value matters because this method now DELETES a note's
-        existing rows before writing its new ones. If the delete lands and the
-        upsert then fails, the note has no rows at all — before chunking, a
-        failed write merely left the previous row in place, so the failure mode
-        was stale content rather than disappearance. reindex_vault stamps a
-        note's mtime as current only on True; stamping unconditionally would
-        make every later incremental run skip the note it just lost.
+        The return value matters: reindex_vault stamps a note's mtime as current
+        only on True, and stamping unconditionally would make every later
+        incremental run skip a note whose write failed. The new rows are written
+        first and the stale ones removed after, so a failure or a kill in the
+        middle leaves old text behind rather than a note with no rows at all.
 
         doc_id: explicit ID for chunked external files (IngestManager).
         Defaults to metadata['path'] so vault notes are keyed by their vault-relative path.
@@ -690,29 +688,39 @@ class VaultManager:
 
         try:
             with _chroma_write_lock:
+                velhos: list[str] = []
                 if chunkable:
                     # upsert replaces, it never removes. A note edited from 12
                     # chunks down to 3 would keep ::chunk_3..11 verbatim from the
-                    # old revision — text that exists in no file, answering
+                    # old revision: text that exists in no file, answering
                     # searches forever, and invisible to the orphan sweep because
-                    # the note itself is still on disk. organizer's heal pass
-                    # exists to shorten notes, so this is the common case, not the
-                    # exotic one. Failure here is logged rather than fatal: a
-                    # stale sibling is worse than nothing, but not indexing the
-                    # note at all is worse still.
+                    # the note itself is still on disk.
+                    #
+                    # A limpeza vem DEPOIS da gravacao, e so do que sobrou. Ate
+                    # 16/11/2026 a ordem era apagar tudo e regravar: medido com
+                    # `kill -9` no meio de uma carga, uma nota gravada e
+                    # confirmada minutos antes ficou sem linha nenhuma no indice,
+                    # porque a queda caiu entre o delete e o upsert de uma
+                    # regravacao (o relink). Gravando primeiro, a queda no meio
+                    # deixa no maximo um trecho antigo sobrando, nunca a nota
+                    # fora da busca.
                     try:
-                        self.collection.delete(where={"path": raw_path})
+                        achado = self.collection.get(where={"path": raw_path}, include=[])
+                        velhos = [i for i in (achado.get("ids") or []) if i not in set(ids)]
+                    except Exception as e:
+                        logger.warning("Stale-chunk lookup failed for %s: %s", raw_path, e)
+                self.collection.upsert(ids=ids, documents=chunks, metadatas=metas)
+                if velhos:
+                    try:
+                        self.collection.delete(ids=velhos)
                     except Exception as e:
                         logger.warning("Stale-chunk cleanup failed for %s: %s", raw_path, e)
-                self.collection.upsert(ids=ids, documents=chunks, metadatas=metas)
                 # Our own write moves the fingerprint; adopt it, or the next call
                 # reads it as a foreign change and reopens on every single write.
                 self._disk_state = self._read_disk_state()
         except Exception as e:
             # Naming the note is the whole difference between a log line someone
-            # can act on and one that only proves something went wrong. The
-            # delete above may already have landed, so this note can be on disk
-            # with no rows at all.
+            # can act on and one that only proves something went wrong.
             logger.error("index_note: %r was NOT indexed (%s: %s) — it is on disk "
                          "and invisible to search", raw_path, type(e).__name__, e)
             return False
@@ -1369,6 +1377,7 @@ class VaultManager:
         try:
             existing = f.read_text(encoding="utf-8")
             stamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+            append_content = append_content.replace("\x00", " ")  # o .md nao leva NUL, como o indice
             updated = existing + f"\n\n---\n*Updated {stamp}*\n\n{append_content}"
             f.write_text(updated, encoding="utf-8")
             rel = f.relative_to(self.cfg.vault).as_posix()

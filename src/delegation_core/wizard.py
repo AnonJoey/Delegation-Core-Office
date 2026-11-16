@@ -750,9 +750,6 @@ def _systemd_literal(value) -> str:
 
 
 def _startup_systemd(cfg: Config):
-    service_dir = Path.home() / ".config" / "systemd" / "user"
-    service_dir.mkdir(parents=True, exist_ok=True)
-
     service = (
         "[Unit]\n"
         "Description=llama.cpp server for delegation-core\n"
@@ -781,6 +778,10 @@ def _startup_systemd(cfg: Config):
     # reads them too. They used to be spelled out independently in five files.
     from . import service as _svc
     service_file = _svc.LLAMA_SYSTEMD_UNIT
+    # A pasta e a do proprio arquivo, nao um segundo `Path.home()/.config/...`
+    # escrito aqui: com os dois, um teste que redirecionava a unit ainda criava
+    # `~/.config/systemd/user` no HOME de quem rodava a suite (medido em 16/11/2026).
+    service_file.parent.mkdir(parents=True, exist_ok=True)
     # encoding explicito, como service.py ja faz para a unit DELE. Sem ele
     # o Python usa locale.getpreferredencoding(): medido sob LC_ALL=C, um
     # caminho com acento levanta UnicodeEncodeError e o usuario recebe

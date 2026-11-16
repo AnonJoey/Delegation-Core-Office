@@ -1,6 +1,6 @@
 """Um NUL no meio do texto de um documento corrompia o FTS5 do ChromaDB.
 
-Diagnostico de 26/10/2026 (maquina do Saad): o indice de busca textual voltou a corromper
+Diagnostico de 26/10/2026 (maquina de um colega): o indice de busca textual voltou a corromper
 entre 15:33 e 15:39, depois da reingestao de PDFs, com o doctor dando "healthy" as 15:33 e
 `--rebuild-fts` tendo consertado as 13:56. Reproduzido aqui sem concorrencia, com o
 chromadb 1.5.9: um documento com NUL no meio deixa o `integrity-check` em "database disk

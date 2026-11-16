@@ -572,7 +572,7 @@ def _pastas_de_indice_abandonadas(cfg) -> list[Path]:
 
 def _descreve_abandonadas(abandonadas: list[Path]) -> tuple[list[str], str | None]:
     """Texto do aviso e remedio. Backup e rede de seguranca, nao lixo: o aviso diz qual
-    pasta e qual, e o remedio padrao nao a apaga (o Max, em 15/10/2026, recebeu
+    pasta e qual, e o remedio padrao nao a apaga (um colega, em 15/10/2026, recebeu
     "1 diretorio de indice legado" sem saber que era o backup que ele mesmo fizera, e o
     `--clean-orphans` o teria apagado junto com a possibilidade de voltar atras)."""
     backups = [d for d in abandonadas if _e_backup_de_indice(d)]

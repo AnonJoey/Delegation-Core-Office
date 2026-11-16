@@ -105,7 +105,8 @@ def test_codex_session_end_only_dispatches_a_detached_worker(monkeypatch, tmp_pa
 def test_codex_worker_is_hidden_on_windows(monkeypatch):
     monkeypatch.setattr(entrada, "_is_windows", lambda: True)
     flags = entrada._detached_popen_kwargs().get("creationflags", 0)
-    assert flags & entrada.DETACHED_PROCESS
+    # DETACHED_PROCESS anula o CREATE_NO_WINDOW: os dois juntos era o defeito.
+    assert not flags & entrada.DETACHED_PROCESS
     assert flags & entrada.CREATE_NO_WINDOW
     assert flags & entrada.CREATE_NEW_PROCESS_GROUP
 

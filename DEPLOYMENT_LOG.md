@@ -189,7 +189,6 @@ Verify the reload succeeded by checking `heartbeat` now reports `engine_mode`.
 
 **Details.**
 - **Local Repository:** `/home/joey/Projects/delegation-core`
-- **Git User Configured:** `joey bernardes <followthepillow@gmail.com>`
 - **GitHub Repository Created:** [https://github.com/AnonJoey/delegation-core-v6.4](https://github.com/AnonJoey/delegation-core-v6.4)
 - **Tooling Used:** GitHub CLI (`gh` v2.96.0) installed and authenticated to `AnonJoey`.
 - **Status:** Initial `v6.4` release commit pushed to `origin/master`.
@@ -249,7 +248,7 @@ Verify the reload succeeded by checking `heartbeat` now reports `engine_mode`.
 **Nao verificado.**
 - A migracao do indice (`index-migrate`) em macOS e em Windows: so rodou em Linux e nos testes de CI.
 - O BGE pelo llama.cpp com Metal: validado apenas em CPU no Linux.
-- `delegation-core update` das outras maquinas (Max, Luan, William) para a 0.16.1.
+- `delegation-core update` das outras maquinas (tres colegas) para a 0.16.1.
 
 **Efeito colateral.** As conexoes MCP das sessoes abertas durante o restart perdem as ferramentas e precisam ser reconectadas (`/mcp`) ou a sessao reiniciada.
 

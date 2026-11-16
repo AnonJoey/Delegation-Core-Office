@@ -91,3 +91,14 @@ def test_nonexistent_note_inside_vault_returns_404(server):
     port, _, _ = server
     status, body = _get(port, "/api/vault/note?path=does-not-exist.md")
     assert status == 404
+
+
+def test_a_path_with_a_nul_is_a_clean_400(server):
+    """Medido em 16/11/2026 contra um daemon vivo: `path=a%00b` devolvia 500 com
+    "lstat: embedded null character in path". A rota repetia a contencao com o
+    resolve() fora do try; agora usa notes.resolve_in_vault, que devolve None."""
+    port, _, _ = server
+    status, body = _get(port, "/api/vault/note?path=a%00b")
+    assert status == 400
+    assert "lstat" not in json.dumps(body)
+

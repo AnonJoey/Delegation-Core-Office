@@ -741,6 +741,22 @@ class ClienteSqlite:
             c.close()
             self._local.c = None
 
+    def checkpoint(self) -> None:
+        """Leva o WAL para dentro do `indice.db` e o zera.
+
+        As conexoes sao por thread e so a da thread que chama `close()` fecha, entao
+        uma parada limpa do daemon deixava o WAL no disco: medido em 16/11/2026, um
+        `indice.db` de 7,7 MB com `indice.db-wal` de 4,7 MB ao lado depois do
+        SIGTERM. Nada se perde assim, mas um backup ou uma sincronizacao que copie
+        so o `indice.db` leva um indice sem as ultimas gravacoes. Conexao propria,
+        para valer de qualquer thread; com leitor ativo o SQLite faz o que der.
+        """
+        c = _conectar(self.arquivo)
+        try:
+            c.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        finally:
+            c.close()
+
     def _colecao(self, nome: str, ef: Any) -> ColecaoSqlite:
         with self._lock:
             col = self._colecoes.get(nome)
