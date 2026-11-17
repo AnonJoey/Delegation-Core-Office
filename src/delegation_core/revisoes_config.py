@@ -149,8 +149,8 @@ def cmd_config(args) -> int:
 def registrar(sub) -> dict:
     p = sub.add_parser("config", help="Config revisions: history and revert")
     s = p.add_subparsers(dest="acao", required=True)
-    h = s.add_parser("history")
-    h.add_argument("--limit", type=int, default=10)
+    h = s.add_parser("history", help="list saved revisions")
+    h.add_argument("--limit", type=int, default=10, help="revisions to list")
     r = s.add_parser("revert", help="revert to revision N (1 = the one before the current config)")
-    r.add_argument("revision", type=int)
+    r.add_argument("revision", type=int, help="revision number (1 = the one before the current config)")
     return {"config": cmd_config}

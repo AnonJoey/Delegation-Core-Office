@@ -7,6 +7,15 @@ This changelog is derived directly from the canonical versioning recorded across
 
 ## Unreleased
 
+### Removed (cores that reported work they never did)
+
+- **OCR, audio transcription, speech synthesis and diagram generation** in the multimodal core. OCR and transcription returned the same fixed text for any file (the "transcript" of any audio read "Aprovado pelo operador", 42.5 s), the diagram was the same for any request, all marked SUCCESS. `cores_multimodal_ingest` now converts documents only, and a file it cannot read is an error with the reason instead of a SUCCESS with a placeholder table.
+- **`cores_platform_session`**: it ran no agent and no prompt (fixed toy code graph, a voice step that returned metadata only).
+- **`cores_selfhosted_route`**: it answered `FORWARDED_OK` without sending any request. `cores_selfhosted_catalog` stays, described as the static list it is.
+- **`telemetry_summary`** and the whole `cores/orchestration` package (task queue, a "CI runner" that reported 48 of 48 tests passing without running any, telemetry of a demonstration pipeline). The real workflow runner, `dag_run`, is separate and stays.
+- The browser and workspace tools of the agent harness, the platform's dead-code sweeper, voice engine, toy graph and agent locks, and the dashboard's orchestrator tab, diagram panel and lock card.
+- Host metrics no longer label every disk "Corsair MP600 NVMe, @home (Btrfs)" nor report a fixed HEALTHY; load is `null` on Windows instead of zeros.
+
 ### Added
 
 - **`ingest_forget` acha a fonte registrada por caminho com link simbolico.** `forget` so procurava a grafia resolvida (`resolve()` segue o link); no servidor gss `/home/joey` e um link para `/home/GrimstoneSolutions`, e as 19 fontes mortas respondiam `registry_entry_removed: false` e continuavam no `ingest_status`. Agora casa as duas grafias, nas linhas do indice e no registro.

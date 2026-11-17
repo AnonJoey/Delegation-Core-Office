@@ -1,17 +1,14 @@
-"""
-HomelabServiceGateway: Núcleo de software unificado para serviços self-hosted (Categoria 5).
-Integra catálogo, roteamento de requisições, mapeamento de portas e autenticação
-centralizada para os 29 repositórios self-hosted do ecossistema.
+"""A static catalog of self-hosted services: name, domain, port and role of each.
+
+It is reference data only. Until 17/11/2026 it also "routed" requests and reported the gateway
+HEALTHY, without contacting any service; both were removed for v0.17.0.
 """
 
-import time
 from typing import Dict, Any, List, Optional
 
 
 class HomelabServiceGateway:
-    """
-    Gateway de orquestração e catálogo unificado para os serviços self-hosted.
-    """
+    """The catalog and lookups over it. Nothing here makes a network call."""
 
     CATALOG: Dict[str, Dict[str, Any]] = {
         # --- Identidade & Segurança ---
@@ -267,57 +264,10 @@ class HomelabServiceGateway:
         """Retorna os domínios funcionais únicos do homelab."""
         return sorted(list(set(s["domain"] for s in self.CATALOG.values())))
 
-    def route_request(
-        self,
-        target_service: str,
-        action: str,
-        user_token: str = "local-admin",
-        payload: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
-        """
-        Roteia uma requisição para o serviço alvo no homelab gateway.
-        Aplica validação de tokens e normaliza a resposta.
-        """
-        t0 = time.time()
-        srv = self.CATALOG.get(target_service.lower())
-        if not srv:
-            return {
-                "status": "NOT_FOUND",
-                "error": f"Servico '{target_service}' nao encontrado no catalogo self-hosted (29 servicos mapeados).",
-            }
-
-        if srv.get("auth_required", False):
-            if not user_token or len(user_token) < 4:
-                return {
-                    "status": "UNAUTHORIZED",
-                    "service": srv["name"],
-                    "error": "Autenticacao necessaria para acessar este servico.",
-                }
-
-        latency_ms = round((time.time() - t0) * 1000, 2)
-        return {
-            "status": "FORWARDED_OK",
-            "pipeline": "homelab-gateway-core",
-            "target_service": srv["name"],
-            "domain": srv["domain"],
-            "port": srv["port"],
-            "role": srv["role"],
-            "action": action,
-            "authenticated": True,
-            "payload_received": payload or {},
-            "latency_ms": latency_ms,
-        }
-
-    def check_health(self) -> Dict[str, Any]:
-        """Retorna o sumário de saúde e contagem de serviços configurados."""
+    def summary(self) -> Dict[str, Any]:
+        """Size of the catalog. It is a static list: nothing here contacts the services."""
         domains = self.list_domains()
-        return {
-            "status": "HEALTHY",
-            "total_services": len(self.CATALOG),
-            "domains_count": len(domains),
-            "domains": domains,
-            "gateway_port": 8788,
-        }
+        return {"total_services": len(self.CATALOG), "domains_count": len(domains), "domains": domains}
 
 
 _GLOBAL_HOMELAB_GATEWAY: Optional[HomelabServiceGateway] = None

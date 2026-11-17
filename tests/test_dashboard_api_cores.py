@@ -71,7 +71,7 @@ def test_cores_status(server):
     assert status == 200
     assert body["status"] == "OPERATIONAL"
     assert "agent-harness-core" in body["cores_active"]
-    assert "orchestration-core" in body["cores_active"]
+    assert "orchestration-core" not in body["cores_active"]
 
 
 def test_cores_skills_search(server):
@@ -91,19 +91,13 @@ def test_cores_skill_by_id(server):
         assert "name" in body or "title" in body
 
 
-def test_cores_orchestration_telemetry(server):
-    port, _ = server
-    status, body = _get(port, "/api/cores/orchestration/telemetry")
-    assert status == 200
-    assert "total_spans" in body or "total_tokens" in body or "spans_recorded" in body or isinstance(body, dict)
-
-
 def test_cores_hardware(server):
     port, _ = server
     status, body = _get(port, "/api/cores/hardware")
     assert status == 200
-    assert "nvme_corsair_mp600" in body
-    assert body["status"] == "HEALTHY"
+    assert body["disk_home"]["total_gb"] > 0 and 0 <= body["disk_home"]["used_pct"] <= 100
+    # Sem rotulo de hardware inventado nem saude afirmada sem checagem.
+    assert "nvme_corsair_mp600" not in body and "status" not in body
 
 
 def test_cores_sanitize_post(server):
@@ -113,22 +107,6 @@ def test_cores_sanitize_post(server):
     assert "audit" in body
     assert "purified" in body
     assert "score" in body
-
-
-def test_cores_multimodal_diagram(server):
-    port, _ = server
-    status, body = _post(port, "/api/cores/multimodal/diagram", {"prompt": "Client -> Server -> Database"})
-    assert status == 200
-    assert body["status"] == "SUCCESS"
-    assert "mermaid_code" in body
-
-
-def test_cores_orchestration_run(server):
-    port, _ = server
-    status, body = _post(port, "/api/cores/orchestration/run", {"title": "Test Run DAG", "steps": []})
-    assert status == 200
-    assert body["status"] == "SUCCESS"
-    assert body["dag_nodes_executed"] >= 1
 
 
 def test_cores_prune(server):

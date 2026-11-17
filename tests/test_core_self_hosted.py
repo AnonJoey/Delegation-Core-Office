@@ -16,30 +16,12 @@ class TestCoreSelfHosted(unittest.TestCase):
         self.assertIn("jellyfin", names)
         self.assertIn("paperless-ngx", names)
 
-    def test_route_authorized(self):
-        res = self.gateway.route_request("immich", action="upload_photo", user_token="valid_secret_token")
-        self.assertEqual(res["status"], "FORWARDED_OK")
-        self.assertEqual(res["target_service"], "immich")
-        self.assertEqual(res["port"], 2283)
-
-    def test_route_unauthorized(self):
-        res = self.gateway.route_request("vaultwarden", action="get_secret", user_token="")
-        self.assertEqual(res["status"], "UNAUTHORIZED")
-
-    def test_route_not_found(self):
-        res = self.gateway.route_request("non_existent_service", action="ping")
-        self.assertEqual(res["status"], "NOT_FOUND")
-
-    def test_route_case_insensitivity_formerly_mixed_case(self):
-        for svc in ["LibreChat", "librechat", "AppFlowy", "appflowy", "LibreTranslate", "FreshRSS"]:
-            res = self.gateway.route_request(svc, action="status", user_token="admin_token")
-            self.assertEqual(res["status"], "FORWARDED_OK", f"Failed to route {svc}")
-
-    def test_health_check(self):
-        health = self.gateway.check_health()
-        self.assertEqual(health["status"], "HEALTHY")
-        self.assertEqual(health["total_services"], 29)
-        self.assertGreater(health["domains_count"], 5)
-
 if __name__ == "__main__":
     unittest.main()
+
+    def test_resumo_nao_diz_que_algo_esta_no_ar(self):
+        """O catalogo e uma lista fixa: o resumo conta, nao afirma saude de servico nenhum."""
+        r = self.gateway.summary()
+        self.assertEqual(r["total_services"], 29)
+        self.assertNotIn("status", r)
+        self.assertFalse(hasattr(self.gateway, "route_request"))

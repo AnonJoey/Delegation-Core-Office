@@ -1319,58 +1319,47 @@ padrao (`proxy_enabled`); ligado, `delegation-core proxy env` imprime o
 
 ---
 
-## Unified Cores Tools
+## Cores and workflow tools
 
 ### `cores_unified_status()`
-Retorna o estado operacional e métricas consolidadas dos 5 núcleos unificados
-(`agent-harness-core`, `multimodal-media-core`, `orchestration-core`, `local-platform-core`, `homelab-gateway-core`),
-incluindo total de skills indexadas, motores multimodais ativos, serviços homelab mapeados e telemetria de hardware.
+What the bundled cores have on this machine: the number of skills in the local catalog and their
+sources, the document-conversion capability, host metrics (disk use of the home folder, load) and
+the size of the self-hosted catalog.
 
 ### `cores_skills_search(query, limit=5)`
-Busca full-text FTS5 sobre o catálogo de skills de agentes desta máquina (`~/.delegation_core/skills.db`,
-ou `DELEGATION_CORE_SKILLS_DB`). O catálogo não vem no pacote: construa com
-`python -m delegation_core.cores.agent_harness.skills.ingester <pasta>`; sem ele a busca devolve zero resultados.
-Retorna snippets contextuais, pontuação de ranking, caminhos relativos e repositórios de origem.
+Full-text search (SQLite FTS5) in this machine's catalog of agent skills and rules
+(`~/.delegation_core/skills.db`, or `DELEGATION_CORE_SKILLS_DB`). The catalog is not shipped:
+build it with `python -m delegation_core.cores.agent_harness.skills.ingester <folder>`. Without it
+the search returns no results.
 
 ### `cores_sanitize_prompt(text)`
-Audita e purifica o texto contra clichês sintéticos de IA, marcadores de slop e comentários
-óbvios de código, retornando pontuação de conformidade e texto limpo.
+Finds filler phrases typical of generated text and obvious code comments, and returns a score, what
+matched and a cleaned copy. Pattern based, no model.
 
 ### `cores_multimodal_ingest(file_path)`
-Ingestão multiformato unificada. Roteia arquivos automaticamente com base na extensão:
-- Documentos e planilhas (PDF, DOCX, XLSX, PPTX, HTML, CSV) para Markdown estruturado via `MarkItDown`.
-- Imagens e PDFs para OCR Tesseract.
-- Áudio (MP3, WAV, OGG) para transcrição Whisper STT com timestamps.
-
-### `cores_platform_session(session_id, prompt)`
-Executa sessão local do agente com verificação de hardware, travas atômicas em disco (Paperclip),
-orçamento de iterações (Hermes), compressão de AST (Headroom) e grafo de código em memória.
+Converts a document on this machine to Markdown: PDF (text layer), Word, Excel, PowerPoint, HTML,
+CSV and plain-text formats. A file it cannot read returns an error with the reason. This tool does no OCR
+and no audio transcription; to make images searchable by their text, ingest them with `ingest_folder`
+with `tesseract` installed.
 
 ### `cores_prune_context(text)`
-Comprime texto ou código removendo comentários desnecessários e espaços redundantes.
-O original é preservado no armazenamento reversível CCR via hash retrievable (`ccr.Guarda`).
+Shrinks a text with pattern rules: collapses repeated spaces and blank lines and drops obvious code
+comments (`//` and `#`), keeping URLs and Markdown headings. When something was cut, the original is
+stored and `ccr_hash` recovers it with `recall_output`.
 
 ### `cores_selfhosted_catalog(domain="")`
-Consulta o catálogo centralizado de 29 serviços homelab mapeados em 14 domínios funcionais
-(*identity_secrets*, *backend_baas*, *storage_media*, *git_cicd*, *collaboration*, *ai_chat*, *knowledge*, etc.).
-Permite filtrar por domínio (ex: `domain="storage_media"` ou `domain="ai_chat"`).
-
-### `cores_selfhosted_route(service, action, user_token="local-admin")`
-Gateway autenticado para despacho de requisições e comandos aos 29 microserviços homelab,
-com validação de tokens e normalização case-insensitive do serviço alvo.
+A static catalog of 29 self-hosted services in 14 domains (`identity_secrets`, `backend_baas`,
+`storage_media`, `git_cicd`, `collaboration`, `ai_chat`, `knowledge`, ...): name, domain, default port
+and role. Reference data only: nothing checks whether a service is installed or running.
 
 ### `convert_to_markdown(file_path)`
-Converte universalmente documentos binários e tabulares (PDF, DOCX, XLSX, PPTX, HTML, CSV)
-em Markdown estruturado em Python puro usando o motor integrado `MarkItDown`.
+Converts PDF, DOCX, XLSX, PPTX, HTML and CSV files to Markdown with the bundled converter
+(pypdf, python-docx, openpyxl, python-pptx, BeautifulSoup).
 
 ### `dag_run(yaml_content)` / `dag_status(run_id)`
-Executa workflows declarativos assíncronos baseados em DAG (estilo Dagu) com controle
-de timeouts, retentativas e persistência do histórico de execução em SQLite (`dag_executions.db`).
-
-### `telemetry_summary(hours=24.0)`
-Spans gravados pelo orquestrador dos cores (passos de DAG, sessões de agente, poda de tokens):
-contagem, latência, tokens de entrada e saída e taxa de erro, em SQLite. Não conta chamadas
-de ferramenta MCP; para isso use `usage_report`.
+Runs a declarative workflow of shell steps with dependencies (DAG), timeouts and retries, and keeps
+each run's history in SQLite (`dag_executions.db`). The steps are real shell commands: a client with a
+read-only token cannot call `dag_run`.
 
 ## Quick reference
 
