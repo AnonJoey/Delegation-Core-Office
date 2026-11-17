@@ -136,7 +136,7 @@ def registrar(sub) -> dict:
     p = sub.add_parser("test-drive", help="Throwaway daemon with its own HOME, vault and port")
     p.add_argument("--from", dest="source", default="", help="copy this folder in as the test vault")
     p.add_argument("--dir", default="", help="use this directory instead of a new temp dir")
-    p.add_argument("--port", type=int, default=0)
+    p.add_argument("--port", type=int, default=0, help="port for the throwaway daemon (0 = a free one)")
     p.add_argument("--keep", action="store_true", help="keep the directory after it stops")
-    p.add_argument("--prepare-only", action="store_true")
+    p.add_argument("--prepare-only", action="store_true", help="set it up and print how to start it, without starting it")
     return {"test-drive": cmd_test_drive}

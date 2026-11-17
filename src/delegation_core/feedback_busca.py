@@ -115,10 +115,10 @@ def cmd_feedback(args) -> int:
 def registrar(sub) -> dict:
     p = sub.add_parser("feedback", help="Search feedback votes: report, export to eval questions")
     s = p.add_subparsers(dest="acao", required=True)
-    r = s.add_parser("report")
-    r.add_argument("--days", type=int, default=30)
-    e = s.add_parser("export")
-    e.add_argument("out")
-    e.add_argument("--days", type=int, default=0)
-    e.add_argument("--force", action="store_true")
+    r = s.add_parser("report", help="summary of votes: worst sources and queries with no useful result")
+    r.add_argument("--days", type=int, default=30, help="period in days")
+    e = s.add_parser("export", help="write useful votes as eval-search questions")
+    e.add_argument("out", help="questions file to write")
+    e.add_argument("--days", type=int, default=0, help="only votes from the last N days (0 = all)")
+    e.add_argument("--force", action="store_true", help="overwrite an existing file")
     return {"feedback": cmd_feedback}

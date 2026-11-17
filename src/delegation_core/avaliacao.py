@@ -234,9 +234,9 @@ def registrar(sub) -> dict:
     p = sub.add_parser("eval-search", help="Measure search on known-answer questions: hits, MRR, nDCG, latency")
     p.add_argument("arquivo", nargs="?", default="", help="questions JSON (default ~/.delegation_core/avaliacao/consultas.json)")
     p.add_argument("--scope", default="notes,all", help="comma-separated scopes")
-    p.add_argument("-k", type=int, default=5)
-    p.add_argument("--json", action="store_true")
+    p.add_argument("-k", type=int, default=5, help="results per question that count as a hit")
+    p.add_argument("--json", action="store_true", help="print JSON")
     p.add_argument("--gate", action="store_true", help="exit 1 when a scope is below the targets")
-    p.add_argument("--min-mrr", type=float, default=META_MRR)
-    p.add_argument("--min-ndcg", type=float, default=META_NDCG)
+    p.add_argument("--min-mrr", type=float, default=META_MRR, help="MRR target for --gate")
+    p.add_argument("--min-ndcg", type=float, default=META_NDCG, help="nDCG target for --gate")
     return {"eval-search": cmd_eval_search}

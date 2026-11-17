@@ -57,7 +57,7 @@ running daemon instead of opening a second copy of it.
 | [`token`](#delegation-core-token) | Per-client tokens: read-only or read-write |
 | [`uninstall`](#delegation-core-uninstall) | Remove the installation (keeps your vault and downloaded models) |
 | [`update`](#delegation-core-update) | Update the installed package from its source, stopping the daemon first |
-| [`update-finish`](#delegation-core-update-finish) |  |
+| [`update-finish`](#delegation-core-update-finish) | Internal: second half of `update`, run by it in the newly installed code |
 
 ## `delegation-core aferir-busca`
 
@@ -76,29 +76,37 @@ Human approvals requested by tool policies
 
 ### `delegation-core approvals list`
 
+list approval requests
+
 | Argument | Description |
 |---|---|
-| `--status` | (one of: `pending`, `approved`, `denied`, `used`, `expired`, `all`)Default: `"pending"`. |
+| `--status` | which requests to list (one of: `pending`, `approved`, `denied`, `used`, `expired`, `all`)Default: `"pending"`. |
 
 ### `delegation-core approvals approve`
 
+approve a pending request
+
 | Argument | Description |
 |---|---|
-| `id` |  |
-| `--reason` |  |
+| `id` | request id |
+| `--reason` | why, recorded with the decision |
 
 ### `delegation-core approvals deny`
 
+deny a pending request
+
 | Argument | Description |
 |---|---|
-| `id` |  |
-| `--reason` |  |
+| `id` | request id |
+| `--reason` | why, recorded with the decision |
 
 ### `delegation-core approvals prune`
 
+delete decided requests older than --days
+
 | Argument | Description |
 |---|---|
-| `--days` | Default: `30`. |
+| `--days` | age in daysDefault: `30`. |
 
 ## `delegation-core backup`
 
@@ -106,8 +114,8 @@ Rotating local backup of config and state
 
 | Argument | Description |
 |---|---|
-| `--keep` | Default: `10`. |
-| `--status` |  |
+| `--keep` | backups to keepDefault: `10`. |
+| `--status` | show the existing backups instead of making one |
 
 ## `delegation-core clients`
 
@@ -139,9 +147,11 @@ Config revisions: history and revert
 
 ### `delegation-core config history`
 
+list saved revisions
+
 | Argument | Description |
 |---|---|
-| `--limit` | Default: `10`. |
+| `--limit` | revisions to listDefault: `10`. |
 
 ### `delegation-core config revert`
 
@@ -149,7 +159,7 @@ revert to revision N (1 = the one before the current config)
 
 | Argument | Description |
 |---|---|
-| `revision` |  |
+| `revision` | revision number (1 = the one before the current config) |
 
 ## `delegation-core dashboard-api`
 
@@ -158,7 +168,7 @@ Run the local JSON API used by the Tauri dashboard (standalone/debug)
 | Argument | Description |
 |---|---|
 | `--port` | Port to bind (0 = pick a free one) |
-| `--host` | Default: `"127.0.0.1"`. |
+| `--host` | address to listen onDefault: `"127.0.0.1"`. |
 
 ## `delegation-core doctor`
 
@@ -204,11 +214,11 @@ Measure search on known-answer questions: hits, MRR, nDCG, latency
 |---|---|
 | `arquivo` | questions JSON (default ~/.delegation_core/avaliacao/consultas.json) |
 | `--scope` | comma-separated scopesDefault: `"notes,all"`. |
-| `-k` | Default: `5`. |
-| `--json` |  |
+| `-k` | results per question that count as a hitDefault: `5`. |
+| `--json` | print JSON |
 | `--gate` | exit 1 when a scope is below the targets |
-| `--min-mrr` | Default: `0.95`. |
-| `--min-ndcg` | Default: `0.9`. |
+| `--min-mrr` | MRR target for --gateDefault: `0.95`. |
+| `--min-ndcg` | nDCG target for --gateDefault: `0.9`. |
 
 ## `delegation-core export`
 
@@ -216,7 +226,7 @@ Export config (no secrets) and state to a .zip
 
 | Argument | Description |
 |---|---|
-| `path` |  |
+| `path` | where to write the .zip |
 | `--with-vault` | also pack the vault's markdown |
 
 ## `delegation-core feedback`
@@ -226,17 +236,21 @@ Search feedback votes: report, export to eval questions
 
 ### `delegation-core feedback report`
 
+summary of votes: worst sources and queries with no useful result
+
 | Argument | Description |
 |---|---|
-| `--days` | Default: `30`. |
+| `--days` | period in daysDefault: `30`. |
 
 ### `delegation-core feedback export`
 
+write useful votes as eval-search questions
+
 | Argument | Description |
 |---|---|
-| `out` |  |
-| `--days` |  |
-| `--force` |  |
+| `out` | questions file to write |
+| `--days` | only votes from the last N days (0 = all) |
+| `--force` | overwrite an existing file |
 
 ## `delegation-core filters`
 
@@ -244,7 +258,7 @@ Output filters: list, verify (RTK inline tests), hook (Claude Code PreToolUse)
 
 | Argument | Description |
 |---|---|
-| `acao` | (one of: `list`, `verify`, `hook`) |
+| `acao` | list the filters, verify them against RTK's inline tests, or answer as a Claude Code PreToolUse hook (one of: `list`, `verify`, `hook`) |
 
 ## `delegation-core graph`
 
@@ -258,7 +272,7 @@ Build a code graph for a local directory
 | Argument | Description |
 |---|---|
 | `--local` | Do the work in this process instead of handing it to the running daemon |
-| `path` |  |
+| `path` | directory to graph |
 | `--name` | Graph name (default: directory basename) |
 | `--force` | Rebuild even if already built |
 
@@ -268,7 +282,7 @@ Show what a build would cover, without building or writing anything
 
 | Argument | Description |
 |---|---|
-| `path` |  |
+| `path` | directory to preview |
 | `--name` | Graph name (default: directory basename) |
 
 ### `delegation-core graph extract-sources`
@@ -277,7 +291,7 @@ Reconstruct original sources from .js.map sidecars, then graph those
 
 | Argument | Description |
 |---|---|
-| `path` |  |
+| `path` | directory with the .js.map files |
 | `out_dir` | Destination directory (must be empty or absent) |
 
 ### `delegation-core graph list`
@@ -291,7 +305,7 @@ Print a graph's full GRAPH_REPORT.md
 
 | Argument | Description |
 |---|---|
-| `name` |  |
+| `name` | graph name (see: delegation-core graph list) |
 
 ### `delegation-core graph affected`
 
@@ -301,7 +315,7 @@ Blast-radius query: what's affected if X changes
 |---|---|
 | `name` | Graph name (see: delegation-core graph list) |
 | `query` | A file path or symbol label, e.g. auth.py or AuthService.login |
-| `--depth` | Default: `2`. |
+| `--depth` | how many hops to followDefault: `2`. |
 
 ### `delegation-core graph hook`
 
@@ -323,7 +337,7 @@ Remove the post-commit hook
 
 | Argument | Description |
 |---|---|
-| `path` |  |
+| `path` | repository (default: the current directory) |
 
 #### `delegation-core graph hook status`
 
@@ -331,7 +345,7 @@ Check whether the hook is installed
 
 | Argument | Description |
 |---|---|
-| `path` |  |
+| `path` | repository (default: the current directory) |
 
 ## `delegation-core hook`
 
@@ -339,7 +353,7 @@ Agent hook: read the host's PreToolUse payload on stdin, answer in its format
 
 | Argument | Description |
 |---|---|
-| `host` | (one of: `antigravity`, `claude`, `codex`, `copilot-cli`, `copilot-ide`, `cursor`, `droid`, `gemini`, `trae`, `vibe`, `vscode`) |
+| `host` | agent whose hook payload format is used (one of: `antigravity`, `claude`, `codex`, `copilot-cli`, `copilot-ide`, `cursor`, `droid`, `gemini`, `trae`, `vibe`, `vscode`) |
 
 ## `delegation-core import`
 
@@ -347,10 +361,10 @@ Import an export .zip (dry run unless --apply)
 
 | Argument | Description |
 |---|---|
-| `path` |  |
+| `path` | the .zip to import |
 | `--map` | OLD=NEW path prefix rewrite, repeatable |
 | `--vault` | where to unpack vault notes, if the package has them |
-| `--apply` |  |
+| `--apply` | write the changes (without it, only report what would change) |
 
 ## `delegation-core index-compare`
 
@@ -358,8 +372,8 @@ Run the same queries on the Chroma and SQLite indexes
 
 | Argument | Description |
 |---|---|
-| `--from` |  |
-| `--amostra` | Default: `100`. |
+| `--from` | Chroma index directory (default: the configured one) |
+| `--amostra` | queries run on both indexesDefault: `100`. |
 
 ## `delegation-core index-migrate`
 
@@ -401,7 +415,7 @@ Headroom's Kompress text compressor (ML model): setup or status
 
 | Argument | Description |
 |---|---|
-| `acao` | (one of: `setup`, `status`) |
+| `acao` | setup downloads the model; status checks that it loads (one of: `setup`, `status`) |
 
 ## `delegation-core maintain`
 
@@ -428,7 +442,7 @@ Write a new note
 | Argument | Description |
 |---|---|
 | `folder` | Vault folder (see: delegation-core status) |
-| `title` |  |
+| `title` | note title (the body comes from stdin or --file) |
 | `--file` | Read content from this file instead of stdin |
 | `--local` | Do the work in this process instead of handing it to the running daemon |
 
@@ -456,8 +470,8 @@ List notes in a folder, newest first
 
 | Argument | Description |
 |---|---|
-| `folder` |  |
-| `--limit` | Default: `20`. |
+| `folder` | vault folder |
+| `--limit` | notes to listDefault: `20`. |
 
 ### `delegation-core note find-similar`
 
@@ -466,9 +480,9 @@ Find notes semantically similar to a given note
 | Argument | Description |
 |---|---|
 | `--local` | Do the work in this process instead of handing it to the running daemon |
-| `name` |  |
-| `--threshold` | Default: `0.8`. |
-| `--limit` | Default: `5`. |
+| `name` | note name |
+| `--threshold` | minimum similarityDefault: `0.8`. |
+| `--limit` | notes to returnDefault: `5`. |
 
 ## `delegation-core ocr-setup`
 
@@ -486,13 +500,17 @@ Per-client tool policies: allow/block/require_approval/rate_limit
 
 ### `delegation-core policy show`
 
+show the configured policies
+
 
 ### `delegation-core policy check`
 
+which policy applies to a client and a tool
+
 | Argument | Description |
 |---|---|
-| `client` |  |
-| `tool` |  |
+| `client` | client name |
+| `tool` | tool name |
 
 ### `delegation-core policy set`
 
@@ -500,16 +518,18 @@ client ('*' for all), key (a tool or read/write/destructive), action
 
 | Argument | Description |
 |---|---|
-| `client` |  |
-| `key` |  |
-| `action` |  |
+| `client` | client name, or '*' for all |
+| `key` | a tool name, or read, write or destructive |
+| `action` | allow, block, require_approval or rate_limit:N/S |
 
 ### `delegation-core policy unset`
 
+remove a policy
+
 | Argument | Description |
 |---|---|
-| `client` |  |
-| `key` |  |
+| `client` | client name, or '*' for all |
+| `key` | a tool name, or read, write or destructive |
 
 ## `delegation-core post-install`
 
@@ -531,8 +551,8 @@ Start tracking a new process
 
 | Argument | Description |
 |---|---|
-| `name` |  |
-| `--description` |  |
+| `name` | process name |
+| `--description` | what the process is |
 | `--steps` | Comma-separated step descriptions |
 
 ### `delegation-core process list`
@@ -542,7 +562,7 @@ List tracked processes
 | Argument | Description |
 |---|---|
 | `--status` | active\|paused\|done\|cancelled\|allDefault: `"active"`. |
-| `--query` |  |
+| `--query` | only processes whose name, description or notes contain this text |
 
 ### `delegation-core process update`
 
@@ -550,10 +570,10 @@ Update a tracked process
 
 | Argument | Description |
 |---|---|
-| `process_id` |  |
-| `--note` |  |
-| `--step-done` |  |
-| `--status` |  |
+| `process_id` | process id |
+| `--note` | note to append |
+| `--step-done` | index of the step to mark done |
+| `--status` | active, paused, done or cancelled |
 
 ### `delegation-core process get`
 
@@ -561,7 +581,7 @@ Full detail view of a tracked process
 
 | Argument | Description |
 |---|---|
-| `process_id` |  |
+| `process_id` | process id |
 
 ## `delegation-core proposals`
 
@@ -570,28 +590,36 @@ Note edits proposed by agents: list/show/apply/reject
 
 ### `delegation-core proposals list`
 
+list proposals
+
 | Argument | Description |
 |---|---|
-| `--status` | (one of: `pending`, `applied`, `rejected`, `stale`, `all`)Default: `"pending"`. |
+| `--status` | which proposals to list (one of: `pending`, `applied`, `rejected`, `stale`, `all`)Default: `"pending"`. |
 
 ### `delegation-core proposals show`
 
+show a proposal
+
 | Argument | Description |
 |---|---|
-| `id` |  |
+| `id` | proposal id |
 
 ### `delegation-core proposals reject`
 
+reject a proposal
+
 | Argument | Description |
 |---|---|
-| `id` |  |
+| `id` | proposal id |
 
 ### `delegation-core proposals apply`
 
+apply a proposal to its note
+
 | Argument | Description |
 |---|---|
-| `id` |  |
-| `--force` |  |
+| `id` | proposal id |
+| `--force` | apply even if the note changed since the proposal (otherwise it is marked stale) |
 
 ## `delegation-core proxy`
 
@@ -599,7 +627,7 @@ API proxy that compresses tool outputs before they reach the model
 
 | Argument | Description |
 |---|---|
-| `acao` | (one of: `env`, `status`, `run`) |
+| `acao` | env prints the variables that point an agent at the proxy; status checks it; run serves it in the foreground (one of: `env`, `status`, `run`) |
 
 ## `delegation-core recall`
 
@@ -607,8 +635,8 @@ Original output saved when a filter cut it
 
 | Argument | Description |
 |---|---|
-| `hash` |  |
-| `--from` |  |
+| `hash` | the hash from the recall hint |
+| `--from` | first line to show (1 = the start) |
 
 ## `delegation-core recover-index`
 
@@ -656,7 +684,7 @@ Rewrite a shell command to run through the output filters (exit 3) or not (exit 
 
 | Argument | Description |
 |---|---|
-| `comando` |  |
+| `comando` | the shell command to rewrite |
 
 ## `delegation-core run`
 
@@ -673,8 +701,8 @@ Query the vault (BGE similarity search, no LLM required)
 | Argument | Description |
 |---|---|
 | `--local` | Do the work in this process instead of handing it to the running daemon |
-| `query` |  |
-| `--limit` | Default: `5`. |
+| `query` | what to search for |
+| `--limit` | results to returnDefault: `5`. |
 
 ## `delegation-core service`
 
@@ -682,7 +710,7 @@ Install/remove/stop/start the daemon as a per-user background service
 
 | Argument | Description |
 |---|---|
-| `action` | (one of: `install`, `uninstall`, `status`, `stop`, `start`, `restart`) |
+| `action` | install, uninstall, status, stop, start or restart the per-user service (one of: `install`, `uninstall`, `status`, `stop`, `start`, `restart`) |
 | `--visible` | install, Windows: run the daemon in a visible console window (default is no window), for diagnosing a daemon that did not start |
 
 ## `delegation-core session`
@@ -701,7 +729,7 @@ Set automatic, manual, or off transcript capture
 
 | Argument | Description |
 |---|---|
-| `mode` | (one of: `automatic`, `manual`, `off`) |
+| `mode` | automatic saves every session, manual only the next one after capture-next, off none (one of: `automatic`, `manual`, `off`) |
 
 ### `delegation-core session capture-next`
 
@@ -722,7 +750,7 @@ Run a shell command and show its output through the RTK filters
 
 | Argument | Description |
 |---|---|
-| `comando` | the command line, run with /bin/sh -c |
+| `comando` | the command line, run with sh when available, otherwise the system shell |
 
 ## `delegation-core status`
 
@@ -737,9 +765,9 @@ Throwaway daemon with its own HOME, vault and port
 |---|---|
 | `--from` | copy this folder in as the test vault |
 | `--dir` | use this directory instead of a new temp dir |
-| `--port` |  |
+| `--port` | port for the throwaway daemon (0 = a free one) |
 | `--keep` | keep the directory after it stops |
-| `--prepare-only` |  |
+| `--prepare-only` | set it up and print how to start it, without starting it |
 
 ## `delegation-core token`
 
@@ -748,7 +776,7 @@ Per-client tokens: read-only or read-write
 | Argument | Description |
 |---|---|
 | `acao` | what to do with client tokens (one of: `create`, `list`, `revoke`) |
-| `name` |  |
+| `name` | client name (needed for create and revoke) |
 | `--write` | allow tools that write (default: read-only) |
 | `--force` | replace an existing token with the same name |
 
@@ -774,6 +802,8 @@ Update the installed package from its source, stopping the daemon first
 
 ## `delegation-core update-finish`
 
+Internal: second half of `update`, run by it in the newly installed code
+
 | Argument | Description |
 |---|---|
-| `--root` |  |
+| `--root` | source checkout the update installed from |

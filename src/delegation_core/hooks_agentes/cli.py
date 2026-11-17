@@ -29,7 +29,7 @@ def cmd_hook(args) -> int:
 def registrar(sub) -> dict:
     from .nucleo import HOSTS
     p = sub.add_parser("rewrite", help="Rewrite a shell command to run through the output filters (exit 3) or not (exit 1)")
-    p.add_argument("comando")
+    p.add_argument("comando", help="the shell command to rewrite")
     p = sub.add_parser("hook", help="Agent hook: read the host's PreToolUse payload on stdin, answer in its format")
-    p.add_argument("host", choices=sorted(HOSTS))
+    p.add_argument("host", choices=sorted(HOSTS), help="agent whose hook payload format is used")
     return {"rewrite": cmd_rewrite, "hook": cmd_hook}

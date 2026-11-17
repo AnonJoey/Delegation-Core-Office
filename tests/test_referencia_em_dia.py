@@ -70,3 +70,29 @@ def test_nenhum_texto_sem_dono():
     sobrando = {nome: sorted(set(g._textos(nome)) - chaves) for nome, chaves in donos.items()}
     sobrando = {n: s for n, s in sobrando.items() if s}
     assert not sobrando, f"texts for things that no longer exist: {sobrando}"
+
+
+def test_todo_comando_e_argumento_da_cli_tem_ajuda():
+    """A referencia da CLI sai do texto de ajuda: sem ele, a linha fica vazia na documentacao."""
+    import argparse
+
+    from delegation_core.cli import construir_parser
+    parser, _ = construir_parser()
+    faltando = []
+
+    def andar(p, caminho):
+        for a in p._actions:
+            if isinstance(a, (argparse._HelpAction, argparse._VersionAction)):
+                continue
+            if isinstance(a, argparse._SubParsersAction):
+                ajuda = {c.dest: c.help for c in a._choices_actions}
+                for nome, sub in a.choices.items():
+                    if not ajuda.get(nome):
+                        faltando.append(f"{caminho} {nome}")
+                    andar(sub, f"{caminho} {nome}")
+                continue
+            if not a.help:
+                faltando.append(f"{caminho} {'/'.join(a.option_strings) or a.dest}")
+
+    andar(parser, "delegation-core")
+    assert not faltando, f"CLI entries without help text: {faltando}"
