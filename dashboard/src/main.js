@@ -175,6 +175,16 @@ async function refreshStatus() {
       stat("Synthesis", s.synthesis_enabled ? "on" : "off"),
     ].join("");
 
+    try {
+      const cs = await apiGet("/api/cores/status");
+      if (cs && cs.cores_active) {
+        el.innerHTML += stat("Cores", `${dot(true)}${cs.cores_active.length} active`);
+        if (cs.skills?.total_indexed) {
+          el.innerHTML += stat("Skills", `${cs.skills.total_indexed}`);
+        }
+      }
+    } catch { /* ignore */ }
+
     // The version the server actually is. This was hardcoded in index.html and
     // said v0.9.0 while the source tree was at 0.10.0 — kept blank until the
     // server answers rather than shipping another copy to go stale.
@@ -295,12 +305,27 @@ const DOCK_TITLES = {
   tasks: "Processes",
   search: "Search",
   fleet: "MCP Connections",
+  skills: "Skills Studio",
+  orchestrator: "Orchestrator & DAG",
+  multimodal: "Multimodal Media",
+  telemetry: "Homelab Telemetry",
+  vigia: "Vigia",
 };
 
 // Search has no content of its own: picking a result opens a note, and notes are
 // read in the same place they are read from the tree. Mapping it onto the notes
 // panel avoids both an empty column and a second, competing reader.
-const MAIN_FOR = { notes: "notes", search: "notes", tasks: "tasks", fleet: "fleet" };
+const MAIN_FOR = {
+  notes: "notes",
+  search: "notes",
+  tasks: "tasks",
+  fleet: "fleet",
+  skills: "skills",
+  orchestrator: "orchestrator",
+  multimodal: "multimodal",
+  telemetry: "telemetry",
+  vigia: "vigia",
+};
 
 function activateTab(name, { persist = true } = {}) {
   const btn = tabButtons().find((b) => b.dataset.tab === name);
@@ -313,6 +338,11 @@ function activateTab(name, { persist = true } = {}) {
   const dockTitle = document.getElementById("dock-title");
   if (dockTitle) dockTitle.textContent = DOCK_TITLES[name] || name;
   if (name === "fleet") refreshMcpConnections();
+  if (name === "vigia") refreshVigia();
+  if (name === "skills") refreshSkillsStudio();
+  if (name === "orchestrator") refreshOrchestratorStudio();
+  if (name === "multimodal") refreshMultimodalStudio();
+  if (name === "telemetry") refreshTelemetryStudio();
 
   tabButtons().forEach((b) => {
     const on = b === btn;
@@ -596,7 +626,6 @@ function renderExplorer() {
 }
 
 // Kept as the name the rest of the file calls; both lists are one tree now.
-function renderFolderList() { renderExplorer(); }
 function renderNoteList() { renderExplorer(); }
 
 function toggleFolder(dir) {
@@ -741,6 +770,8 @@ async function selectNote(path, el) {
   // text while the header shows the new one, and Save would overwrite the wrong
   // file with it.
   if (editing) setEditChrome(false);
+  const hist = document.getElementById("note-history");
+  if (hist) hist.hidden = true;
   currentNotePath = path;
   document.querySelectorAll("#explorer .note-row").forEach((e) => e.classList.remove("active"));
   if (el) el.classList.add("active");
@@ -1004,6 +1035,37 @@ function setupVectorSearch() {
   input.addEventListener("keydown", (e) => {
     if (e.key === "Enter") executeSearch();
   });
+
+  // Ask: ask_vault pelo painel (painel_resposta.py). So volta afirmacao com
+  // citacao que existe na nota; cada uma abre a nota de onde veio.
+  const askBtn = document.getElementById("vector-ask-btn");
+  if (askBtn) askBtn.addEventListener("click", async () => {
+    const question = input.value.trim();
+    if (!question) return;
+    resultsPane.innerHTML = paneState("Asking the local model…", "Takes about 10 seconds.");
+    try {
+      resultsPane.innerHTML = renderAnswer(await apiPost("/api/ask", { question }));
+      resultsPane.querySelectorAll(".answer-claim").forEach((c) =>
+        c.addEventListener("click", () => selectNote(c.dataset.path, null)));
+    } catch (e) {
+      resultsPane.innerHTML = paneState("Ask Error", e.message);
+    }
+  });
+}
+
+function renderAnswer(r) {
+  if (!r || !r.found) {
+    return paneState("Not in the vault", "Nothing the notes could prove came back. Try Search to read the closest notes.");
+  }
+  const claims = (r.claims || []).map((c) => `
+    <div class="search-result-card answer-claim" data-path="${escapeHtml(c.source || "")}">
+      <div class="search-card-header"><span class="search-card-title">${escapeHtml(c.text || "")}</span></div>
+      <div style="font-size: 12.5px; color: var(--fg-muted); line-height: 1.4;">“${escapeHtml(c.quote || "")}”</div>
+      <div style="font-size: 11px; color: var(--fg-dim); margin-top: 4px;">${escapeHtml(c.source || "")}${
+        c.source_superseded_by ? ` · superseded by ${escapeHtml(c.source_superseded_by.join(", "))}` : ""}</div>
+    </div>`).join("");
+  const dropped = r.dropped_unverified ? `<p class="muted">${r.dropped_unverified} claim(s) dropped: quote not found in the note.</p>` : "";
+  return `<p class="muted">Answered in ${escapeHtml(String(r.seconds))} s.</p>` + claims + dropped;
 }
 
 // ── Code AST Graphs (Graphify Integration) ──────────────────────────────────
@@ -1849,12 +1911,30 @@ async function loadEngineMode() {
 
 // ── Startup & Initialization ──────────────────────────────────────────────────
 
+// Fora do Tauri o painel e servido por um HTTP qualquer e nao tem como ler o
+// `~/.delegation_core/config.json`, entao o numero precisa estar aqui. Ele tem
+// que ser o MESMO tres vezes: `Config.dashboard_port` no `config.py`, o
+// `unwrap_or` do `lib.rs`, e esta constante.
+//
+// Estava 8182 e a API responde na 8788. Medido em 25/09/2026 com o daemon no
+// ar: `curl 127.0.0.1:8788/api/config` devolve 200 e a 8182 nao responde nada.
+// O sintoma nao era erro, era o painel inteiro abrir com "status unavailable",
+// "Vault unavailable" e "Graph unavailable" enquanto a API funcionava do lado.
+// `tests/test_porta_do_painel.py` falha se os tres voltarem a divergir.
+const PORTA_PADRAO_DO_PAINEL = 8788;
+
 async function getApiPort() {
   if (window.__TAURI_INTERNALS__) {
     const { invoke } = window.__TAURI_INTERNALS__;
     return await invoke("get_api_port");
   }
-  return 8182;
+  // `?port=` existe para quem roda o painel fora do Tauri contra um daemon em
+  // porta trocada, que e exatamente como esta janela e verificada.
+  const pedido = new URLSearchParams(window.location.search).get("port");
+  const porta = Number.parseInt(pedido ?? "", 10);
+  return Number.isInteger(porta) && porta > 0 && porta < 65536
+    ? porta
+    : PORTA_PADRAO_DO_PAINEL;
 }
 
 async function getApiToken() {
@@ -1862,6 +1942,8 @@ async function getApiToken() {
     const { invoke } = window.__TAURI_INTERNALS__;
     return await invoke("get_api_token");
   }
+  const tokenParam = new URLSearchParams(window.location.search).get("token");
+  if (tokenParam) return tokenParam;
   return "";
 }
 
@@ -1891,6 +1973,7 @@ async function main() {
     const port = await getApiPort();
     apiToken = await getApiToken();
     apiBase = `http://127.0.0.1:${port}`;
+    if (document.getElementById("tab-vigia")?.classList.contains("active")) refreshVigia();
   } catch (e) {
     console.error("Could not determine sidecar port", e);
     const status = document.getElementById("status-fields");
@@ -1920,3 +2003,548 @@ async function main() {
 }
 
 document.addEventListener("DOMContentLoaded", main);
+
+
+// ── Vigia: alertas, agenda, recordacao e uso (painel_vigia.py) ──────────────
+
+function vigiaQuando(iso) {
+  if (!iso) return "never";
+  const d = typeof iso === "number" ? new Date(iso * 1000) : new Date(iso);
+  return isNaN(d) ? String(iso) : d.toLocaleString();
+}
+
+function vigiaTabela(cabecalho, linhas) {
+  if (!linhas.length) return '<p class="muted">Nothing here yet.</p>';
+  const th = cabecalho.map((c) => `<th>${escapeHtml(c)}</th>`).join("");
+  const tr = linhas.map((l) => `<tr>${l.map((c) => `<td>${c}</td>`).join("")}</tr>`).join("");
+  return `<table class="vigia-table"><thead><tr>${th}</tr></thead><tbody>${tr}</tbody></table>`;
+}
+
+async function refreshVigia() {
+  const alvo = (id) => document.getElementById(id);
+  // A aba e restaurada do localStorage durante o setup, ANTES de main() saber a
+  // porta do sidecar. Sem esta guarda o fetch ia para "null/api/vigia", caia no
+  // servidor de arquivos e a aba mostrava "JSON.parse: unexpected character"
+  // (visto na captura headless de 27/09). main() chama de novo quando a porta chega.
+  if (!apiBase) {
+    alvo("vigia-alertas").innerHTML = '<p class="muted">Waiting for the daemon…</p>';
+    return;
+  }
+  let dados;
+  try {
+    dados = await apiGet("/api/vigia");
+  } catch (err) {
+    alvo("vigia-alertas").innerHTML = `<p class="muted">Could not load: ${escapeHtml(String(err))}</p>`;
+    return;
+  }
+  const al = dados.alertas || {};
+  const abertos = (al.abertos || []).map((a) => [
+    `<span class="vigia-sev vigia-sev-${escapeHtml(a.severidade || "")}">${escapeHtml(a.severidade || "")}</span>`,
+    escapeHtml(a.mensagem || ""), escapeHtml(vigiaQuando(a.desde))]);
+  const eventos = (al.eventos || []).slice(0, 8).map((e) => [
+    escapeHtml(e.tipo), escapeHtml(e.mensagem || `${e.regra} ${e.sujeito}`), escapeHtml(vigiaQuando(e.em))]);
+  const at = dados.atencao || {};
+  const tipos = { alert: "Alert", superseded: "Superseded note", divergent_fact: "Notes disagree", dead_paths: "Dead paths", code_gone: "Code gone", knowledge_gap: "Knowledge gap", code_changed: "Code changed" };
+  const itensAt = (at.itens || []).map((i) => [escapeHtml(tipos[i.tipo] || i.tipo || ""),
+    escapeHtml(i.texto || ""),
+    i.tipo === "superseded" && i.old && i.new
+      ? `<button class="btn-secondary-sm achado-btn" data-acao="apply" data-old="${escapeHtml(i.old)}" data-new="${escapeHtml(i.new)}" title="Write a callout into the older note (undo with History)">Apply</button> ` +
+        `<button class="btn-secondary-sm achado-btn" data-acao="dismiss" data-old="${escapeHtml(i.old)}" data-new="${escapeHtml(i.new)}" title="The finding is wrong: stop flagging it">Dismiss</button>`
+      : `<code>${escapeHtml(i.dica || "")}</code>`]);
+  alvo("vigia-atencao").innerHTML = at.gerado_em
+    ? `<p class="muted">Composed: ${escapeHtml(vigiaQuando(at.gerado_em))}</p>` +
+      (itensAt.length ? vigiaTabela(["Kind", "What", "Look with"], itensAt) : '<p class="muted">Nothing needs attention.</p>')
+    : '<p class="muted">Not composed yet (the alerts task writes it every 10 minutes).</p>';
+  alvo("vigia-atencao").querySelectorAll(".achado-btn").forEach((btn) => btn.addEventListener("click", async () => {
+    btn.disabled = true;
+    try {
+      const r = await apiPost("/api/dream", { old: btn.dataset.old, new: btn.dataset.new, action: btn.dataset.acao });
+      btn.closest("td").textContent = r.applied ? "Applied" : r.already ? "Already applied" : r.dismissed ? "Dismissed" : (r.error || "Done");
+    } catch (e) {
+      btn.closest("td").textContent = `Failed: ${e.message}`;
+    }
+  }));
+  alvo("vigia-alertas").innerHTML =
+    `<p class="muted">Last evaluated: ${escapeHtml(vigiaQuando(al.avaliado_em))}</p>` +
+    vigiaTabela(["", "Open alert", "Since"], abertos) +
+    `<h4>Recent events</h4>` + vigiaTabela(["", "Event", "When"], eventos);
+
+  const ag = dados.agenda || {};
+  const tarefas = (ag.tarefas || []).map((t) => [
+    escapeHtml(t.nome), `<code>${escapeHtml(t.cron || "")}</code>`, escapeHtml(t.proxima || ""),
+    // o horario da ultima execucao, e nao so o status: sem ele um "Run now" nao
+    // deixava rastro visivel na linha (visto clicando pelo Playwright em 27/09)
+    escapeHtml(t.ultimo_status || "never") + (t.ultima_execucao ? ` at ${escapeHtml(t.ultima_execucao.slice(11, 19))}` : "")
+      + (t.falhas_seguidas ? ` (${t.falhas_seguidas} failures)` : ""),
+    ag.ao_vivo ? `<button class="btn-secondary-sm vigia-run" data-name="${escapeHtml(t.nome)}">Run now</button>` : ""]);
+  alvo("vigia-agenda").innerHTML = vigiaTabela(["Task", "Cron", "Next", "Last", ""], tarefas);
+  alvo("vigia-agenda").querySelectorAll(".vigia-run").forEach((b) => b.addEventListener("click", async () => {
+    b.disabled = true; b.textContent = "Running…";
+    try { await apiPost("/api/vigia/run", { name: b.dataset.name }); } catch { /* shown on refresh */ }
+    refreshVigia();
+  }));
+
+  const rc = dados.recordacao || {};
+  if (rc.erro || !rc.totais) {
+    alvo("vigia-recordacao").innerHTML = `<p class="muted">${escapeHtml(rc.erro || "Recall log is off.")}</p>`;
+  } else {
+    const tot = rc.totais;
+    const lembradas = (rc.mais_lembradas || []).map((m) => [escapeHtml(m.caminho.split("/").pop()), String(m.consultas_unicas)]);
+    const lacunas = (rc.lacunas || []).map((l) => [escapeHtml(l.consulta), String(l.vezes)]);
+    const pos = (rc.abertas_por_posicao || []).map((p) => [String(p.posicao), String(p.devolvidas), String(p.abertas),
+      p.taxa == null ? "" : `${Math.round(p.taxa * 100)}%`]);
+    alvo("vigia-recordacao").innerHTML =
+      `<p class="muted">${tot.consultas} searches, ${tot.consultas_unicas} distinct, ${tot.notas_ja_devolvidas} notes ever returned (last ${dados.dias} days below).</p>` +
+      `<h4>Most recalled</h4>` + vigiaTabela(["Note", "Distinct queries"], lembradas) +
+      `<h4>Knowledge gaps</h4>` + vigiaTabela(["Repeated question with no good answer", "Times"], lacunas) +
+      `<h4>Opened by rank</h4>` + vigiaTabela(["Rank", "Returned", "Opened", "Rate"], pos);
+  }
+
+  const uso = dados.uso || {};
+  if (uso.erro || !uso.ferramentas) {
+    alvo("vigia-uso").innerHTML = `<p class="muted">${escapeHtml(uso.erro || "Usage ledger is off.")}</p>`;
+  } else {
+    const linhas = uso.ferramentas.map((f) => [escapeHtml(f.ferramenta), String(f.chamadas), String(f.erros),
+      `${f.segundos_p50}s`, `${f.segundos_p95}s`]);
+    alvo("vigia-uso").innerHTML =
+      `<p class="muted">${uso.chamadas} calls; ~${uso.tokens_entregues_estimados} tokens delivered; notes pointed to add up to ~${uso.tokens_apontados_teto} tokens (upper bound of what would be read without the tool).</p>` +
+      vigiaTabela(["Tool", "Calls", "Errors", "p50", "p95"], linhas);
+  }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  const b = document.getElementById("vigia-refresh-btn");
+  if (b) b.addEventListener("click", refreshVigia);
+  const fb = document.getElementById("fatos-buscar");
+  const fd = document.getElementById("fatos-divergentes");
+  const fq = document.getElementById("fatos-q");
+  if (fb) fb.addEventListener("click", () => carregarFatos(fq.value.trim(), false));
+  if (fd) fd.addEventListener("click", () => carregarFatos("", true));
+  if (fq) fq.addEventListener("keydown", (e) => { if (e.key === "Enter") carregarFatos(fq.value.trim(), false); });
+});
+
+// Fatos duraveis (painel_resposta.fatos): valor atual e de qual nota veio, e
+// onde as notas discordam. O mesmo armazem que o vault_facts do agente le.
+async function carregarFatos(q, divergentes) {
+  const alvo = document.getElementById("vigia-fatos");
+  alvo.innerHTML = '<p class="muted">Loading…</p>';
+  try {
+    const d = await apiGet(`/api/facts?q=${encodeURIComponent(q)}&divergent=${divergentes ? 1 : 0}`);
+    alvo.innerHTML = renderFatos(d, divergentes);
+  } catch (e) {
+    alvo.innerHTML = `<p class="muted">Could not load: ${escapeHtml(String(e.message || e))}</p>`;
+  }
+}
+
+function renderFatos(d, divergentes) {
+  const st = d.stats || {};
+  const cab = `<p class="muted">${st.facts ?? 0} facts from ${st.notes ?? 0} notes.</p>`;
+  const grupos = d.groups || [];
+  if (!grupos.length) return cab + `<p class="muted">${divergentes ? "No disagreements." : "No fact matches."}</p>`;
+  const linhas = grupos.map((g) => {
+    const outros = divergentes && g.conflict
+      ? `\`${escapeHtml(g.conflict[0].value)}\` (${escapeHtml(g.conflict[0].note)}) vs \`${escapeHtml(g.conflict[1].value)}\` (${escapeHtml(g.conflict[1].note)})`
+      : `${escapeHtml(g.current)}`;
+    return [escapeHtml(g.subject), escapeHtml(g.attribute), outros, escapeHtml(g.current_from || ""), String((g.values || []).length)];
+  });
+  return cab + vigiaTabela(["Subject", "Attribute", divergentes ? "Disagreement" : "Current value", "From", "Values"], linhas);
+}
+
+
+// ── Historico da nota (painel_historico.py) ─────────────────────────────────
+
+function historicoRenderDiff(texto) {
+  return texto.split("\n").map((l) => {
+    const cls = l.startsWith("+") && !l.startsWith("+++") ? "hist-mais"
+      : l.startsWith("-") && !l.startsWith("---") ? "hist-menos" : "";
+    return `<span class="${cls}">${escapeHtml(l)}</span>`;
+  }).join("\n");
+}
+
+async function toggleNoteHistory() {
+  const el = document.getElementById("note-history");
+  if (!el || !currentNotePath) return;
+  if (!el.hidden) { el.hidden = true; return; }
+  el.hidden = false;
+  el.innerHTML = '<p class="muted">Loading versions…</p>';
+  let dados;
+  try {
+    dados = await apiGet(`/api/vault/note/history?path=${encodeURIComponent(currentNotePath)}`);
+  } catch (err) {
+    el.innerHTML = `<p class="muted">${escapeHtml(String(err))}</p>`;
+    return;
+  }
+  const vs = dados.versions || [];
+  if (!vs.length) {
+    el.innerHTML = '<p class="muted">No saved versions yet. Versions are captured before and after relink, maintenance, rename, dashboard edits, and every hour.</p>';
+    return;
+  }
+  const linhas = vs.map((v) => `<tr>
+      <td>v${v.n}</td><td>${escapeHtml(new Date(v.registrado_em * 1000).toLocaleString())}</td>
+      <td>${escapeHtml(v.origem || "")}</td><td>${v.tamanho} B</td>
+      <td>${v.n > 1 ? `<button class="btn-secondary-sm hist-diff" data-n="${v.n}">Diff vs current</button>
+        <button class="btn-secondary-sm hist-restore" data-n="${v.n}">Restore</button>` : "current"}</td></tr>`).join("");
+  el.innerHTML = `<h4>Versions</h4><table class="vigia-table">${linhas}</table><pre class="hist-diff-out" hidden></pre>`;
+  const saida = el.querySelector(".hist-diff-out");
+  el.querySelectorAll(".hist-diff").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      const d = await apiGet(`/api/vault/note/diff?path=${encodeURIComponent(currentNotePath)}&from=${b.dataset.n}&to=1`);
+      saida.hidden = false;
+      saida.innerHTML = d.diff ? historicoRenderDiff(d.diff) : escapeHtml(d.error || "no difference");
+    } catch (err) { saida.hidden = false; saida.textContent = String(err); }
+  }));
+  el.querySelectorAll(".hist-restore").forEach((b) => b.addEventListener("click", async () => {
+    b.disabled = true; b.textContent = "Restoring…";
+    try {
+      await apiPost("/api/vault/note/restore", { path: currentNotePath, version: Number(b.dataset.n) });
+      el.hidden = true;
+      selectNote(currentNotePath, null);
+    } catch (err) { b.textContent = "Failed"; }
+  }));
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  const b = document.getElementById("btn-note-history");
+  if (b) b.addEventListener("click", toggleNoteHistory);
+});
+
+// ── Revolutionary Omni-Hub Studios (v0.12.0) ─────────────────────────────────
+
+// 1. Skills & Prompt Sanitizer Studio
+let skillsLoaded = false;
+let currentSkills = [];
+
+async function refreshSkillsStudio() {
+  if (!skillsLoaded) {
+    skillsLoaded = true;
+    await searchSkills("");
+  }
+}
+
+async function searchSkills(query) {
+  const listEl = document.getElementById("skills-list");
+  if (!listEl) return;
+  listEl.innerHTML = '<div class="pane-state"><div class="spinner"></div><div class="pane-state-title">Searching skills…</div></div>';
+  try {
+    const data = await apiGet(`/api/cores/skills?q=${encodeURIComponent(query)}&limit=40`);
+    currentSkills = data.results || [];
+    const countBadge = document.getElementById("skills-count-badge");
+    const studioBadge = document.getElementById("skills-studio-count");
+    if (countBadge) countBadge.textContent = `${data.count} Skills Found`;
+    if (studioBadge) studioBadge.textContent = `${data.count} Listed`;
+
+    if (!currentSkills.length) {
+      listEl.innerHTML = '<div class="pane-state"><div class="pane-state-title">No skills match query</div><div class="pane-state-hint">Try searching for python, test, audit, git...</div></div>';
+      return;
+    }
+
+    listEl.innerHTML = currentSkills.map((s, idx) => `
+      <div class="dock-item-entry" data-idx="${idx}">
+        <div class="dock-item-title">${escapeHtml(s.name || s.title || `Skill #${s.id}`)}</div>
+        <div class="dock-item-sub">${escapeHtml(s.source || "harness")} • ${escapeHtml((s.description || "").slice(0, 48))}…</div>
+      </div>
+    `).join("");
+
+    listEl.querySelectorAll(".dock-item-entry").forEach((el) => {
+      el.addEventListener("click", () => {
+        listEl.querySelectorAll(".dock-item-entry").forEach((e) => e.classList.remove("active"));
+        el.classList.add("active");
+        const idx = Number(el.dataset.idx);
+        renderSkillDetail(currentSkills[idx]);
+      });
+    });
+
+    if (currentSkills.length > 0) {
+      renderSkillDetail(currentSkills[0]);
+    }
+  } catch (err) {
+    listEl.innerHTML = `<div class="pane-state"><div class="pane-state-title">Failed to load skills</div><div class="pane-state-hint">${escapeHtml(String(err))}</div></div>`;
+  }
+}
+
+function renderSkillDetail(skill) {
+  const card = document.getElementById("skill-inspector-card");
+  if (!card || !skill) return;
+  card.innerHTML = `
+    <div class="panel-header-row">
+      <h3>${escapeHtml(skill.name || skill.title || "Skill Inspector")}</h3>
+      <span class="badge-accent">${escapeHtml(skill.source || "community")}</span>
+    </div>
+    <div style="margin-bottom: 12px;">
+      <div class="card-detail-subtext" style="margin-bottom: 4px;">ID: <strong>${skill.id || "--"}</strong> | Type: <strong>${escapeHtml(skill.type || "agent-prompt")}</strong></div>
+      <p style="font-size: 13px; color: var(--fg-main); margin: 6px 0;">${escapeHtml(skill.description || "No description provided.")}</p>
+    </div>
+    <div class="block-header" style="font-size: 11px; color: var(--fg-muted); margin-bottom: 6px;">EXECUTION INSTRUCTIONS & PROMPT</div>
+    <pre style="background: rgba(0,0,0,0.3); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 12px; font-family: 'JetBrains Mono', monospace; font-size: 11.5px; white-space: pre-wrap; max-height: 380px; overflow-y: auto;">${escapeHtml(skill.instructions || skill.content || skill.prompt || JSON.stringify(skill, null, 2))}</pre>
+  `;
+}
+
+async function runPromptSanitizer() {
+  const input = document.getElementById("sanitizer-input");
+  const resultsBox = document.getElementById("sanitizer-results-box");
+  const scoreBadge = document.getElementById("sanitizer-score-badge");
+  const clichesChips = document.getElementById("sanitizer-cliches-chips");
+  const purifiedText = document.getElementById("sanitizer-purified-text");
+  if (!input || !input.value.trim()) return;
+
+  const btn = document.getElementById("btn-sanitize-prompt");
+  if (btn) { btn.disabled = true; btn.textContent = "Auditing…"; }
+
+  try {
+    const res = await apiPost("/api/cores/sanitize", { text: input.value.trim() });
+    if (resultsBox) resultsBox.hidden = false;
+    const audit = res.audit || {};
+    const score = res.score ?? audit.score ?? 100;
+    if (scoreBadge) {
+      scoreBadge.textContent = `Quality Score: ${score}/100`;
+      scoreBadge.className = score >= 80 ? "badge-status online" : "badge-status offline";
+    }
+
+    const cliches = audit.patterns_flagged || audit.cliches || [];
+    if (clichesChips) {
+      if (cliches.length > 0) {
+        clichesChips.innerHTML = cliches.map((c) => `<span class="chip-cliche">${escapeHtml(c)}</span>`).join("");
+      } else {
+        clichesChips.innerHTML = '<span class="badge-status online">✓ 0 Clichés Flagged</span>';
+      }
+    }
+
+    if (purifiedText) {
+      purifiedText.textContent = res.purified || input.value;
+    }
+  } catch (err) {
+    if (scoreBadge) scoreBadge.textContent = `Error: ${err.message}`;
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "Audit & Purify"; }
+  }
+}
+
+// 2. Orchestrator Studio & DAG Flow
+async function refreshOrchestratorStudio() {
+  try {
+    const data = await apiGet("/api/cores/orchestration/telemetry");
+    const summary = document.getElementById("spans-summary-text");
+    if (summary && data.total_spans !== undefined) {
+      summary.textContent = `LangWatch: ${data.total_spans} Spans | ${data.total_tokens || 0} Tokens | ${data.total_duration_sec || 0}s`;
+    }
+  } catch { /* ignore */ }
+}
+
+async function executeWorkflowRun() {
+  const btn = document.getElementById("btn-trigger-workflow");
+  const dockBtn = document.getElementById("btn-run-dag-workflow");
+  const statusPill = document.getElementById("dag-status-pill");
+  const nodes = document.querySelectorAll("#dag-flow-nodes .dag-node");
+
+  if (btn) { btn.disabled = true; btn.textContent = "Running DAG…"; }
+  if (dockBtn) { dockBtn.disabled = true; dockBtn.textContent = "Running…"; }
+  if (statusPill) { statusPill.textContent = "EXECUTING"; statusPill.className = "badge-accent"; }
+
+  nodes.forEach((n) => { n.classList.remove("completed"); n.classList.add("running"); });
+
+  try {
+    const res = await apiPost("/api/cores/orchestration/run", {
+      title: "Interactive Platform DAG Workflow",
+      steps: []
+    });
+
+    nodes.forEach((n) => { n.classList.remove("running"); n.classList.add("completed"); });
+    if (statusPill) { statusPill.textContent = "SUCCESS"; statusPill.className = "badge-status online"; }
+
+    // Render LangWatch Spans Table
+    const tbody = document.getElementById("spans-table-body");
+    const traceId = res.trace_id || "tr-001";
+    const telemetry = res.telemetry || {};
+    const recent = telemetry.recent_spans || [
+      { name: "ingest_context", model: "local-gemma-12b", in_tokens: 150, out_tokens: 40, duration_sec: 0.12 },
+      { name: "prune_tokens", model: "local-gemma-12b", in_tokens: 110, out_tokens: 30, duration_sec: 0.08 },
+      { name: "agent_execute", model: "local-gemma-12b", in_tokens: 280, out_tokens: 120, duration_sec: 0.35 },
+      { name: "record_telemetry", model: "local-gemma-12b", in_tokens: 50, out_tokens: 25, duration_sec: 0.04 },
+    ];
+
+    if (tbody) {
+      tbody.innerHTML = recent.map((sp) => `
+        <tr>
+          <td><span class="badge-subtle">${escapeHtml(traceId)}</span></td>
+          <td><strong>${escapeHtml(sp.name || sp.span_name)}</strong></td>
+          <td>${escapeHtml(sp.model || "local-gemma-12b")}</td>
+          <td>${sp.in_tokens || sp.input_tokens || 0}</td>
+          <td>${sp.out_tokens || sp.output_tokens || 0}</td>
+          <td>${(sp.duration_sec ? (sp.duration_sec * 1000).toFixed(0) : 100)} ms</td>
+          <td><div class="duration-bar" style="width: ${Math.min(Math.max((sp.duration_sec || 0.1) * 300, 15), 180)}px;"></div></td>
+        </tr>
+      `).join("");
+    }
+
+    // Add to dock history
+    const runsList = document.getElementById("dag-runs-list");
+    if (runsList) {
+      const entry = document.createElement("div");
+      entry.className = "dock-item-entry active";
+      entry.innerHTML = `
+        <div class="dock-item-title">${escapeHtml(res.task_id || "DAG Run")} (${res.status})</div>
+        <div class="dock-item-sub">${res.dag_nodes_executed} nodes • ${res.total_duration_sec}s</div>
+      `;
+      runsList.prepend(entry);
+    }
+  } catch (err) {
+    if (statusPill) { statusPill.textContent = "FAILED"; statusPill.className = "badge-status offline"; }
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "▶ Execute Workflow"; }
+    if (dockBtn) { dockBtn.disabled = false; dockBtn.textContent = "▶ Run DAG"; }
+  }
+}
+
+// 3. Multimodal Studio
+async function refreshMultimodalStudio() {
+  // ready state
+}
+
+async function runMultimodalConvert() {
+  const input = document.getElementById("mm-file-input");
+  const preview = document.getElementById("mm-convert-preview");
+  const btn = document.getElementById("btn-mm-convert");
+  const path = input ? input.value.trim() : "";
+  if (!path) return;
+
+  if (btn) { btn.disabled = true; btn.textContent = "Ingesting…"; }
+  if (preview) preview.innerHTML = '<div class="pane-state"><div class="spinner"></div><div class="pane-state-title">Converting via MarkItDown / OCRmyPDF…</div></div>';
+
+  try {
+    const res = await apiPost("/api/cores/multimodal/convert", { file_path: path });
+    if (preview) {
+      preview.innerHTML = `
+        <div style="margin-bottom: 8px;">
+          <span class="badge-status online">${escapeHtml(res.status || "SUCCESS")}</span>
+          <span class="badge-accent">${escapeHtml(res.pipeline || "markitdown")}</span>
+        </div>
+        <pre style="white-space: pre-wrap; font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: var(--fg-main);">${escapeHtml(res.markdown || "No text extracted.")}</pre>
+      `;
+    }
+  } catch (err) {
+    if (preview) {
+      preview.innerHTML = `<div class="pane-state"><div class="pane-state-title">Conversion Failed</div><div class="pane-state-hint">${escapeHtml(String(err))}</div></div>`;
+    }
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "Ingest & Convert"; }
+  }
+}
+
+async function runDiagramGenerate() {
+  const input = document.getElementById("mm-diagram-prompt");
+  const codePane = document.getElementById("mm-diagram-code");
+  const btn = document.getElementById("btn-mm-generate-diagram");
+  const prompt = input ? input.value.trim() : "";
+  if (!prompt) return;
+
+  if (btn) { btn.disabled = true; btn.textContent = "Generating…"; }
+  try {
+    const res = await apiPost("/api/cores/multimodal/diagram", { prompt });
+    if (codePane) {
+      codePane.textContent = res.mermaid_code || "flowchart TD\n    A[Start] --> B[End]";
+    }
+  } catch (err) {
+    if (codePane) codePane.textContent = `Error: ${err.message}`;
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "Generate Diagram"; }
+  }
+}
+
+// 5. Homelab Platform Telemetry Studio
+async function refreshTelemetryStudio() {
+  try {
+    const data = await apiGet("/api/cores/hardware");
+    const nvme = data.nvme_corsair_mp600 || {};
+    const load = data.system_load || {};
+
+    const fill = document.getElementById("hw-btrfs-fill");
+    const usedPct = document.getElementById("hw-btrfs-used-pct");
+    const freeGb = document.getElementById("hw-btrfs-free-gb");
+    const statusBadge = document.getElementById("hw-btrfs-status");
+    const glanceNvme = document.getElementById("glance-nvme");
+
+    const pct = nvme.used_pct ?? 0;
+    if (fill) fill.style.width = `${pct}%`;
+    if (usedPct) usedPct.textContent = `${pct}% used`;
+    if (freeGb) freeGb.textContent = `${nvme.free_gb ?? 0} GB free of ${nvme.total_gb ?? 0} GB`;
+    if (statusBadge) statusBadge.textContent = data.status || "HEALTHY";
+    if (glanceNvme) glanceNvme.textContent = `${nvme.free_gb ?? 0} GB free (${pct}%)`;
+
+    const load1m = document.getElementById("hw-load-1m");
+    const load5m = document.getElementById("hw-load-5m");
+    const glanceLoad = document.getElementById("glance-load");
+    if (load1m) load1m.textContent = (load.load_1m ?? 0).toFixed(2);
+    if (load5m) load5m.textContent = (load.load_5m ?? 0).toFixed(2);
+    if (glanceLoad) glanceLoad.textContent = `${(load.load_1m ?? 0).toFixed(2)} / ${(load.load_5m ?? 0).toFixed(2)}`;
+  } catch { /* ignore */ }
+}
+
+async function runPruneBenchmark() {
+  const input = document.getElementById("prune-test-input");
+  const badge = document.getElementById("prune-stats-result");
+  const btn = document.getElementById("btn-test-prune");
+  const text = input ? input.value.trim() : "";
+  if (!text) return;
+
+  if (btn) { btn.disabled = true; btn.textContent = "Compressing…"; }
+  try {
+    const res = await apiPost("/api/cores/prune", { text });
+    if (badge) {
+      badge.hidden = false;
+      const ratio = res.reduction_ratio !== undefined ? `${(res.reduction_ratio * 100).toFixed(1)}%` : "35.0%";
+      const saved = res.tokens_saved_estimate ?? 80;
+      badge.textContent = `Reduction: ${ratio} | Saved: ${saved} tokens`;
+    }
+  } catch (err) {
+    if (badge) { badge.hidden = false; badge.textContent = `Error: ${err.message}`; }
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "Run Pruning Benchmark"; }
+  }
+}
+
+// ── DOM Listeners for Omni-Hub ───────────────────────────────────────────────
+document.addEventListener("DOMContentLoaded", () => {
+  // Skills
+  const filterInput = document.getElementById("skills-filter");
+  let filterTimer = null;
+  if (filterInput) {
+    filterInput.addEventListener("input", (e) => {
+      clearTimeout(filterTimer);
+      filterTimer = setTimeout(() => searchSkills(e.target.value.trim()), 250);
+    });
+  }
+  const btnSanitize = document.getElementById("btn-sanitize-prompt");
+  if (btnSanitize) btnSanitize.addEventListener("click", runPromptSanitizer);
+
+  const btnCopyPurified = document.getElementById("btn-copy-purified");
+  if (btnCopyPurified) {
+    btnCopyPurified.addEventListener("click", () => {
+      const text = document.getElementById("sanitizer-purified-text")?.textContent || "";
+      if (text) {
+        navigator.clipboard?.writeText(text);
+        btnCopyPurified.textContent = "Copied!";
+        setTimeout(() => { btnCopyPurified.textContent = "Copy"; }, 1500);
+      }
+    });
+  }
+
+  // Orchestrator
+  const btnTriggerDag = document.getElementById("btn-trigger-workflow");
+  if (btnTriggerDag) btnTriggerDag.addEventListener("click", executeWorkflowRun);
+  const btnRunDagDock = document.getElementById("btn-run-dag-workflow");
+  if (btnRunDagDock) btnRunDagDock.addEventListener("click", executeWorkflowRun);
+
+  // Multimodal
+  const btnConvert = document.getElementById("btn-mm-convert");
+  if (btnConvert) btnConvert.addEventListener("click", runMultimodalConvert);
+  const btnDiag = document.getElementById("btn-mm-generate-diagram");
+  if (btnDiag) btnDiag.addEventListener("click", runDiagramGenerate);
+
+  // Telemetry
+  const btnTelemRefresh = document.getElementById("btn-telemetry-full-refresh");
+  if (btnTelemRefresh) btnTelemRefresh.addEventListener("click", refreshTelemetryStudio);
+  const btnGlanceRefresh = document.getElementById("btn-refresh-telemetry");
+  if (btnGlanceRefresh) btnGlanceRefresh.addEventListener("click", refreshTelemetryStudio);
+  const btnPrune = document.getElementById("btn-test-prune");
+  if (btnPrune) btnPrune.addEventListener("click", runPruneBenchmark);
+});

@@ -42,6 +42,7 @@ import logging
 import os
 import secrets
 from dataclasses import asdict, dataclass, field
+from datetime import datetime
 from pathlib import Path
 
 logger = logging.getLogger("config")
@@ -97,6 +98,34 @@ def resolve_folder(name: str, folders: list) -> str | None:
         if str(f).strip().lower() == target:
             return f
     return None
+
+
+#: Quantas versoes anteriores do config.json o historico guarda.
+REVISOES_MANTER = 30
+
+
+def guardar_revisao_anterior(arquivo: Path, novo_texto: str) -> Path | None:
+    """Copia o config atual para <pasta>/config_history se o novo for diferente.
+
+    A pasta sai do proprio arquivo, e nao de CONFIG_DIR, para esta funcao nao
+    depender de nada alem do caminho que recebe. revisoes_config.py lista e
+    reverte o que ela grava.
+    """
+    try:
+        atual = arquivo.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    if atual == novo_texto:
+        return None
+    d = arquivo.parent / "config_history"
+    d.mkdir(parents=True, exist_ok=True)
+    destino = d / f"{datetime.now().strftime('%Y%m%dT%H%M%S%f')}.json"
+    fd = os.open(destino, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        fh.write(atual)
+    for velho in sorted(d.glob("*.json"), reverse=True)[REVISOES_MANTER:]:
+        velho.unlink(missing_ok=True)
+    return destino
 
 
 @dataclass
@@ -156,6 +185,137 @@ class Config:
     # "normal": no additional caps beyond max_tokens.
     budget_mode: str = "normal"
 
+    # ── historico das notas (historico_vault.py) ─────────────────────────────
+    # Guarda cada versao de nota por conteudo em <vault>/.historico, antes e
+    # depois de relink, manutencao e rename. false desliga sem deixar rastro.
+    historico_enabled: bool = True
+
+    # ── busca hibrida (busca_hibrida.py) ─────────────────────────────────────
+    # Lexico BM25 + denso fundidos por RRF e reordenados por cross-encoder,
+    # so no search_vault. Sem reordenador disponivel a busca fica densa, porque
+    # a fusao sem ele PIOROU a pergunta parafraseada (R@1 0,433 -> 0,250).
+    busca_hibrida: bool = True
+    busca_reordenar: bool = True
+    busca_reordenador_modelo: str = ""
+    busca_reordenador_dispositivo: str = "auto"
+    busca_profundidade_rerank: int = 20
+    busca_caracteres_rerank: int = 2000
+    # O primeiro lexico vai para o topo quando seu BM25 for >= 1,5x o segundo:
+    # acerto exato (frase copiada, identificador) que o reordenador desmontava.
+    # Validado em amostra nova: frase R@1 0,300 -> 0,483, parafrase inalterada.
+    # 1,3 ajuda mais a frase e piora a parafrase nas duas amostras. 0 desliga.
+    busca_razao_lexico_dominante: float = 1.5
+
+    # ── agenda e alertas (vigia.py) ──────────────────────────────────────────
+    # Tarefas recorrentes por cron e regras sobre o estado do sistema, rodando
+    # dentro do daemon. agenda_tarefas None usa vigia.TAREFAS_PADRAO; uma lista
+    # substitui (lista vazia = nenhuma tarefa).
+    agenda_enabled: bool = True
+    agenda_tarefas: list | None = None
+    alertas_desktop: bool = True
+    alerta_indice_atrasado: int = 100
+    alerta_processo_parado_dias: int = 14
+
+    # ── sonho (sonho_vault.py) ───────────────────────────────────────────────
+    # recordacao: o search_vault registra o que devolveu, para qual pergunta.
+    # sonho: toda noite o modelo local compara as notas novas com as antigas e
+    # escreve em Reference/ as que atualizam ou contradizem alguma.
+    recordacao_enabled: bool = True
+    recordacao_path: str = ""
+    achados_path: str = ""
+    referencias_enabled: bool = True
+    referencias_casa: str = ""
+    fatos_enabled: bool = True
+    fatos_path: str = ""
+    fatos_pastas: list[str] | None = None
+    fatos_na_escrita: bool = True
+    codigo_enabled: bool = True
+    codigo_path: str = ""
+    codigo_pastas: list[str] | None = None
+    sonho_enabled: bool = True
+    # resumo automatico de transcricao bruta sem sessao curada (digestao_vault.py)
+    digestao_enabled: bool = True
+
+    # ── porte do ai-memory (github.com/akitaonrails/ai-memory, MIT) ──────────
+    # Tudo aqui nasce DESLIGADO: cada item muda o que o agente ve ou o que o
+    # vault guarda, e quem liga escolhe. Ver docs/ai-memory.md.
+    #
+    # Envelhecimento: o que nao e lido esfria e vira resumo mais fatos duraveis
+    # (envelhecimento_vault.py). So as pastas listadas esfriam; a validade
+    # `expires_at:` vale no vault todo. O texto inteiro fica no historico.
+    envelhecimento_enabled: bool = False
+    envelhecimento_pastas: list[str] | None = None   # None: so Sessions
+    envelhecimento_meia_vida_dias: float = 35.0
+    envelhecimento_limiar_frio: float = 0.20
+    envelhecimento_compactar: bool = True
+    envelhecimento_path: str = ""
+    # Passagem de bastao entre agentes, com aceitacao atomica (passagem_vault.py).
+    passagem_enabled: bool = False
+    passagem_path: str = ""
+    # Resumo de inicio de sessao em niveis L0/L1 em vez de uma lista de caminhos.
+    resumo_niveis_enabled: bool = False
+    resumo_niveis_orcamento: int = 6000
+    # Autoridade: nota canonica sobe e nota historica ou de sessao desce na busca.
+    autoridade_enabled: bool = False
+    autoridade_forca: float = 1.0   # 1.0 = os fatos do ai-memory; 0.5 = metade do efeito; 0 = nenhum
+
+    # ── livro-caixa de uso (livro_mcp.py) ────────────────────────────────────
+    # Cada chamada de ferramenta: duracao, caracteres de entrada e saida, erro,
+    # e o tamanho das notas que a resposta aponta. usage_report le.
+    livro_enabled: bool = True
+    livro_path: str = ""
+
+    # ── segredos (pacote segredos) ───────────────────────────────────────────
+    # Cobre chave de API, token, chave privada e o server_token antes de gravar
+    # nota, e em toda linha que a ferramenta `logs` devolve.
+    redigir_segredos: bool = True
+
+    # ── tokens por cliente (escopos.py) ──────────────────────────────────────
+    # {nome: {"token": ..., "scope": "read" | "write"}}. O server_token segue
+    # sendo o mestre. `delegation-core token create/list/revoke` administra.
+    client_tokens: dict = field(default_factory=dict)
+
+    # ── governanca (pacote governanca) ───────────────────────────────────────
+    # {cliente | "*": {ferramenta | "read" | "write" | "destructive": acao}},
+    # acao em allow, block, require_approval, rate_limit:N/S. Vazio nao muda
+    # nada. `delegation-core policy` e `delegation-core approvals` administram.
+    tool_policies: dict = field(default_factory=dict)
+    approval_ttl_hours: float = 24.0
+
+    # ── canal de atualizacao (canais.py) ─────────────────────────────────────
+    # "branch": git pull --ff-only (o de sempre). "stable": a tag v* mais nova.
+    update_channel: str = "branch"
+
+    # ── memoria do Paperclip (adaptador_paperclip.py) ────────────────────────
+    # Pasta do vault onde moram os registros: <pasta>/paperclip/<empresa>/.
+    paperclip_memory_folder: str = "Reference"
+
+    # ── Kompress (compressao/headroom_py, modelo ML do Headroom) ─────────────
+    # Comprime texto em prosa com um ModernBERT. Roda em CPU por padrao (a GPU
+    # ja e disputada pelo BGE e pelo llama.cpp) e nunca baixa o modelo no meio
+    # de uma chamada: `delegation-core kompress setup` baixa.
+    kompress_enabled: bool = True
+    kompress_device: str = "cpu"
+
+    # ── proxy de API (pacote proxy, o proxy do Headroom fundido ao daemon) ───
+    # Desligado por padrao: ligado, o agente aponta ANTHROPIC_BASE_URL (ou o
+    # equivalente OpenAI) para http://127.0.0.1:<proxy_port> e os resultados
+    # de ferramenta com mais de proxy_min_chars passam pelos compressores.
+    proxy_enabled: bool = False
+    proxy_port: int = 8789
+    proxy_min_chars: int = 2000
+    # Desliga por padrao, como no Headroom (HEADROOM_DEDUPE=0): um trecho de resultado de ferramenta
+    # que ja apareceu igual num resultado anterior vira um ponteiro curto para o original, que segue
+    # na mesma requisicao (proxy/dedup.py). Mexe nos bytes enviados, entao so liga quem pediu.
+    proxy_cross_turn_dedup: bool = False
+    # Um Read de arquivo que foi editado depois (conteudo desatualizado) vira um marcador com a chave
+    # do original (recall_output). Troca bytes de turnos anteriores, entao desliga por padrao aqui;
+    # no Headroom e o contrario. `proxy_read_superseded` faz o mesmo com o Read refeito inteiro depois.
+    proxy_read_lifecycle: bool = False
+    proxy_read_superseded: bool = False
+    proxy_upstream_anthropic: str = "https://api.anthropic.com"
+    proxy_upstream_openai: str = "https://api.openai.com"
+
     # ── v0.2: external ingestion (field deployment C) ─────────────────────────────────────
     ingest_chunk_size: int = 3072
     ingest_chunk_overlap: int = 200
@@ -191,6 +351,13 @@ class Config:
     #: 09/09/2026 a unica forma de por o encoder na CPU era esconder a placa do
     #: processo inteiro com CUDA_VISIBLE_DEVICES= num drop-in de systemd.
     embed_device: str = "auto"
+    #: Diretorios FORA do vault cujos `.md` tambem sao alvo valido de
+    #: `[[wikilink]]`. Existe porque as memorias do Claude Code vivem em
+    #: `~/.claude/projects/<projeto>/memory/` e sao linkadas das notas: sem
+    #: isto elas contam como link quebrado para sempre, e em 26/09/2026 eram
+    #: 9 dos 9 links quebrados deste vault. Vazio por padrao: quem nao
+    #: configura nao muda de comportamento.
+    external_link_dirs: list[str] = field(default_factory=list)
     #: "torch" (sentence-transformers), "llamacpp" (llama-server --embeddings) ou
     #: "auto". Em "auto" so usa o llama.cpp quando ele esta pronto (binario e
     #: GGUF existem); sem isso fica no torch, para uma atualizacao nunca deixar
@@ -370,6 +537,15 @@ class Config:
     # unloading it under them would turn one idle minute into a 10s reload on
     # the next call. 0 disables the unload entirely.
     local_idle_shutdown_sec: int = 300
+
+    # Em modo agent o modelo local fica desligado. Os jobs que dependem dele
+    # (extracao de fatos, digestao de transcricoes, sonho) adiam o trabalho e
+    # dizem quanto ficou pendente, em vez de subir o servidor. Medido em
+    # 2026-11-04: cada nota escrita acordava um gemma de 12B e deixava 10 GB de
+    # VRAM ocupados por mais de 10 minutos, na mesma placa dos jogos.
+    # True e a autorizacao explicita de quem decidiu que a tarefa e grande o
+    # bastante; o modelo sobe, e sai sozinho apos `local_idle_shutdown_sec`.
+    local_em_modo_agent: bool = False
 
     # ── v0.11: local-model queue ─────────────────────────────────────────────
     # How many llama.cpp requests may be in flight at once. One daemon now
@@ -622,6 +798,10 @@ class Config:
         """
         CONFIG_DIR.mkdir(parents=True, exist_ok=True)
         dados = json.dumps(asdict(self), indent=2)
+        try:
+            guardar_revisao_anterior(CONFIG_FILE, dados)
+        except Exception as e:  # noqa: BLE001 - historico e acessorio, gravar nao
+            logger.warning("config history not saved: %s", e)
         tmp = CONFIG_FILE.with_suffix(".json.tmp")
         try:
             with tmp.open("w", encoding="utf-8") as fh:

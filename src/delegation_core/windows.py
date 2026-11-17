@@ -40,6 +40,20 @@ CLIENT_CONFIG = Path.home() / ".claude.json"
 REGISTRY = Path.home() / ".delegation_core" / "mcp_workspaces.json"
 
 
+#: Servidores que o delegation-core sabe montar sem que o usuario os tenha
+#: configurado antes. `open_window` usa a definicao daqui quando o nome nao
+#: esta no registro; montado uma vez, ele entra no registro como qualquer outro.
+#: O REA (morluto/rea), montado por npx na versao fixada. rea_ponte.py importa daqui.
+REA_PACOTE = "rea-agents@3.2.1"
+REA_JANELA = {"command": "npx", "args": ["-y", REA_PACOTE, "mcp"]}
+
+
+def _catalogo() -> dict:
+    return {"rea": {"spec": REA_JANELA,
+                    "description": "REA: reverse engineering MCP (apps, binaries, Electron, .NET, web). "
+                                   "Needs Node ^22.19 or >=24.11; npx downloads it on first use."}}
+
+
 def _empty_registry() -> dict:
     return {"servers": {}, "workspaces": {}, "active": None}
 
@@ -119,6 +133,10 @@ def list_windows() -> dict:
         {"name": n, "mounted": n in mounted, "managed": n != SELF}
         for n in sorted(known)
     ]
+    for n, item in sorted(_catalogo().items()):
+        if n not in known:
+            windows.append({"name": n, "mounted": False, "managed": True, "source": "catalog",
+                            "description": item["description"]})
     return {
         "windows": windows,
         "active_workspace": reg.get("active"),
@@ -132,9 +150,9 @@ def open_window(name: str) -> dict:
     reg = sync_registry_from_client()
     if name == SELF:
         return {"error": f"'{SELF}' is always mounted and is not managed as a window."}
-    spec = reg["servers"].get(name)
+    spec = reg["servers"].get(name) or (_catalogo().get(name) or {}).get("spec")
     if not spec:
-        return {"error": f"Unknown server '{name}'. Known: {sorted(reg['servers'])}"}
+        return {"error": f"Unknown server '{name}'. Known: {sorted(set(reg['servers']) | set(_catalogo()))}"}
 
     cfg = read_client_config()
     servers = dict(_mounted(cfg))

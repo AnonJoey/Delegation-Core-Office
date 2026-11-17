@@ -79,6 +79,8 @@ def _rodar(hook, mod_vault, capsys, monkeypatch, tmp_path):
                                "vault_folders": ["Reference"]}), encoding="utf-8")
     monkeypatch.setattr(hook, "STATE_PATH", estado)
     monkeypatch.setattr(hook, "CONFIG_PATH", cfg)
+    # o atencao.json real da maquina nao entra nestes testes
+    monkeypatch.setattr(hook, "ATENCAO_PATH", tmp_path / "sem-atencao.json")
     monkeypatch.setattr(hook, "_trigger_reindex", lambda: False)
     monkeypatch.setattr(hook, "_trigger_maintenance", lambda: False)
     hook.main()

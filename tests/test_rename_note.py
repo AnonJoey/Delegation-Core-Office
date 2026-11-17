@@ -185,3 +185,17 @@ def test_rename_with_retitle_false_leaves_the_real_title_alone(tmp_path):
 
     text = (tmp_path / result["path"]).read_text(encoding="utf-8")
     assert 'title: "A much longer real title that the filename truncated"' in text
+
+
+def test_rename_nao_cai_por_causa_de_uma_nota_que_nao_e_utf8(vault):
+    """Em 2026-11-04 `vault_rename_note` falhou com "'utf-8' codec can't decode byte 0x92" porque dez notas do
+    vault (rascunhos em Windows-1252) nao decodificam, e a varredura de links so tolerava OSError: uma nota
+    ruim bloqueava toda renomeacao. Ela fica de fora da varredura, intacta, e o resultado diz qual."""
+    ruim = vault.cfg.vault / "Reference" / "rascunho-cp1252.md"
+    ruim.write_bytes("Não ’ [[2026-08-01-old name]]\n".encode("cp1252", errors="replace"))
+    antes = ruim.read_bytes()
+    result = notewriter.rename_note(vault, "Reference/2026-08-01-old name.md", "new name")
+    assert result["status"] == "ok", result
+    assert ruim.read_bytes() == antes, "reescreveu (e corrompeu) a nota que nao decodifica"
+    assert result["skipped_unreadable"] == ["Reference/rascunho-cp1252.md"]
+    assert set(result["referrers"]) == {"Reference/plain.md", "Reference/fancy.md"}

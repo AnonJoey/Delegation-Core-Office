@@ -7,6 +7,8 @@ Called by the export_session MCP tool when the user signals end-of-session.
 import logging
 from datetime import datetime
 
+from .listas import separar
+
 logger = logging.getLogger("session")
 
 
@@ -31,7 +33,7 @@ def export(vault, title: str, summary: str, key_decisions: str = "") -> dict:
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest = unique_note_path(dest)
 
-    decisions_list = [d.strip() for d in key_decisions.split(",") if d.strip()] if key_decisions else []
+    decisions_list = separar(key_decisions)
 
     lines = [
         f"# {title}",
@@ -64,6 +66,8 @@ def export(vault, title: str, summary: str, key_decisions: str = "") -> dict:
     # `type: session` vai no bloco do chamador porque compose_note preserva o
     # que o autor fornece e so acrescenta o que falta.
     full = compose_note(title, "---\ntype: session\n---\n\n" + "\n".join(lines), date_str)
+    from .notewriter import _proteger
+    full, cobertos = _proteger(cfg, full)
     dest.write_text(full, encoding="utf-8")
     rel = dest.relative_to(cfg.vault).as_posix()
     # Carimba so em sucesso: ver a nota em notewriter.create_note. Sem isto, o
@@ -75,4 +79,7 @@ def export(vault, title: str, summary: str, key_decisions: str = "") -> dict:
     ):
         vault.stamp_indexed([rel])
     logger.info("Session exported: %s", dest.name)
-    return {"status": "ok", "path": str(dest.name), "folder": folder}
+    r = {"status": "ok", "path": str(dest.name), "folder": folder}
+    if cobertos:
+        r["secrets_redacted"] = cobertos
+    return r

@@ -334,3 +334,44 @@ def test_registro_de_ingestao_ilegivel_nao_derruba_a_checagem(tmp_path, monkeypa
     detail = VaultManager(cfg).health_detail()
     assert detail["broken_links"] == 1, "sem registro, volta ao comportamento antigo"
     assert detail["ingested_link_items"] == []
+
+
+def test_notas_dataless_sao_contadas_e_resolvem_alias_pelo_indice(tmp_path, monkeypatch):
+    """Notas despejadas pelo OneDrive/iCloud (SF_DATALESS) entram em `dataless`
+    e `dataless_items`, e seus titulos/aliases ja indexados continuam resolvendo
+    wikilinks sem inflar `broken_links`.
+    """
+    from delegation_core import extractor
+    from delegation_core.vault import VaultManager
+
+    cfg = _vault_with(tmp_path, "vdl")
+    evicted = cfg.vault / "Reference" / "2026-06-17-Cliente 2026 Tom.md"
+    evicted.write_text("", encoding="utf-8")
+    (cfg.vault / "Reference" / "indice.md").write_text(
+        "---\ntitle: indice\n---\n\nVer [[7. Tom de Voz]].\n", encoding="utf-8"
+    )
+
+    monkeypatch.setattr(extractor, "is_dataless", lambda p: p == evicted)
+    monkeypatch.setattr(extractor, "materialize_if_dataless", lambda p, timeout=10.0: p != evicted)
+
+    class _FakeCol:
+        def get(self, ids=None, include=None):
+            return {
+                "ids": ["Reference/2026-06-17-Cliente 2026 Tom.md::chunk_0"],
+                "metadatas": [{"title": "7. Tom de Voz"}],
+                "documents": ["---\naliases: [\"7. Tom de Voz\"]\n---\nConteudo"],
+            }
+
+    vm = VaultManager(cfg)
+    vm._initialized = True
+    vm.collection = _FakeCol()
+
+    detail = vm.health_detail()
+    assert detail["dataless"] == 1
+    assert detail["dataless_items"] == [{
+        "stem": "2026-06-17-Cliente 2026 Tom",
+        "folder": "Reference",
+        "rel": "Reference/2026-06-17-Cliente 2026 Tom.md",
+    }]
+    assert detail["broken_links"] == 0
+

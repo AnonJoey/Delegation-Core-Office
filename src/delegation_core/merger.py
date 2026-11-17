@@ -92,7 +92,9 @@ def try_merge(
         existing_text = existing_path.read_text(encoding="utf-8")
         merged = (
             existing_text
-            + f"\n\n---\n*Merged from `{filename}` — {today}*\n\n"
+            # Hifen: este marcador vai para o CORPO da nota no vault, e a
+            # regra de escrita desta casa proibe travessao la.
+            + f"\n\n---\n*Merged from `{filename}` - {today}*\n\n"
             + note_content
         )
         existing_path.write_text(merged, encoding="utf-8")

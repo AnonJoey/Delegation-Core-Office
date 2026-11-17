@@ -106,3 +106,10 @@ delegation-core-hook = "delegation_core.hooks.entrada:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+# Dados que nao sao .py e que o codigo le em tempo de execucao: os filtros TOML
+# do RTK, o registro anotado dos modulos Rust dele, e os hooks de agente que nao
+# sao Python (calcos TypeScript, manifesto do Hermes, instrucao em texto).
+"delegation_core.filtros_saida" = ["rtk/*.toml", "rtk_modulos.json"]
+"delegation_core.hooks_agentes" = ["scripts/*.ts", "scripts/*.md", "scripts/hermes/*.yaml"]

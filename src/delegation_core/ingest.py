@@ -18,6 +18,7 @@ from datetime import datetime
 from pathlib import Path
 
 from .config import CONFIG_DIR
+from .locking import arquivo_travado
 from .embeddings import chunk_text, effective_chunk_chars
 from .notes import client_from_path
 
@@ -92,19 +93,35 @@ def _save_registry(registry: dict):
 
 
 def _update_source_entry(source_key: str, entry: dict):
+    """Acrescenta uma entrada ao registro, sob trava.
+
+    A trava e o que separa este ciclo de um update perdido. `_load_registry`
+    seguido de `_atomic_write_registry` ja era atomico NA ESCRITA, e mesmo
+    assim duas ingestoes concorrentes em 31/08/2026 apagaram as entradas de
+    duas fontes: cada uma leu antes da outra gravar. Escrita atomica
+    garante arquivo inteiro, nao garante que quem leu antes ainda esteja nele.
+    """
     try:
-        fresh = _load_registry()
-        fresh[source_key] = entry
-        _atomic_write_registry(fresh)
+        with arquivo_travado(_REGISTRY_FILE):
+            fresh = _load_registry()
+            fresh[source_key] = entry
+            _atomic_write_registry(fresh)
     except Exception as e:
         logger.warning("Could not update registry entry for %s: %s", source_key, e)
 
 
 def _remove_source_entry(source_key: str) -> bool:
+    """Tira uma entrada do registro, sob a mesma trava do acrescimo.
+
+    Remover sem trava perde update do mesmo jeito que acrescentar: um
+    `ingest_forget` correndo junto de um `ingest_folder` pode ressuscitar o
+    que acabou de ser removido, ou levar junto o que acabou de ser gravado.
+    """
     try:
-        fresh = _load_registry()
-        had_entry = fresh.pop(source_key, None) is not None
-        _atomic_write_registry(fresh)
+        with arquivo_travado(_REGISTRY_FILE):
+            fresh = _load_registry()
+            had_entry = fresh.pop(source_key, None) is not None
+            _atomic_write_registry(fresh)
         return had_entry
     except Exception as e:
         logger.warning("Could not remove registry entry for %s: %s", source_key, e)

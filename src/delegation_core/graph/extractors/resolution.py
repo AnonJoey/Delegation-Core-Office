@@ -20,6 +20,7 @@ import sys
 
 
 _TSCONFIG_ALIAS_CACHE: dict[str, dict[str, list[str]]] = {}
+_TSCONFIG_LOCK = threading.Lock()
 
 _WORKSPACE_MANIFEST_NAMES = ("pnpm-workspace.yaml", "package.json")
 
@@ -333,9 +334,10 @@ def _load_tsconfig_aliases(start_dir: Path) -> dict[str, list[str]]:
         tsconfig = candidate / "tsconfig.json"
         if tsconfig.exists():
             key = str(tsconfig)
-            if key not in _TSCONFIG_ALIAS_CACHE:
-                _TSCONFIG_ALIAS_CACHE[key] = _read_tsconfig_aliases(tsconfig, candidate, seen=set())
-            return _TSCONFIG_ALIAS_CACHE[key]
+            with _TSCONFIG_LOCK:
+                if key not in _TSCONFIG_ALIAS_CACHE:
+                    _TSCONFIG_ALIAS_CACHE[key] = _read_tsconfig_aliases(tsconfig, candidate, seen=set())
+                return _TSCONFIG_ALIAS_CACHE[key]
     return {}
 
 def _match_tsconfig_alias(raw: str, pattern: str) -> "tuple[tuple[int, int], str, bool] | None":
@@ -544,10 +546,12 @@ _EXPORT_CONDITION_PRIORITY = (
     "source", "import", "module", "svelte", "types", "require", "default",
 )
 
-def _resolve_export_target(value: Any) -> str | None:
+def _resolve_export_target(value: Any, depth: int = 0) -> str | None:
     """Resolve an `exports` map value (string or condition object) to a
     relative target string, honouring _EXPORT_CONDITION_PRIORITY for objects
-    and recursing into nested condition objects."""
+    and recursing into nested condition objects with depth safeguard."""
+    if depth > 20:
+        return None
     if isinstance(value, str):
         return value
     if isinstance(value, dict):
@@ -556,7 +560,7 @@ def _resolve_export_target(value: Any) -> str | None:
             if isinstance(v, str):
                 return v
             if isinstance(v, dict):
-                nested = _resolve_export_target(v)
+                nested = _resolve_export_target(v, depth=depth + 1)
                 if nested:
                     return nested
     return None
@@ -1219,9 +1223,11 @@ def _apply_symbol_resolution_facts(
                     target_file=str(path_by_resolved.get(origin[0], origin[0])),
                 )
 
-    def resolve_exported_origin(target_path: Path, imported_name: str, seen: set[tuple[Path, str]] | None = None) -> tuple[Path, str]:
+    def resolve_exported_origin(target_path: Path, imported_name: str, seen: set[tuple[Path, str]] | None = None, depth: int = 0) -> tuple[Path, str]:
         target_path = target_path.resolve()
         key = (target_path, imported_name)
+        if depth > 50:
+            return key
         if seen is None:
             seen = set()
         if key in seen:
@@ -1229,12 +1235,12 @@ def _apply_symbol_resolution_facts(
         seen.add(key)
         origin = named_exports_by_file.get(target_path, {}).get(imported_name)
         if origin is not None:
-            return resolve_exported_origin(origin[0], origin[1], seen)
+            return resolve_exported_origin(origin[0], origin[1], seen, depth=depth + 1)
         for star_target in star_exports_by_file.get(target_path, []):
             star_key = (star_target, imported_name)
             if star_key in symbol_nodes:
                 return star_key
-            resolved = resolve_exported_origin(star_target, imported_name, seen)
+            resolved = resolve_exported_origin(star_target, imported_name, seen, depth=depth + 1)
             if resolved in symbol_nodes:
                 return resolved
         return key
@@ -1525,19 +1531,19 @@ def _ts_heritage_clause_entries(clause_node, source: bytes) -> list[str]:
                 out.append(text)
     return out
 
-def _ts_collect_type_refs(node, source: bytes, generic: bool, out: list[tuple[str, str]]) -> None:
+def _ts_collect_type_refs(node, source: bytes, generic: bool, out: list[tuple[str, str]], depth: int = 0) -> None:
     """Walk a TS type annotation tree; append (name, role) tuples.
 
     role is 'type' for the outermost type position and 'generic_arg' for entries
     that appear inside `type_arguments`.
     """
-    if node is None:
+    if node is None or depth > 60:
         return
     t = node.type
     if t == "type_annotation":
         for c in node.children:
             if c.is_named:
-                _ts_collect_type_refs(c, source, generic, out)
+                _ts_collect_type_refs(c, source, generic, out, depth=depth + 1)
         return
     if t in ("type_identifier", "identifier"):
         name = _read_text(node, source)
@@ -1566,12 +1572,12 @@ def _ts_collect_type_refs(node, source: bytes, generic: bool, out: list[tuple[st
             if c.type == "type_arguments":
                 for sub in c.children:
                     if sub.is_named:
-                        _ts_collect_type_refs(sub, source, True, out)
+                        _ts_collect_type_refs(sub, source, True, out, depth=depth + 1)
         return
     if node.is_named:
         for c in node.children:
             if c.is_named:
-                _ts_collect_type_refs(c, source, generic, out)
+                _ts_collect_type_refs(c, source, generic, out, depth=depth + 1)
 
 def _ts_walk_class_members(class_node, source: bytes, path: Path, class_nid: str,
                             facts: _SymbolResolutionFacts) -> None:
@@ -1859,9 +1865,11 @@ def _parse_python_tree(path: Path):
         return None
 
 def _walk_python_tree(node):
-    yield node
-    for child in node.children:
-        yield from _walk_python_tree(child)
+    stack = [node]
+    while stack:
+        n = stack.pop()
+        yield n
+        stack.extend(reversed(n.children))
 
 def _python_import_from_module(node, source: bytes) -> tuple[int, str] | None:
     level = 0
@@ -2152,15 +2160,11 @@ def _resolve_cross_file_imports(
         except Exception:
             continue
 
-        def walk_imports(node) -> None:
+        stack = [tree.root_node]
+        while stack:
+            node = stack.pop()
             if node.type == "import_from_statement":
                 # Find the module name - handles both absolute and relative imports.
-                # Relative: `from .models import X` → relative_import → dotted_name
-                # Absolute: `from models import X`  → module_name field
-                # target_fq is the directory-qualified stem used as the key in
-                # stem_to_entities. Relative imports are resolved exactly via the
-                # importing file's directory; absolute imports fall back to the
-                # bare-stem secondary index (first-writer-wins when names collide).
                 target_fq: str | None = None
                 for child in node.children:
                     if child.type == "relative_import":
@@ -2179,7 +2183,7 @@ def _resolve_cross_file_imports(
                         target_fq = bare_to_qualified.get(bare)
 
                 if not target_fq or target_fq not in stem_to_entities:
-                    return
+                    continue
 
                 # Collect imported names: dotted_name children of import_from_statement
                 # that come AFTER the 'import' keyword token.
@@ -2217,10 +2221,8 @@ def _resolve_cross_file_imports(
                                 "source_location": f"L{line}",
                                 "weight": 0.8,
                             })
-            for child in node.children:
-                walk_imports(child)
-
-        walk_imports(tree.root_node)
+            else:
+                stack.extend(reversed(node.children))
 
     return new_edges
 
@@ -2404,42 +2406,38 @@ def _resolve_cross_file_java_imports(
         except Exception:
             continue
 
-        def walk(n) -> None:
+        stack = [tree.root_node]
+        while stack:
+            n = stack.pop()
             if n.type == "import_declaration":
                 raw = _read_text(n, source).strip()
                 body = raw[len("import"):].strip().rstrip(";").strip()
                 if body.startswith("static "):
                     body = body[len("static "):].strip()
-                if body.endswith(".*"):
-                    return
-                parts = body.split(".")
-                if not parts:
-                    return
-                last = parts[-1]
-                if last and last[0].islower() and len(parts) >= 2:
-                    last = parts[-2]
-                at_line = n.start_point[0] + 1
-                for tgt_nid in name_to_ids.get(last, []):
-                    if tgt_nid == file_nid:
-                        continue
-                    key = (file_nid, tgt_nid)
-                    if key in seen_pairs:
-                        continue
-                    seen_pairs.add(key)
-                    new_edges.append({
-                        "source": file_nid,
-                        "target": tgt_nid,
-                        "relation": "imports",
-                        "confidence": "EXTRACTED",
-                        "confidence_score": 1.0,
-                        "source_file": str(path),
-                        "source_location": f"L{at_line}",
-                        "weight": 1.0,
-                    })
-            for child in n.children:
-                walk(child)
-
-        walk(tree.root_node)
+                if not body.endswith(".*"):
+                    parts = body.split(".")
+                    if parts:
+                        last = parts[-1]
+                        if last and last[0].islower() and len(parts) >= 2:
+                            last = parts[-2]
+                        at_line = n.start_point[0] + 1
+                        for tgt_nid in name_to_ids.get(last, []):
+                            if tgt_nid != file_nid:
+                                key = (file_nid, tgt_nid)
+                                if key not in seen_pairs:
+                                    seen_pairs.add(key)
+                                    new_edges.append({
+                                        "source": file_nid,
+                                        "target": tgt_nid,
+                                        "relation": "imports",
+                                        "confidence": "EXTRACTED",
+                                        "confidence_score": 1.0,
+                                        "source_file": str(path),
+                                        "source_location": f"L{at_line}",
+                                        "weight": 1.0,
+                                    })
+            else:
+                stack.extend(reversed(n.children))
 
     return new_edges
 
@@ -2489,23 +2487,21 @@ def _resolve_java_type_references(
         pkg = ""
         imps: dict[str, str] = {}
 
-        def walk(n) -> None:
-            nonlocal pkg
+        stack = [tree.root_node]
+        while stack:
+            n = stack.pop()
             if n.type == "package_declaration":
                 pkg = _read_text(n, source).strip()[len("package"):].strip().rstrip(";").strip()
             elif n.type == "import_declaration":
                 body = _read_text(n, source).strip()[len("import"):].strip().rstrip(";").strip()
                 if body.startswith("static "):
                     body = body[len("static "):].strip()
-                if body.endswith(".*") or "." not in body:
-                    return
-                simple = body.split(".")[-1]
-                if simple and simple[0].isupper():
-                    imps[simple] = body
-            for child in n.children:
-                walk(child)
-
-        walk(tree.root_node)
+                if not body.endswith(".*") and "." in body:
+                    simple = body.split(".")[-1]
+                    if simple and simple[0].isupper():
+                        imps[simple] = body
+            else:
+                stack.extend(reversed(n.children))
         for s in srcs:
             pkg_by_file[s] = pkg
             imports_by_file[s] = imps
@@ -2685,7 +2681,9 @@ def _resolve_php_type_references(
             if key:
                 uses.setdefault(key, fqn)
 
-        def walk(n) -> None:
+        stack = [tree.root_node]
+        while stack:
+            n = stack.pop()
             t = n.type
             if t == "namespace_definition":
                 for c in n.children:
@@ -2706,7 +2704,7 @@ def _resolve_php_type_references(
                     for c in group.children:
                         if c.type == "namespace_use_clause":
                             _record_use_clause(c, prefix)
-                return
+                continue
             elif t == "class_declaration":
                 for child in n.children:
                     if child.type == "base_clause":
@@ -2724,10 +2722,7 @@ def _resolve_php_type_references(
                             for sub in member.children:
                                 if sub.type in ("name", "qualified_name"):
                                     _record_raw("mixes_in", _read_text(sub, source))
-            for child in n.children:
-                walk(child)
-
-        walk(tree.root_node)
+            stack.extend(reversed(n.children))
         if len(set(namespaces)) > 1:
             continue  # multi-namespace file (PSR-1 violation): keep legacy behavior
         ns = namespaces[0] if namespaces else ""

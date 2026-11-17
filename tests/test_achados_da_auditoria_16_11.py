@@ -124,6 +124,21 @@ def test_token_nao_ascii_configurado_ainda_autentica():
     assert asyncio.run(LocalTokenAuth(token).verify_token(token)) is not None
 
 
+@pytest.mark.parametrize("apresentado", ["café", "日本", "token-do-cliente-é"])
+def test_token_nao_ascii_contra_tokens_por_cliente_e_recusado_sem_excecao(apresentado):
+    """O porte do TEST (17/11) trouxe tokens por cliente; a comparacao deles tambem e em bytes."""
+    nomeados = {"codex": {"token": "token-do-cliente", "scope": "read"}}
+    auth = LocalTokenAuth("M" * 30, tokens_nomeados=lambda: nomeados)
+    assert asyncio.run(auth.verify_token(apresentado)) is None
+
+
+def test_token_por_cliente_nao_ascii_configurado_ainda_autentica():
+    nomeados = {"codex": {"token": "cliente-com-ç", "scope": "read"}}
+    auth = LocalTokenAuth("M" * 30, tokens_nomeados=lambda: nomeados)
+    r = asyncio.run(auth.verify_token("cliente-com-ç"))
+    assert r is not None and r.client_id == "client:codex"
+
+
 # -- 3. (rota da nota no dashboard com NUL: em test_dashboard_api_vault_note.py)
 
 

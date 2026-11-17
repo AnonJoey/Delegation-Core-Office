@@ -132,7 +132,8 @@ def test_o_docstring_do_delegate_nao_lista_chamadores_a_mao():
     build. Uma lista escrita a mao dentro de um docstring e uma copia, e copia
     deriva. O docstring passa a apontar para este teste.
     """
-    fonte = CLI.read_text(encoding="utf-8")
+    # _delegate mora em delegacao.py desde 06/10/2026 (o cli o reexporta).
+    fonte = (CLI.parent / "delegacao.py").read_text(encoding="utf-8")
     inicio = fonte.index("def _delegate(")
     doc = fonte[inicio: fonte.index('"""', fonte.index('"""', inicio) + 3)]
     assert "test_cli_delega_escrita" in doc, (

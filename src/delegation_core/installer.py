@@ -107,15 +107,9 @@ def is_editable() -> bool:
 
 # ── git, when the source is a checkout ───────────────────────────────────────
 
-def _git(root: Path, *args: str, timeout: int = 60) -> tuple[int, str]:
-    try:
-        p = subprocess.run(["git", "-C", str(root), *args],
-                           capture_output=True, text=True, timeout=timeout, **sem_janela())
-        return p.returncode, (p.stdout + p.stderr).strip()
-    except FileNotFoundError:
-        return 127, "git not found"
-    except subprocess.TimeoutExpired:
-        return 124, f"git timed out after {timeout}s"
+# Mora em git_local.py: canais.py precisa dele, e importar o installer por isso
+# fechava o ciclo installer -> canais -> installer.
+from .git_local import _git  # noqa: E402,F401
 
 
 def is_git_checkout(root: Path) -> bool:
@@ -344,7 +338,7 @@ def _pip_install(root: Path) -> tuple[bool, str]:
 
 
 def update(check_only: bool = False, restart: bool = True,
-           root: Path | None = None) -> dict:
+           root: Path | None = None, ref: str = "") -> dict:
     """Bring the installed package up to date with its source, safely.
 
     The order is the point:
@@ -423,6 +417,17 @@ def update(check_only: bool = False, restart: bool = True,
     resultado = {"status": "ok", "version_before": versao_antes, "root": str(raiz)}
     try:
         if estado.get("git"):
+            # canais.py: o commit de agora fica registrado para `--rollback`.
+            from . import canais
+            canais.registrar_antes(raiz, ref or "pull")
+        if estado.get("git") and ref:
+            codigo, saida = _git(raiz, "checkout", "--quiet", ref)
+            _passo("git_checkout", codigo == 0, ref=ref, detail=saida)
+            if codigo != 0:
+                resultado["status"] = "failed"
+                resultado["detail"] = f"git checkout {ref} failed:\n{saida}"
+                return resultado
+        elif estado.get("git"):
             codigo, saida = _git(raiz, "pull", "--ff-only")
             _passo("git_pull", codigo == 0, detail=saida)
             if codigo != 0:
