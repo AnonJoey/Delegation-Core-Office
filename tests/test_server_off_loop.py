@@ -37,12 +37,19 @@ def test_the_tools_are_still_registered_with_their_parameters():
     for name in SYNC_TOOLS:
         assert name in tools, f"{name} is no longer registered"
     assert set(tools["write_note"].parameters["properties"]) >= {"folder", "title", "content"}
+    # expected_hash: concorrencia otimista do fork (vault_note_hash).
     assert set(tools["vault_update_note"].parameters["properties"]) == {
-        "note_name", "append_content"}
+        "note_name", "append_content", "expected_hash"}
 
 
 def test_a_slow_search_leaves_the_loop_free(monkeypatch):
+    from delegation_core.config import Config
+
     class SlowVault:
+        # A busca do fork le o cfg (facetas, busca hibrida); hibrida desligada
+        # deixa so o caminho denso, que e o que este teste mede.
+        cfg = Config(busca_hibrida=False)
+
         def search(self, *a, **k):
             time.sleep(0.6)
             return []
@@ -80,7 +87,7 @@ def test_writing_tools_stay_serialised_among_themselves(monkeypatch):
     overlap = []
 
     class Tracker:
-        def create(self, name, description="", steps=""):
+        def create(self, name, description="", steps="", **_kw):
             active.append(1)
             if len(active) > 1:
                 overlap.append(True)

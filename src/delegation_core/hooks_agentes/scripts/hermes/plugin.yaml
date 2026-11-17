@@ -1,0 +1,8 @@
+name: delegation-core-rewrite
+version: "0.1.0"
+description: Rewrite Hermes terminal commands through delegation-core's output filters before execution.
+author: delegation-core (ported from the RTK Hermes plugin, Apache 2.0)
+hooks:
+  - pre_tool_call
+provides_hooks:
+  - pre_tool_call

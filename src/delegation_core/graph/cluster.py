@@ -35,16 +35,30 @@ def _partition(G: nx.Graph, resolution: float = 1.0) -> dict[str, int]:
     """
     stable = nx.Graph()
     stable.add_nodes_from(sorted(G.nodes(), key=str))
-    edge_rows = sorted(
-        G.edges(data=True),
-        key=lambda row: (
-            str(row[0]),
-            str(row[1]),
-            json.dumps(row[2], sort_keys=True, ensure_ascii=False, default=str),
-        ),
-    )
-    for src, tgt, attrs in edge_rows:
-        stable.add_edge(src, tgt, **attrs)
+
+    # A ORIENTACAO tem que ser normalizada antes de ordenar, e este era o
+    # defeito. Num grafo nao dirigido, `G.edges()` devolve cada aresta numa
+    # orientacao que depende da iteracao interna de adjacencia, e ela varia
+    # entre PROCESSOS: medido no subgrafo da maior comunidade deste repo, das
+    # 1675 arestas vinham invertidas 938, 793 e 987 em tres execucoes da mesma
+    # fonte. Ordenar por `(str(row[0]), str(row[1]))` ordena pela orientacao
+    # RECEBIDA, entao a sequencia de insercao em `stable` mudava a cada
+    # processo e o Louvain, que e sensivel a ordem no desempate, devolvia
+    # particoes diferentes: 299 a 301 grupos para o mesmo grafo.
+    #
+    # `(a, b)` e `(b, a)` sao a mesma aresta aqui, entao normalizar e de graca.
+    # Medido: com a normalizacao a sequencia de insercao passa a ter o mesmo
+    # hash em toda execucao.
+    def _canonica(row):
+        a, b = str(row[0]), str(row[1])
+        if a > b:
+            a, b = b, a
+        return (a, b, json.dumps(row[2], sort_keys=True, ensure_ascii=False,
+                                 default=str))
+
+    for src, tgt, attrs in sorted(G.edges(data=True), key=_canonica):
+        a, b = (src, tgt) if str(src) <= str(tgt) else (tgt, src)
+        stable.add_edge(a, b, **attrs)
 
     try:
         from graspologic.partition import leiden
@@ -181,7 +195,9 @@ def label_communities_by_hub(
             stem = _dominant_source_stem(G, present)
             if stem:
                 discriminator = _short_discriminator(G, present)
-                labels[cid] = f"{stem} — {discriminator}" if discriminator else stem
+                # Hifen e nao travessao: este label vira NOME DE ARQUIVO de artigo
+                # no vault, e a regra de escrita desta casa proibe travessao la.
+                labels[cid] = f"{stem} - {discriminator}" if discriminator else stem
                 continue
         # highest degree wins; ties broken by node id (ascending) for determinism
         hub = min(nameable or defined or present, key=lambda n: (-G.degree(n), str(n)))

@@ -1,8 +1,9 @@
 """`delegation-core-hook`: um processo por evento de sessao do Claude Code.
 
-    delegation-core-hook session-start   resumo do que mudou no vault
-    delegation-core-hook session-end     exporta a transcricao e para o
-                                         modelo local ocioso
+    delegation-core-hook session-start   resumo do que mudou no vault e, com
+                                         passagem_enabled, a passagem de bastao
+    delegation-core-hook session-end     exporta a transcricao, deixa a passagem
+                                         automatica e para o modelo local ocioso
 
 O fim de sessao le a entrada do hook uma vez e entrega aos dois passos, em
 sequencia, no mesmo processo. Antes eram dois hooks registrados e dois
@@ -23,6 +24,8 @@ import time
 from pathlib import Path
 from typing import Callable
 
+from . import passagem_hooks
+
 USO = "uso: delegation-core-hook {session-start|session-end|codex-session-start|codex-session-end}"
 
 # The constants are only exposed by subprocess on Windows. Keep their documented
@@ -40,9 +43,10 @@ def _passo(nome: str, fazer: Callable[[], object]) -> None:
         sys.stderr.write(f"delegation-core-hook: {nome} falhou: {type(e).__name__}: {e}\n")
 
 
-def session_start() -> None:
+def session_start(raw: str = "") -> None:
     from . import session_start_brief
     _passo("session_start_brief", session_start_brief.main)
+    _passo("passagem", lambda: passagem_hooks.ao_comecar(raw))
 
 
 def codex_session_start() -> None:
@@ -63,6 +67,7 @@ def session_end(raw: str, client: str = "claude") -> None:
         _passo("session_export", lambda: session_export.main(raw))
     else:
         _passo("session_export", lambda: session_export.main(raw, client=client))
+    _passo("passagem", lambda: passagem_hooks.ao_terminar(raw))
     _passo("llama_session_stop", lambda: llama_session_stop.main(raw))
 
 
@@ -207,7 +212,11 @@ def main(argv: list[str] | None = None) -> int:
     args = sys.argv[1:] if argv is None else argv
     evento = args[0] if args else ""
     if evento == "session-start":
-        session_start()
+        try:
+            raw = "" if sys.stdin is None or sys.stdin.isatty() else sys.stdin.read()
+        except Exception:
+            raw = ""
+        session_start(raw)
         return 0
     if evento == "session-end":
         try:

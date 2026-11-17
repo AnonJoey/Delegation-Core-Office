@@ -145,7 +145,12 @@ def test_source_file_fallback_picks_the_dominant_file():
                   "b": {"label": "another sentence", "source_file": "pkg/core.py"},
                   "c": {"label": "third sentence too", "source_file": "pkg/other.py"}})
     # "core" (2 nodes) beats "other" (1); the discriminator follows the stem.
-    assert label_communities_by_hub(G, {0: ["a", "b", "c"]})[0].startswith("core — ")
+    #
+    # O separador virou HIFEN em 26/09/2026: este rotulo vira nome de arquivo
+    # de artigo no vault, e a regra de escrita desta casa proibe travessao la.
+    # O valor esperado foi atualizado, e nao afrouxado: ele continua fixando o
+    # formato exato, so que o novo.
+    assert label_communities_by_hub(G, {0: ["a", "b", "c"]})[0].startswith("core - ")
 
 
 def test_falls_back_to_prose_when_no_identifier_and_no_source_file():

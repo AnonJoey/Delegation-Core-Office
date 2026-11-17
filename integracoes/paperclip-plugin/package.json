@@ -1,0 +1,22 @@
+{
+  "name": "@delegation-core/paperclip-plugin-memory",
+  "version": "0.1.0",
+  "description": "Paperclip plugin: delegation-core as the memory of a Paperclip company (memory_* MCP tools)",
+  "type": "module",
+  "private": true,
+  "paperclipPlugin": {
+    "manifest": "./dist/manifest.js",
+    "worker": "./dist/worker.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@paperclipai/plugin-sdk": "*"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "@types/node": "^24.0.0"
+  }
+}

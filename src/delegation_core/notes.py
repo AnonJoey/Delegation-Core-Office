@@ -44,6 +44,8 @@ _CHUNK_SUFFIX_RE = re.compile(r"::chunk_\d+$")
 # The same shape, but only for a *non-zero* chunk: every indexed document has
 # exactly one row that this does NOT match (::chunk_0, or a legacy bare path),
 # which is what makes counting distinct documents an id-only scan in get_stats().
+logger = logging.getLogger("notes")
+
 _EXTRA_CHUNK_SUFFIX_RE = re.compile(r"::chunk_(?!0$)\d+$")
 
 # v6 health de-pollution: `[[...]]` occurs in ingested content that is NOT a
@@ -456,7 +458,7 @@ def _frontmatter_parses(content: str) -> bool:
 
 
 def compose_note(title: str, content: str, date_str: str,
-                 ai_generated: bool = True) -> str:
+                 ai_generated: bool = True, extras: tuple = ()) -> str:
     """Build note text carrying exactly one YAML frontmatter block.
 
     Callers routinely include a full frontmatter block at the top of `content` —
@@ -488,6 +490,8 @@ def compose_note(title: str, content: str, date_str: str,
         ("date", date_str),
         ("ai_generated", "true" if ai_generated else "false"),
     ]
+    # Proveniencia (memoria.py): quem escreveu, como pares ja serializados.
+    generated.extend(extras)
 
     # An alias carrying the untruncated title, when the filename could not.
     # safe_filename cuts the stem at 50 characters, so a note titled "Palworld —
@@ -640,33 +644,126 @@ def ingested_link_stems(registro: dict) -> set[str]:
     return nomes
 
 
-# ── estado do indice (.chroma_index.json) ────────────────────────────────────
-#
-# Este arquivo diz quais notas ja estao embutidas e com que mtime, e e o que o
-# reindex incremental consulta para pular o que nao mudou. Ele morava inteiro
-# no `vault.py` com escrita atomica e SEM trava, e as duas coisas tem nomes
-# parecidos e resolvem problemas diferentes: atomica garante que ninguem le
-# pela metade, trava garante que quem leu antes de voce ainda esteja no que
-# voce grava.
-#
-# O defeito medido em 26/09/2026: os tres escritores (`stamp_indexed`,
-# `delete_notes` e o fim do `reindex_vault`) fazem ler-modificar-escrever, e os
-# hooks de sessao criam concorrencia de verdade entre eles. O de fim de sessao
-# dispara `delegation-core reindex`, o de inicio dispara `delegation-core
-# maintain`, e `jobs.submit` abre uma thread nova sem checar se ja existe um
-# job igual rodando. Duas sessoes fechando juntas, ou uma fechando enquanto
-# outra abre, colocam dois escritores no mesmo arquivo.
-#
-# Consequencia, na propria letra do docstring que ja estava la: o ultimo a
-# gravar escreve por cima e os carimbos do outro somem, e o proximo reindex
-# reembute nota intocada. E o nome do temporario era fixo, entao dois
-# escritores abriam o MESMO `.json.tmp`: um truncava o do outro no meio do
-# dump e o `os.replace` instalava o resultado, que `carregar` le como "nada
-# esta carimbado", ou seja um reembute do vault inteiro.
-#
-# E a mesma forma de defeito que o `locking.py` existe para conter, e que ja
-# tinha sido corrigida no `jobs.py` em 03/09 e no registro de ingestao em
-# 31/08. Aqui era o terceiro sitio.
+def contar_notas_markdown(vault: Path, excluir: Path | None = None) -> int:
+    """Quantos `.md` existem sob `vault`, ignorando a arvore de `excluir`.
+
+    Mora aqui e nao no `VaultManager` por duas razoes. Contar arquivo de nota e
+    assunto de identidade de nota, que e o que este modulo ja faz; e o
+    `VaultManager` estava em exatamente 1800 linhas, o teto que
+    `test_o_modulo_de_indice_encolheu_de_verdade` guarda, entao qualquer coisa
+    que nao precise estar la nao deve estar.
+
+    `excluir` existe para o indice ChromaDB, que vive dentro do vault e guarda
+    `.md` proprios. Contar os dele infla a contagem com arquivo que nunca foi
+    nota de ninguem.
+
+    Custo medido em 25/09/2026 sobre o vault real, 8.967 arquivos: 0,164s a
+    frio e 0,106s a quente. Quem chamar isto a cada `get_stats()` esta pagando
+    esse preco por chamada, e `get_stats()` e chamado pelo `heartbeat`.
+    """
+    return sum(1 for caminho in vault.rglob("*.md")
+               if excluir is None or excluir not in caminho.parents)
+
+
+def external_link_targets(dirs) -> dict[str, "Path"]:
+    """Nomes linkaveis de documentos que vivem FORA do vault.
+
+    As memorias do Claude Code ficam em `~/.claude/projects/<projeto>/memory/`
+    e sao linkadas das notas do vault. Sem isto elas contam como link quebrado
+    para sempre: medido em 26/09/2026, eram **9 dos 9** links quebrados deste
+    vault, todos apontando para quatro arquivos de memoria que existem e estao
+    corretos.
+
+    Mora aqui, e nao no `vault.py`, porque este modulo ja e o dono das regras de
+    wikilink: `link_names_for_stem` e `_countable_wikilinks` estao nele. E
+    porque o `vault.py` tem guarda de tamanho em 1800 linhas, que existe para
+    impedir que ele volte a crescer, e essa guarda ja pegou esta mudanca.
+
+    Diretorio inexistente e pulado sem levantar: um caminho velho no config nao
+    pode derrubar a saude do vault.
+    """
+    from pathlib import Path
+
+    alvos: dict[str, Path] = {}
+    for bruto in (dirs or []):
+        try:
+            raiz = Path(bruto).expanduser()
+            if not raiz.is_dir():
+                continue
+            for f in raiz.rglob("*.md"):
+                for nome in link_names_for_stem(f.name[:-3]):
+                    alvos.setdefault(nome, f)
+        except OSError as e:
+            logger.warning("external_link_dirs: %s ignorado (%s)", bruto, e)
+    return alvos
+
+
+def alias_link_targets(vault_root, folders) -> dict[str, "Path"]:
+    """Nomes declarados em `aliases:` no frontmatter das notas gerenciadas.
+
+    Uma nota que declara `aliases: [Command Center]` e alcancavel por esse
+    nome, e ignorar isso produz link quebrado falso. Mora aqui pelo mesmo
+    motivo de `external_link_targets`: resolucao de wikilink e assunto deste
+    modulo, e o `vault.py` tem guarda de tamanho que existe para nao deixa-lo
+    voltar a crescer.
+
+    Arquivo ilegivel e pulado: um `.md` com byte invalido nao pode derrubar a
+    contagem de saude do vault inteiro.
+    """
+    from pathlib import Path
+
+    alvos: dict[str, Path] = {}
+    for pasta in folders:
+        raiz = Path(vault_root) / pasta
+        if not raiz.exists():
+            continue
+        for f in raiz.rglob("*.md"):
+            try:
+                conteudo = f.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            for alias in frontmatter_aliases(conteudo):
+                alvos.setdefault(alias.lower(), f)
+    return alvos
+
+
+def problemas_declarados(fm: dict) -> list[str]:
+    """Os `quality_issues` que o proprio organizer gravou no frontmatter.
+
+    O `organizer` ja marca defeito de conteudo ali desde sempre, e nada lia.
+    Medido no vault em 26/09/2026: duas notas com `quality_issues:
+    ["prompt_leak"]` cujo corpo E o template de prompt, sob titulos que
+    prometem conteudo ("Relatorio do job noturno", "Validacao tecnica dos
+    Agentes PMO"). As duas passavam por **saudaveis** no passe de saude, porque
+    declaram `quality_score: 0.7`, acima do corte de 0,5, e `needs_review:
+    false`.
+
+    O detector marcava e ninguem lia. Esta funcao e a leitura.
+
+    O valor no frontmatter e uma lista em JSON dentro de uma string, porque o
+    `_parse_frontmatter` deste projeto divide a linha no primeiro dois-pontos e
+    nao interpreta tipo. Formato que nao abre vira lista vazia: um frontmatter
+    torto nao pode derrubar o passe de saude do vault inteiro, que e a mesma
+    regra que o resto deste modulo segue.
+    """
+    import json as _json
+
+    bruto = (fm or {}).get("quality_issues")
+    if not bruto:
+        return []
+    if isinstance(bruto, list):
+        return [str(x).strip() for x in bruto if str(x).strip()]
+    texto = str(bruto).strip()
+    try:
+        carga = _json.loads(texto)
+        if isinstance(carga, list):
+            return [str(x).strip() for x in carga if str(x).strip()]
+        return [str(carga).strip()] if str(carga).strip() else []
+    except Exception:
+        # `[a, b]` sem aspas, ou texto solto: ainda da para nomear o problema.
+        limpo = texto.strip("[]").replace('"', "").replace("'", "")
+        return [p.strip() for p in limpo.split(",") if p.strip()]
+
 
 ESTADO_DO_INDICE = ".chroma_index.json"
 
@@ -739,3 +836,57 @@ def atualizar_estado(caminho: Path, modificar) -> dict:
         novo = modificar(carregar_estado(caminho))
         gravar_estado(caminho, novo)
         return novo
+
+
+# ── classificacao por caminho (antes em VaultManager) ────────────────────────
+
+#: Segmento do caminho sob o qual o graph_build arquiva os artigos gerados.
+GENERATED_SEGMENT = "graphs"
+
+#: "<data>-Code Graph Report - <grafo>.md", escrito pelo graphbridge. Aceita
+#: hifen e travessao, nessa ordem: o produtor passou a escrever hifen em
+#: 26/09/2026 (a regra da casa proibe travessao em nota), e as 13 notas ja
+#: gravadas tem travessao no nome. Aceitar so a forma nova faria essas 13
+#: cairem no `scope='notes'` e poluirem a busca padrao com relatorio de grafo.
+#: O travessao sai daqui quando nao houver mais nota antiga: e um contrato com
+#: dado ja gravado, nao preferencia de estilo.
+REPORT_STEM_RE = re.compile(r"^\d{4}-\d{2}-\d{2}-Code Graph Report [-\u2014] (?P<graph>.+)\.md$")
+
+#: Transcricao de reuniao em portugues: `...-transcricao.md` e `... (transcricao).md`.
+#: Medido em 27/09 sobre o indice real: 56 notas, 684 linhas, estavam como
+#: "curated" e escapavam do peso de transcricao. Ancorado no FIM do nome, para
+#: uma nota curada que so fala de uma transcricao continuar curada.
+TRANSCRICAO_NO_NOME = re.compile(r"(^|[-_ (])transcri[cç][aã]o\)?$", re.IGNORECASE)
+
+
+def classificar_caminho(rel_path: str) -> tuple[str, str]:
+    """(kind, nome do grafo) de uma nota pelo caminho relativo ao vault.
+
+    Artigo gerado mora em ``<pasta>/graphs/<grafo>/<stem>.md``. O relatorio do
+    graph_build fica no topo da pasta de proposito (e a porta de entrada que o
+    graphbridge cria), entao e reconhecido pelo nome: antes dava 5 relatorios
+    como notas escritas a mao no grafo de conhecimento do painel.
+    """
+    parts = [p for p in str(rel_path).replace("\\", "/").split("/") if p]
+    if len(parts) >= 3 and parts[1] == GENERATED_SEGMENT:
+        return "generated", parts[2]
+    if len(parts) == 2:
+        m = REPORT_STEM_RE.match(parts[1])
+        if m:
+            return "generated", m.group("graph")
+    return "note", ""
+
+
+def classificar_subtipo(rel_path: str, content: str = "") -> str:
+    """'transcript', 'chat', 'generated' ou 'curated'."""
+    kind, _ = classificar_caminho(rel_path)
+    if kind == "generated":
+        return "generated"
+    p_lower = str(rel_path).lower()
+    if "transcript-" in p_lower or "session-transcript" in content[:600]:
+        return "transcript"
+    if TRANSCRICAO_NO_NOME.search(Path(str(rel_path)).stem):
+        return "transcript"
+    if "chat-" in p_lower or "claude-ai-export" in content[:600]:
+        return "chat"
+    return "curated"

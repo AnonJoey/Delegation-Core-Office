@@ -303,6 +303,63 @@ def entry_summary(cfg: Config) -> dict:
     }
 
 
+def chrome_mcp_entry() -> dict:
+    """The stdio entry for the open-source MCP Chrome server."""
+    executable = shutil.which("mcp-chrome-server") or "npx"
+    args = [] if executable != "npx" else ["-y", "@frankorozcogt/mcp-chrome-server"]
+    return {
+        "command": executable,
+        "args": args,
+    }
+
+
+def install_chrome_antigravity(target_path: Path | None = None) -> dict:
+    """Register the chrome MCP server into Antigravity / Gemini config."""
+    config_file = target_path or ANTIGRAVITY_CONFIG
+    config_file.parent.mkdir(parents=True, exist_ok=True)
+    data: dict = {}
+    if config_file.exists():
+        raw = config_file.read_text(encoding="utf-8").strip()
+        if raw:
+            try:
+                data = json.loads(raw)
+            except json.JSONDecodeError:
+                return {
+                    "client": "antigravity",
+                    "path": str(config_file),
+                    "status": "error",
+                    "detail": "mcp_config.json is not valid JSON, not touching it",
+                }
+
+    servers = data.setdefault("mcpServers", {})
+    before = servers.get("chrome")
+    servers["chrome"] = chrome_mcp_entry()
+    if before == servers["chrome"]:
+        return {"client": "antigravity", "path": str(config_file), "status": "already-configured"}
+
+    tmp = config_file.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    tmp.replace(config_file)
+    return {"client": "antigravity", "path": str(config_file), "status": "updated" if before else "installed"}
+
+
+def install_chrome_claude_code() -> dict:
+    """Register the chrome MCP server into Claude Code (~/.claude.json)."""
+    client_cfg = read_client_config()
+    servers = dict(client_cfg.get("mcpServers") or {})
+    previous = servers.get("chrome")
+    servers["chrome"] = chrome_mcp_entry()
+    client_cfg["mcpServers"] = servers
+    write_client_config(client_cfg)
+    return {
+        "client": "claude-code",
+        "path": str(Path.home() / ".claude.json"),
+        "replaced": previous,
+        "status": "updated" if previous else "installed",
+    }
+
+
+
 # ── Claude Code session hooks ────────────────────────────────────────────────
 #
 # Ate a v0.14.0 os hooks eram scripts copiados para ~/.delegation_core/hooks/ e

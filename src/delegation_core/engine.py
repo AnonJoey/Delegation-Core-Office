@@ -30,6 +30,7 @@ import httpx
 import requests
 
 from . import gpu
+from . import calibracao
 from .config import Config
 
 logger = logging.getLogger("engine")
@@ -52,6 +53,12 @@ _TASK_BUDGETS: dict[str, int] = {
     "synthesize":     2500,
     "summary":        200,
     "section_title":  20,
+    # Tarefas de fundo (agenda noturna): pediam mais que o "default" e levavam
+    # 512 calados. Medido em 27/09: o reduce da digestao pedia 1200.
+    "digestao":       1200,
+    "sonho":          400,
+    "fatos":          1800,
+    "resposta":       900,
     "default":        512,
 }
 
@@ -63,6 +70,12 @@ _CPU_TASK_BUDGETS: dict[str, int] = {
     "synthesize":     2500,
     "summary":        200,
     "section_title":  20,
+    # Tarefas de fundo (agenda noturna): pediam mais que o "default" e levavam
+    # 512 calados. Medido em 27/09: o reduce da digestao pedia 1200.
+    "digestao":       1200,
+    "sonho":          400,
+    "fatos":          1800,
+    "resposta":       900,
     "default":        256,
 }
 
@@ -89,6 +102,10 @@ def _compute_budgets(tok_sec: float, timeout_sec: int) -> dict[str, int]:
         "synthesize":     min(2500, floor(ceiling * 1.5)),
         "summary":        min(200,  ceiling),
         "section_title":  min(20,   ceiling),
+        "digestao":       min(1200, floor(ceiling * 1.5)),
+        "sonho":          min(400,  ceiling),
+        "fatos":          min(1800, floor(ceiling * 1.5)),
+        "resposta":       min(900,  ceiling),
         "default":        min(512,  ceiling),
     }
 
@@ -259,8 +276,9 @@ class DelegationEngine:
         normal mode: per-task defaults from _TASK_BUDGETS.
         If requested > 0: min(requested, effective cap).
         """
-        if self.cfg.budget_mode == "auto" and self.cfg.tok_sec > 0:
-            budgets = _compute_budgets(self.cfg.tok_sec, self.cfg.mcp_timeout_sec)
+        medido = calibracao.ler(self.cfg.tok_sec)
+        if self.cfg.budget_mode == "auto" and medido > 0:
+            budgets = _compute_budgets(medido, self.cfg.mcp_timeout_sec)
         elif self.cfg.is_cpu_budget:
             budgets = _CPU_TASK_BUDGETS
         else:
@@ -303,8 +321,11 @@ class DelegationEngine:
             content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
             actual_tokens = max(len(content) // 4, 5)
         tok_sec = round(actual_tokens / elapsed, 2)
-        self.cfg.tok_sec = tok_sec
-        self.cfg.save()
+        # A medicao vai para o arquivo dela e NAO para o config. `Config.save()`
+        # grava o arquivo inteiro a partir do objeto em memoria deste processo,
+        # entao calibrar aqui revertia qualquer ajuste feito no dashboard depois
+        # que este engine carregou o config. Ver calibracao.py.
+        calibracao.gravar(tok_sec)
         logger.info("Calibrated: %.2f tok/sec (%.1fs for %d actual tokens)", tok_sec, elapsed, actual_tokens)
         return tok_sec
 
@@ -729,3 +750,111 @@ class DelegationEngine:
         if self._log_fh:
             self._log_fh.close()
             self._log_fh = None
+
+
+# Usado por sonho, fatos, digestao e resposta. Morava em sonho_vault, e fatos_vault
+# importava sonho_vault so por ela, fechando o ciclo notewriter -> fatos -> sonho
+# -> notewriter que tests/test_sem_ciclos_de_import.py proibe.
+class ModeloLocalDesligado(RuntimeError):
+    """O modelo local esta desligado de proposito (modo agent) e ninguem o autorizou."""
+
+
+def modelo_local_liberado(cfg) -> bool:
+    """Se um job de fundo pode falar com o modelo local, subindo-o se preciso.
+
+    Em local e hybrid o modelo e do delegation-core e sempre pode. Em agent ele
+    fica desligado: so sobe com `local_em_modo_agent`, a autorizacao explicita.
+    """
+    return (not cfg.is_agent_mode) or bool(getattr(cfg, "local_em_modo_agent", False))
+
+
+def oferta_modelo_local(pendentes: int | None = None, segundos_por_item: float | None = None) -> str:
+    """A frase que o job devolve quando adia: quanto falta e como autorizar."""
+    if pendentes is None:
+        quanto = "Este job precisa do modelo local, desligado em modo agent."
+    else:
+        quanto = f"{pendentes} item(ns) aguardam o modelo local, desligado em modo agent."
+    custo = (f" levaria cerca de {max(1, round(pendentes * segundos_por_item / 60))} min e"
+             if pendentes and segundos_por_item else "")
+    return (f"{quanto} Processar{custo} carregaria cerca de 10 GB de VRAM. Para autorizar, defina "
+            "local_em_modo_agent=true em config.json (o modelo sai sozinho apos a ociosidade) ou "
+            "mude engine_mode para hybrid.")
+
+
+def resultado_adiado(pendentes: int | None = None, segundos_por_item: float | None = None) -> dict:
+    return {"skipped": "agent_mode", "pending": pendentes,
+            "offer": oferta_modelo_local(pendentes, segundos_por_item)}
+
+
+# O motor que sobe o llama-server e o dono do processo: e ele que sabe para-lo. Um
+# motor novo por pergunta (como era) deixava o processo orfao, fora do alcance de
+# qualquer descarga por ociosidade. Um por porta, e o cliente HTTP renasce a cada
+# asyncio.run porque `aclose` o fecha.
+_motores: dict[int, "DelegationEngine"] = {}
+_motores_lock = threading.Lock()
+_liberacoes: dict[int, threading.Timer] = {}
+
+
+def _motor_compartilhado(cfg) -> "DelegationEngine":
+    with _motores_lock:
+        eng = _motores.get(cfg.llama_port)
+        if eng is None:
+            eng = _motores[cfg.llama_port] = DelegationEngine(cfg)
+        return eng
+
+
+def _liberar_se_ocioso(eng: "DelegationEngine") -> None:
+    """Desliga o modelo que este motor subiu, se nada o usa e o modo e agent.
+
+    Em local/hybrid o modelo e o motor de todas as chamadas: soltar custa um
+    reload na proxima. `_shutdown` so para o processo que este motor iniciou,
+    entao um llama-server subido a mao nunca e tocado.
+    """
+    if not eng.cfg.is_agent_mode:
+        return
+    stats = queue_stats()
+    if stats["running"] or stats["waiting"]:
+        return
+    logger.info("local model idle for %ds in agent mode: unloading it",
+                getattr(eng.cfg, "local_idle_shutdown_sec", 0))
+    eng._shutdown()
+
+
+def _agendar_liberacao(eng: "DelegationEngine") -> None:
+    espera = getattr(eng.cfg, "local_idle_shutdown_sec", 0)
+    if not espera or not eng.cfg.is_agent_mode:
+        return
+    with _motores_lock:
+        antigo = _liberacoes.pop(eng.cfg.llama_port, None)
+        if antigo is not None:
+            antigo.cancel()
+        t = threading.Timer(espera, _liberar_se_ocioso, args=(eng,))
+        t.daemon = True
+        _liberacoes[eng.cfg.llama_port] = t
+        t.start()
+
+
+def perguntar_local(cfg, max_tokens: int = 400, tarefa: str = "sonho"):
+    """O modelo local como funcao sincrona, num laco proprio (o da thread e outro).
+
+    Em modo agent recusa, a menos que `local_em_modo_agent` autorize. Quem chama
+    deve consultar `modelo_local_liberado` ANTES de montar uma fila, para adiar o
+    job inteiro em vez de falhar item a item; esta recusa e a rede de seguranca.
+    """
+    def perguntar(system: str, prompt: str) -> str:
+        if not modelo_local_liberado(cfg):
+            raise ModeloLocalDesligado(
+                "the local model is off in agent mode; set local_em_modo_agent=true to allow it")
+        eng = _motor_compartilhado(cfg)
+
+        async def _uma():
+            try:
+                return await eng.invoke(prompt, system=system, max_tokens=max_tokens, temperature=0.1,
+                                        task=tarefa, force_local=True)
+            finally:
+                await eng.aclose()
+        try:
+            return asyncio.run(_uma())
+        finally:
+            _agendar_liberacao(eng)
+    return perguntar

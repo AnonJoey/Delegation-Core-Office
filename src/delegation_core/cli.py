@@ -39,6 +39,8 @@ import json
 import logging
 import sys
 from logging.handlers import RotatingFileHandler
+
+from .listas import separar
 from pathlib import Path
 
 
@@ -81,6 +83,7 @@ def cmd_setup(_args):
 def cmd_run(args):
     import asyncio
     import os
+    from . import calibracao
     from .config import Config, CONFIG_DIR
 
     cfg = Config.load()
@@ -89,8 +92,7 @@ def cmd_run(args):
         sys.exit(1)
 
     if getattr(args, "recalibrate", False):
-        cfg.tok_sec = 0.0
-        cfg.save()
+        calibracao.limpar()
         sys.stderr.write("Calibration reset: will recalibrate on startup.\n")
 
     # Prefer cached model weights, but only when they exist: see prefer_offline().
@@ -127,7 +129,7 @@ def cmd_run(args):
     from . import filtro_de_log
     filtro_de_log.instalar()
 
-    if cfg.budget_mode == "auto" and cfg.tok_sec == 0.0:
+    if cfg.budget_mode == "auto" and calibracao.ler(cfg.tok_sec) == 0.0:
         from .engine import DelegationEngine
 
         async def _calibrate():
@@ -159,7 +161,25 @@ def cmd_update(args):
     from . import installer
 
     console = Console()
-    resultado = installer.update(check_only=args.check, restart=not args.no_restart)
+    ref = ""
+    canal = getattr(args, "channel", "") or ""
+    reverter = getattr(args, "rollback", False)
+    if not canal:
+        from .config import Config
+        canal = getattr(Config.load(), "update_channel", "branch") or "branch"
+    if (canal != "branch" or reverter) and not args.check:
+        from . import canais
+        raiz = installer.source_root()
+        if raiz is None:
+            console.print("[red]Cannot update:[/red] no source directory recorded")
+            return 1
+        ref, erro = canais.ref_para(raiz, canal, reverter=reverter)
+        if erro:
+            console.print(f"[red]{erro}[/red]")
+            return 1
+        if ref:
+            console.print(f"[bold]target[/bold]: {ref} ({'rollback' if reverter else canal})")
+    resultado = installer.update(check_only=args.check, restart=not args.no_restart, ref=ref)
     estado = resultado.get("status")
 
     if estado == "cannot_locate_source":
@@ -214,39 +234,6 @@ def cmd_update(args):
             f"Safe to delete.[/dim]")
 
     return 0 if estado == "ok" else 1
-
-
-def cmd_eval_search(args):
-    """Mede a busca com perguntas de resposta conhecida, por escopo.
-
-    Pergunta pelo daemon em execucao; nunca abre o indice num segundo processo.
-    O arquivo de perguntas fica fora do repositorio: ver delegation_core.avaliacao.
-    """
-    from . import avaliacao
-    from .config import Config
-    from .daemon import DaemonUnavailable
-
-    cfg = Config.load()
-    try:
-        consultas = avaliacao.carregar(args.arquivo)
-    except (OSError, ValueError) as e:
-        print(f"Nao li as perguntas: {e}", file=sys.stderr)
-        return 1
-    escopos = [e.strip() for e in args.scope.split(",") if e.strip()]
-    try:
-        resultados = avaliacao.avaliar(consultas, avaliacao.buscador_do_daemon(cfg),
-                                       escopos, k=args.k)
-    except DaemonUnavailable as e:
-        print(f"Daemon fora do ar: {e}", file=sys.stderr)
-        return 1
-    if args.json:
-        print(json.dumps([r.resumo() for r in resultados], ensure_ascii=False, indent=2))
-        return 0
-    for r in resultados:
-        print(f"{r.escopo:16s} acertos@{r.k} {r.acertos}/{r.total}  mrr {r.mrr}")
-        for erro in r.erros:
-            print(f"    x {erro['pergunta']}")
-    return 0
 
 
 def cmd_update_finish(args):
@@ -480,7 +467,8 @@ def cmd_clients(args):
     cfg = Config.load()
     token = cfg.ensure_server_token()
 
-    if args.show or not (args.claude_code or args.claude_desktop or args.codex or args.antigravity):
+    extras = getattr(args, "cursor", False) or getattr(args, "opencode", False)
+    if args.show or not (args.claude_code or args.claude_desktop or args.codex or args.antigravity or extras):
         console.print(f"[bold]URL[/bold]    {cfg.server_url}")
         console.print(f"[bold]Header[/bold] Authorization: Bearer {token}")
         console.print(f"[bold]Env[/bold]    {_clients.CODEX_TOKEN_ENV_VAR}={token}")
@@ -522,7 +510,84 @@ def cmd_clients(args):
             console.print(f"  [yellow]{result['detail']}[/yellow]")
         else:
             console.print("  [yellow]Restart agy for this to take effect.[/yellow]")
+
+    from . import clientes_extra
+    for marcado, instalar in ((getattr(args, "cursor", False), clientes_extra.install_cursor),
+                              (getattr(args, "opencode", False), clientes_extra.install_opencode)):
+        if not marcado:
+            continue
+        result = instalar(cfg)
+        colour = "red" if result["status"] == "error" else "green"
+        console.print(f"[{colour}]{result['client']}[/{colour}] {result['status']}: {result['path']}")
+        if result.get("detail"):
+            console.print(f"  [yellow]{result['detail']}[/yellow]")
     return 0
+
+
+def _registradores_extras():
+    from .governanca.cli import registrar as governanca
+    from .portabilidade import registrar as portabilidade
+    from .avaliacao import registrar as avaliacao
+    from .feedback_busca import registrar as feedback
+    from .memoria import registrar as memoria
+    from .revisoes_config import registrar as revisoes
+    from .catalogo_erros import registrar as catalogo_erros
+    from .filtros_saida.cli import registrar as filtros
+    from .compressao.kompress_cli import registrar as kompress
+    from .hooks_agentes.cli import registrar as hooks_agentes
+    from .proxy.cli import registrar as proxy
+    from .test_drive import registrar as test_drive
+    return [governanca, revisoes, portabilidade, memoria, avaliacao, feedback, test_drive, catalogo_erros, filtros,
+            hooks_agentes, kompress, proxy]
+
+
+def cmd_token(args):
+    """Tokens por cliente com escopo (escopos.py): create, list, revoke.
+
+    O token so aparece uma vez, no create; list mostra nome, escopo e o fim.
+    Ficam em config.json, que o Config.save grava com permissao 0600.
+    """
+    import secrets as _secrets
+    from .config import Config
+    from rich.console import Console
+    console = Console()
+
+    cfg = Config.load()
+    tokens = dict(getattr(cfg, "client_tokens", {}) or {})
+    if args.acao == "create":
+        nome = (args.name or "").strip()
+        if not nome:
+            console.print("[red]name is required[/red]")
+            return 1
+        if nome in tokens and not args.force:
+            console.print(f"[red]{nome} already exists[/red] (use --force to replace it)")
+            return 1
+        tok = _secrets.token_urlsafe(32)
+        tokens[nome] = {"token": tok, "scope": "write" if args.write else "read"}
+        cfg.client_tokens = tokens
+        cfg.save()
+        console.print(f"{nome} ({tokens[nome]['scope']}): {tok}")
+        console.print("Shown once. The daemon picks it up without a restart.")
+        return 0
+    if args.acao == "list":
+        if not tokens:
+            console.print("no client tokens (the master server_token still works)")
+        for nome, d in sorted(tokens.items()):
+            console.print(f"{nome:20} {d.get('scope', 'read'):6} ...{str(d.get('token', ''))[-4:]}")
+        return 0
+    if args.acao == "revoke":
+        if args.name not in tokens:
+            console.print(f"[red]{args.name} not found[/red]")
+            return 1
+        del tokens[args.name]
+        cfg.client_tokens = tokens
+        cfg.save()
+        console.print(f"{args.name} revoked")
+        return 0
+    return 1
+
+
+OCR_IDIOMAS_BASE = "https://github.com/tesseract-ocr/tessdata_fast/raw/main/{}.traineddata"
 
 
 def _index_row_counts(cfg, timeout: float = 10.0) -> tuple[dict[str, int], str]:
@@ -677,10 +742,24 @@ def cmd_status(_args):
     # the path does not prevent that, but it stops it being invisible.
     try:
         import delegation_core as _pkg
+        from . import installer
         origin = Path(_pkg.__file__).resolve().parent
         editable = not any(part == "site-packages" for part in origin.parts)
+        raiz = installer.source_root() or (origin.parents[1] if editable and len(origin.parts) > 2 else None)
         table.add_row("code", f"{origin}" + ("  [yellow](editable: live working tree)[/yellow]"
                                              if editable else ""))
+        if raiz is not None and installer.is_git_checkout(raiz):
+            _, commit = installer._git(raiz, "rev-parse", "--short", "HEAD")
+            _, branch = installer._git(raiz, "rev-parse", "--abbrev-ref", "HEAD")
+            if commit:
+                ref_str = f"{commit} ({branch})" if branch else commit
+                if not editable:
+                    dif = installer.instalado_difere_da_fonte(raiz, origin)
+                    if dif:
+                        ref_str += f"  [yellow](installed differs in {len(dif)} file(s) from {raiz})[/yellow]"
+                    else:
+                        ref_str += f"  [dim](from {raiz})[/dim]"
+                table.add_row("commit", ref_str)
     except Exception:
         pass
 
@@ -718,66 +797,9 @@ def cmd_status(_args):
     console.print()
 
 
-def _delegate(cfg, args, tool: str, arguments: dict, say) -> dict | None:
-    """Hand index work to the running daemon; None means "do it yourself".
-
-    Every command that touches the index goes through here. That is a claim
-    about eleven functions, and listing them HERE is what made this line wrong
-    twice: first for `note write`/`note update`, then — in the correction that
-    named those two — for `relink` and `graph build`, which write just as much
-    and were not counted. A hand-written list inside a docstring is a copy, and
-    copies drift.
-
-    `tests/test_cli_delega_escrita.py` enforces the property instead: it walks
-    every `cmd_*` in this file, finds the ones that construct a VaultManager,
-    and fails on any that neither delegates nor carries a written, measured
-    exemption. Read that file for who is exempt and why.
-
-    When the daemon is
-    up it owns the index and the resident BGE model, so a second process opening
-    the same directory is both a concurrent writer and a second ~2.4 GiB copy of
-    the model on the GPU: see daemon.py for what that cost in practice, and for
-    why a *failed* daemon call is not allowed to fall back to local work.
-
-    `say` reports routing on the command's own output channel, since `maintain`
-    speaks JSON on stdout and must keep it parseable.
-    """
-    if getattr(args, "local", False):
-        return None
-
-    from . import daemon
-    from .config import CONFIG_DIR
-
-    def _fall_back(reason: str):
-        """Take the local path, or refuse it when this machine has opted out.
-
-        Refusing exits 0, not 1: a hook that skipped a reindex on purpose has
-        not failed, and a non-zero exit here would surface as an error on every
-        session start. The message names the switch so the skip is legible in
-        the log rather than looking like nothing happened.
-        """
-        if cfg.local_index_fallback_allowed():
-            say(f"{reason}. Running in this process.")
-            return None
-        say(f"{reason}. Refusing to write the index from this process.")
-        say("Local index fallback is off (config allow_local_index_fallback, or "
-            f"{CONFIG_DIR / 'no_auto_reindex'}). Start the daemon, or pass --local.")
-        sys.exit(0)
-
-    if not daemon.is_listening(cfg):
-        return _fall_back(f"No daemon on {cfg.server_host}:{cfg.server_port}")
-    try:
-        say(f"Delegating to the daemon at {cfg.server_url} ...")
-        timeout = getattr(args, "timeout", None)
-        return daemon.submit_and_wait(cfg, tool, arguments, timeout=timeout)
-    except daemon.DaemonUnavailable as exc:
-        return _fall_back(f"Daemon went away ({exc})")
-    except daemon.DaemonCallFailed as exc:
-        # Deliberately fatal. Retrying locally would start the second writer the
-        # daemon exists to prevent, on top of a daemon that is already unwell.
-        say(f"Error: {exc}")
-        say("Re-run with --local to do this work in this process anyway.")
-        sys.exit(1)
+# Mora em delegacao.py: memoria.py (proposals apply) tambem delega, e importar
+# o cli por isso fechava o ciclo cli -> memoria -> cli.
+from .delegacao import _delegate  # noqa: E402,F401
 
 
 def cmd_reindex(args):
@@ -1668,6 +1690,67 @@ def _reindex_everything(console, cfg):
                       f"de {len(registry)} fonte(s){note}")
 
 
+def cmd_aferir_busca(args):
+    """Mede a qualidade da busca e compara com a ultima medicao gravada.
+
+    Existe porque a calibracao de 31/07/2026 envelheceu em silencio: ela
+    dependia de cinco perguntas escritas a mao, e ninguem reescreve cinco
+    perguntas toda vez que o vault cresce. Entre julho e setembro o vault foi
+    de 1.159 para 10.234 notas e a banda de par irrelevante subiu de p95 0,480
+    para 0,540, sem ninguem perceber.
+    """
+    from rich.console import Console
+    from . import afericao
+    from .vault import VaultManager
+
+    console = Console()
+    cfg = _graph_config()
+    if cfg is None:
+        console.print("[yellow]Not configured.[/yellow] Run: delegation-core setup")
+        sys.exit(1)
+
+    # Delega SEMPRE que o daemon estiver no ar. Medido em 04/09/2026: abrir o
+    # indice num segundo processo poe uma segunda copia de 2314 MiB do BGE na
+    # placa, ao lado dos 2314 MiB que o daemon ja segura, e o arbitro de gpu.py
+    # nao enxerga outro processo. `tests/test_cli_delega_escrita.py` guarda isto
+    # para todo comando, e pegou este aqui.
+    remoto = _delegate(cfg, args, "aferir_busca",
+                       {"amostras": getattr(args, "amostras", 50),
+                        "semente": getattr(args, "semente", 0),
+                        "gravar": bool(getattr(args, "gravar", False))},
+                       lambda msg: console.print(f"[dim]{msg}[/dim]"))
+    if remoto is not None:
+        medida = remoto.get("result") if isinstance(remoto.get("result"), dict) else remoto
+        if isinstance(medida, str):
+            import json as _json
+            medida = _json.loads(medida)
+    else:
+        vault = VaultManager(cfg)
+        vault._ensure_ready()
+        medida = afericao.aferir(vault.collection,
+                                 amostras=getattr(args, "amostras", 50),
+                                 semente=getattr(args, "semente", 0))
+
+    if medida.get("recall") is None:
+        console.print(f"[yellow]{medida.get('motivo', 'sem dados')}[/yellow]")
+        return
+
+    console.print(f"recall {medida['recuperadas']}/{medida['amostras']} "
+                  f"= [bold]{medida['recall']}[/bold]   "
+                  f"posicao mediana {medida['posicao_mediana']}")
+    console.print(f"acerto: mediana {medida['acerto_mediana']}  "
+                  f"p05 {medida['acerto_p05']}  minimo {medida['acerto_minimo']}")
+
+    deriva = afericao.comparar_com_referencia(medida, afericao.ler_referencia())
+    cor = "red" if deriva.get("piorou") else "green"
+    console.print(f"[{cor}]{deriva['veredito']}[/{cor}]")
+    console.print(f"[dim]{medida['ressalva']}[/dim]")
+
+    if getattr(args, "gravar", False):
+        afericao.gravar_referencia(medida)
+        console.print(f"[dim]gravado como nova referencia em {afericao.ARQUIVO}[/dim]")
+
+
 def cmd_doctor(args):
     from rich.console import Console
     from rich.table import Table
@@ -1942,7 +2025,7 @@ def cmd_process_create(args):
     if tracker is None:
         console.print("[yellow]Not configured.[/yellow] Run: delegation-core setup")
         sys.exit(1)
-    steps = [s.strip() for s in args.steps.split(",") if s.strip()] if args.steps else []
+    steps = separar(args.steps)
     proc = tracker.create(name=args.name, description=args.description or "", steps=steps)
     console.print(f"[green]✓[/green]  {proc['id']}  {proc['name']}")
 
@@ -2008,6 +2091,11 @@ def main():
     sub = parser.add_subparsers(dest="command", metavar="command")
 
     sub.add_parser("setup",    help="Interactive setup wizard (run once per machine)")
+    p_tok = sub.add_parser("token", help="Per-client tokens: read-only or read-write")
+    p_tok.add_argument("acao", choices=["create", "list", "revoke"])
+    p_tok.add_argument("name", nargs="?", default="")
+    p_tok.add_argument("--write", action="store_true", help="allow tools that write (default: read-only)")
+    p_tok.add_argument("--force", action="store_true", help="replace an existing token with the same name")
     p_ocr = sub.add_parser("ocr-setup", help="Download OCR language data so images become searchable")
     p_ocr.add_argument("--langs", default="por,eng", help="comma list of tesseract languages")
     p_ocr.add_argument("--force", action="store_true", help="download again even if present")
@@ -2022,21 +2110,16 @@ def main():
 
     p_update = sub.add_parser(
         "update", help="Update the installed package from its source, stopping the daemon first")
+    p_update.add_argument("--channel", choices=["branch", "stable"], default="",
+                          help="branch: pull the current branch (default); stable: newest v* tag")
+    p_update.add_argument("--rollback", action="store_true",
+                          help="go back to the commit recorded before the last update")
     p_update.add_argument("--check", action="store_true",
                           help="Report what would change; touch nothing")
     p_update.add_argument("--no-restart", action="store_true",
                           help="Leave the daemon stopped after updating")
     # Internal: `update` runs this in a fresh interpreter after pip, so the
     # steps that follow come from the version just installed. No help text.
-    p_eval = sub.add_parser(
-        "eval-search",
-        help="Measure search against questions with known answers, per scope")
-    p_eval.add_argument("arquivo", help="JSON list of {pergunta, esperado}")
-    p_eval.add_argument("--k", type=int, default=5, help="Results checked per question")
-    p_eval.add_argument("--scope", default="notes,notes+external,all",
-                        help="Comma-separated scopes to compare")
-    p_eval.add_argument("--json", action="store_true", help="Print the full result as JSON")
-
     p_update_finish = sub.add_parser("update-finish")
     p_update_finish.add_argument("--root", required=True)
 
@@ -2081,9 +2164,19 @@ def main():
                            help="Point Antigravity / the Gemini CLI (agy) at the daemon")
     p_clients.add_argument("--codex", action="store_true",
                            help="Append delegation-core's table to ~/.codex/config.toml")
+    p_clients.add_argument("--cursor", action="store_true", help="Write ~/.cursor/mcp.json")
+    p_clients.add_argument("--opencode", action="store_true", help="Write ~/.config/opencode/opencode.json")
     p_clients.add_argument("--show", action="store_true",
                            help="Print URL and token without writing anything")
     sub.add_parser("status",   help="Check vault, model, binary, llama.cpp, and feature config")
+    p_aferir = sub.add_parser("aferir-busca",
+                              help="Mede a qualidade da busca e compara com a ultima medicao")
+    p_aferir.add_argument("--amostras", type=int, default=50,
+                          help="Quantas consultas (mais amostras, margem menor)")
+    p_aferir.add_argument("--semente", type=int, default=0,
+                          help="Fixa o sorteio para duas corridas serem comparaveis")
+    p_aferir.add_argument("--gravar", action="store_true",
+                          help="Grava esta medicao como a nova referencia")
     p_doctor = sub.add_parser("doctor",   help="Diagnose installation drift and vault hygiene problems")
     p_doctor.add_argument("--clean-orphans", action="store_true",
                           help="Remove orphan ChromaDB segment directories on disk "
@@ -2282,22 +2375,29 @@ def main():
     p_proc_get = process_sub.add_parser("get", help="Full detail view of a tracked process")
     p_proc_get.add_argument("process_id")
 
+    # Comandos dos pacotes que trazem o proprio argparse. Cada `registrar(sub)`
+    # acrescenta os subcomandos e devolve {nome: funcao}.
+    extras = {}
+    for _registrar in _registradores_extras():
+        extras.update(_registrar(sub))
+
     args = parser.parse_args()
 
     dispatch = {
         "setup":    cmd_setup,
         "ocr-setup": cmd_ocr_setup,
+        "token":    cmd_token,
         "run":      cmd_run,
         "service":  cmd_service,
         "update":   cmd_update,
         "update-finish": cmd_update_finish,
-        "eval-search": cmd_eval_search,
         "repair-empty-source": cmd_repair_empty_source,
         "post-install": cmd_post_install,
         "uninstall": cmd_uninstall,
         "mcp-stdio": cmd_mcp_stdio,
         "clients":  cmd_clients,
         "status":   cmd_status,
+        "aferir-busca": cmd_aferir_busca,
         "doctor":   cmd_doctor,
         "recover-index": cmd_recover_index,
         "ingest-registry": cmd_ingest_registry,
@@ -2369,6 +2469,8 @@ def main():
             cmd_session(args)
         else:
             p_session.print_help()
+    elif args.command in extras:
+        return extras[args.command](args) or 0
     elif args.command in dispatch:
         dispatch[args.command](args)
     else:

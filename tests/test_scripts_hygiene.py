@@ -69,19 +69,18 @@ def test_sem_travessao(nome):
 
 @pytest.mark.parametrize("nome,teto", [
     ("uninstall.sh", 100), ("uninstall.bat", 110),
-    ("install.sh", 170), ("install.bat", 165),
+    ("install.sh", 40), ("install.bat", 60),
 ])
 def test_o_stub_nao_voltou_a_crescer(nome, teto):
     """Medido: uninstall.sh 193 -> 79, uninstall.bat 158 -> 88, install.sh
-    373 -> 150, install.bat 269 -> 142, com a logica agora em installer.py.
+    373 -> 150 -> 25, install.bat 269 -> 142 -> 47, com a logica agora em
+    installer.py e, desde 06/10/2026, o bootstrap em install.py.
     Se um deles passar destes tetos, alguem reescreveu em shell algo que ja
     existe em Python.
 
-    Os instaladores tem teto mais alto que os desinstaladores por um motivo
-    real e nao por folga: o bootstrap deles roda ANTES do venv existir, entao
-    achar um Python 3.11+, instalar pacotes de sistema com sudo e criar o venv
-    nao tem como ser Python. E so a partir do `pip install` que ha um
-    interpretador para chamar."""
+    Dos instaladores sobrou so achar um Python 3.11+: o resto (pacotes de
+    sistema, venv, backup, pip) roda em install.py com o Python do sistema,
+    antes do venv existir."""
     linhas = len(_ler(nome).splitlines())
     assert linhas <= teto, (
         f"{nome} tem {linhas} linhas (teto {teto}). Logica de uninstall pertence "

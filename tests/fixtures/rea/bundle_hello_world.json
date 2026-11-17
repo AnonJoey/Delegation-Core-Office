@@ -1,0 +1,1324 @@
+{
+ "artifacts": [
+  {
+   "architecture": null,
+   "digest": {
+    "sha256": "46cc2ab8ba6675af52df3def52dcea714e444b9383cc62841344ef7e0cc4586b"
+   },
+   "format": "directory"
+  }
+ ],
+ "captures": [],
+ "environments": [],
+ "providers": [
+  {
+   "id": "rea-javascript-application",
+   "name": "REA JavaScript application analyzer",
+   "version": "1"
+  },
+  {
+   "id": "rea-unknown-registry",
+   "name": "REA residual unknown registry",
+   "version": "1"
+  }
+ ],
+ "records": [
+  {
+   "authority": "shipped-artifact",
+   "confidence": "derived",
+   "environment": null,
+   "evidence_id": "ev_90be2c97d2bab9ce16f5f94891fb3a6b3acd94a17a8a29720ea3dba84309fa76",
+   "evidence_links": [],
+   "limitations": [
+    "CommonJS and ESM binding relationships were recovered from inert syntax and resolved only within the inventoried artifact container.",
+    "JavaScript and HTML were parsed as inert text; bundle bootstrap code was never executed.",
+    "Static imports, entrypoints, workers, endpoints, and storage relationships do not prove runtime execution.",
+    "Static paths and relationships may remain unresolved when expressions are dynamic or obfuscated.",
+    "Webpack/Rspack factories were recovered from AST literals; REA did not invoke push handlers or bundle bootstrap code."
+   ],
+   "locations": [
+    {
+     "kind": "artifact-path",
+     "path": "artifact-root"
+    }
+   ],
+   "normalized_result": {
+    "format": "directory",
+    "graph": {
+     "coverage": {
+      "limits": [],
+      "omitted_count": 0,
+      "status": "complete",
+      "truncated": false
+     },
+     "edges": [
+      {
+       "edge_id": "jag_edge_09d4a982e1536c27f7bba97ae6eb877ed4a4e45579eeff94a9815dbc255ceaf6",
+       "evidence": {
+        "artifact": {
+         "artifact_id": "art_12236473a5b00e7f8aa99321221ffb4316bbbbd8dda56b99a312d7bd014e597c",
+         "available": true,
+         "sha256": "12236473a5b00e7f8aa99321221ffb4316bbbbd8dda56b99a312d7bd014e597c"
+        },
+        "authority": "static-relationship-inference",
+        "confidence": "high",
+        "coverage": {
+         "limits": [],
+         "omitted_count": 0,
+         "status": "complete",
+         "truncated": false
+        },
+        "evidence_ids": [],
+        "extractor": {
+         "executable_sha256": null,
+         "name": "rea-javascript-artifact-reconstruction",
+         "operation": "map-static-relationship",
+         "version": "1"
+        },
+        "limitations": [
+         "Static syntax does not prove that this relationship executes at runtime."
+        ],
+        "location": {
+         "available": true,
+         "value": {
+          "end": {
+           "column": 52,
+           "line": 1
+          },
+          "kind": "source-range",
+          "source": "src/index.ts",
+          "start": {
+           "column": 0,
+           "line": 1
+          }
+         }
+        },
+        "state": "inferred"
+       },
+       "identifier_strategy": {
+        "stability": "relationship-exact",
+        "strategy": "semantic-content-sha256"
+       },
+       "properties": {
+        "expression": null,
+        "kind": "static-import",
+        "resolved_path": null,
+        "specifier": "./manifest.js"
+       },
+       "relation": "imports",
+       "source_node_id": "jag_node_192b47232f47bc9074e1666bfff0a09bf813a849dabfb5e65550f3a8ef98e38e",
+       "target_node_id": "jag_node_117e652381c6cce8d56726dbbee765ab7fb588ae59567d5f3ef76d27a6e00196"
+      },
+      {
+       "edge_id": "jag_edge_15332f1accc86879b0768771a001ad34ec338517049f732c53359d60fac77a0d",
+       "evidence": {
+        "artifact": {
+         "artifact_id": "art_a454c2c6a54cd15b8ea661baa7b016502427b95f054409044d4d75ff28a2f034",
+         "available": true,
+         "sha256": "a454c2c6a54cd15b8ea661baa7b016502427b95f054409044d4d75ff28a2f034"
+        },
+        "authority": "static-relationship-inference",
+        "confidence": "high",
+        "coverage": {
+         "limits": [],
+         "omitted_count": 0,
+         "status": "complete",
+         "truncated": false
+        },
+        "evidence_ids": [],
+        "extractor": {
+         "executable_sha256": null,
+         "name": "rea-javascript-artifact-reconstruction",
+         "operation": "map-static-relationship",
+         "version": "1"
+        },
+        "limitations": [
+         "Static syntax does not prove that this relationship executes at runtime."
+        ],
+        "location": {
+         "available": true,
+         "value": {
+          "end": {
+           "column": 66,
+           "line": 1
+          },
+          "kind": "source-range",
+          "source": "src/worker.ts",
+          "start": {
+           "column": 0,
+           "line": 1
+          }
+         }
+        },
+        "state": "inferred"
+       },
+       "identifier_strategy": {
+        "stability": "relationship-exact",
+        "strategy": "semantic-content-sha256"
+       },
+       "properties": {
+        "expression": null,
+        "kind": "static-import",
+        "resolved_path": null,
+        "specifier": "@paperclipai/plugin-sdk"
+       },
+       "relation": "imports",
+       "source_node_id": "jag_node_c63fa23583f8d3fe6f78d563b3fb849fd6ede7a265d71407a8106f66412ef654",
+       "target_node_id": "jag_node_66b5251b973d16decc264860394679ca0b0dc8db84c6edcfa277eff7728064be"
+      },
+      {
+       "edge_id": "jag_edge_1a638b46b0d41889ff18393d70f433bfc0dc827e9e10d9a4a81b8153fcbf3ba1",
+       "evidence": {
+        "artifact": {
+         "artifact_id": "art_a454c2c6a54cd15b8ea661baa7b016502427b95f054409044d4d75ff28a2f034",
+         "available": true,
+         "sha256": "a454c2c6a54cd15b8ea661baa7b016502427b95f054409044d4d75ff28a2f034"
+        },
+        "authority": "artifact-bytes",
+        "confidence": "exact",
+        "coverage": {
+         "limits": [],
+         "omitted_count": 0,
+         "status": "complete",
+         "truncated": false
+        },
+        "evidence_ids": [],
+        "extractor": {
+         "executable_sha256": null,
+         "name": "rea-javascript-artifact-reconstruction",
+         "operation": "inventory-file",
+         "version": "1"
+        },
+        "limitations": [],
+        "location": {
+         "available": true,
+         "value": {
+          "kind": "artifact-path",
+          "path": "src/worker.ts"
+         }
+        },
+        "state": "observed"
+       },
+       "identifier_strategy": {
+        "stability": "relationship-exact",
+        "strategy": "semantic-content-sha256"
+       },
+       "properties": {
+        "path": "src/worker.ts"
+       },
+       "relation": "contains",
+       "source_node_id": "jag_node_7f2abadbf2daa7ed6c9c7d38dd97c4e69d537d313594d89adc8335721776e1fe",
+       "target_node_id": "jag_node_696962446ff18467f184538a38c70dd9037b2f9891c409e4baa7df0d350d2866"
+      }
+     ],
+     "graph_id": "jag_29b2a4185a04babc64365e29804af687560fe1cbcf9ed9257530e4f43fe0eb3d",
+     "limitations": [
+      "CommonJS and ESM binding relationships were recovered from inert syntax and resolved only within the inventoried artifact container.",
+      "JavaScript and HTML were parsed as inert text; bundle bootstrap code was never executed.",
+      "Static imports, entrypoints, workers, endpoints, and storage relationships do not prove runtime execution."
+     ],
+     "nodes": [
+      {
+       "identity": {
+        "artifact_sha256": "a454c2c6a54cd15b8ea661baa7b016502427b95f054409044d4d75ff28a2f034",
+        "key": "46cc2ab8ba6675af52df3def52dcea714e444b9383cc62841344ef7e0cc4586b:src/worker.ts:default",
+        "namespace": "module-export",
+        "stability": "artifact-version",
+        "strategy": "artifact-local-key"
+       },
+       "kind": "javascript-module",
+       "node_id": "jag_node_0f43009a1e2ed5b531b870f1c5690192533a2a36a80699613816b2189aa8aca3",
+       "observations": [
+        {
+         "evidence": {
+          "artifact": {
+           "artifact_id": "art_a454c2c6a54cd15b8ea661baa7b016502427b95f054409044d4d75ff28a2f034",
+           "available": true,
+           "sha256": "a454c2c6a54cd15b8ea661baa7b016502427b95f054409044d4d75ff28a2f034"
+          },
+          "authority": "ast-static-analysis",
+          "confidence": "exact",
+          "coverage": {
+           "limits": [],
+           "omitted_count": 0,
+           "status": "complete",
+           "truncated": false
+          },
+          "evidence_ids": [],
+          "extractor": {
+           "executable_sha256": null,
+           "name": "rea-javascript-artifact-reconstruction",
+           "operation": "recover-module-export",
+           "version": "1"
+          },
+          "limitations": [
+           "Cross-function mutation and dynamic property resolution remain unknown.",
+           "Local call, argument, return, and closure relations are static candidates and do not prove runtime invocation.",
+           "Promise ownership covers explicit unshadowed Promise construction, static factories, aggregation, chaining, and await syntax only."
+          ],
+          "location": {
+           "available": true,
+           "value": {
+            "end": {
+             "column": 22,
+             "line": 26
+            },
+            "kind": "source-range",
+            "source": "src/worker.ts",
+            "start": {
+             "column": 0,
+             "line": 26
+            }
+           }
+          },
+          "state": "observed"
+         },
+         "identifier_strategy": {
+          "stability": "observation-exact",
+          "strategy": "semantic-content-sha256"
+         },
+         "label": "src/worker.ts:default",
+         "observation_id": "jag_observation_61b3d22933bda2e2c1259474b19a565930de6edb7e2960dd54ecb4017341ed33",
+         "properties": {
+          "declared_specifier": null,
+          "exported_name": "default",
+          "imported_name": null,
+          "local_name": null,
+          "module_path": "src/worker.ts",
+          "relationship_kind": "export",
+          "semantic_role": "export-binding"
+         }
+        }
+       ]
+      },
+      {
+       "identity": {
+        "artifact_sha256": "12236473a5b00e7f8aa99321221ffb4316bbbbd8dda56b99a312d7bd014e597c",
+        "key": "static-import:./manifest.js",
+        "namespace": "unresolved-reference",
+        "stability": "artifact-version",
+        "strategy": "artifact-local-key"
+       },
+       "kind": "javascript-module",
+       "node_id": "jag_node_117e652381c6cce8d56726dbbee765ab7fb588ae59567d5f3ef76d27a6e00196",
+       "observations": [
+        {
+         "evidence": {
+          "artifact": {
+           "artifact_id": "art_12236473a5b00e7f8aa99321221ffb4316bbbbd8dda56b99a312d7bd014e597c",
+           "available": true,
+           "sha256": "12236473a5b00e7f8aa99321221ffb4316bbbbd8dda56b99a312d7bd014e597c"
+          },
+          "authority": "static-relationship-inference",
+          "confidence": "low",
+          "coverage": {
+           "limits": [],
+           "omitted_count": 0,
+           "status": "complete",
+           "truncated": false
+          },
+          "evidence_ids": [],
+          "extractor": {
+           "executable_sha256": null,
+           "name": "rea-javascript-artifact-reconstruction",
+           "operation": "resolve-static-reference",
+           "version": "1"
+          },
+          "limitations": [
+           "Static syntax does not prove that this relationship executes at runtime.",
+           "The static reference could not be resolved within the inventoried artifact."
+          ],
+          "location": {
+           "available": true,
+           "value": {
+            "end": {
+             "column": 52,
+             "line": 1
+            },
+            "kind": "source-range",
+            "source": "src/index.ts",
+            "start": {
+             "column": 0,
+             "line": 1
+            }
+           }
+          },
+          "state": "inferred"
+         },
+         "identifier_strategy": {
+          "stability": "observation-exact",
+          "strategy": "semantic-content-sha256"
+         },
+         "label": "./manifest.js",
+         "observation_id": "jag_observation_ed8dba816a28ee0d86fd044a0fa705e2b5519039d38ef11f4b1d45e5e8b9f370",
+         "properties": {
+          "expression": null,
+          "reference_kind": "static-import",
+          "resolution": "unresolved",
+          "specifier": "./manifest.js"
+         }
+        }
+       ]
+      },
+      {
+       "identity": {
+        "artifact_sha256": "25cc966cd8adb7315a29bc4eb6d77a873acf88c606bef3068e135c476e37929d",
+        "key": "46cc2ab8ba6675af52df3def52dcea714e444b9383cc62841344ef7e0cc4586b:src/ui/index.tsx",
+        "namespace": "source-module",
+        "stability": "artifact-version",
+        "strategy": "artifact-local-key"
+       },
+       "kind": "javascript-module",
+       "node_id": "jag_node_17a68cb6f1fa85aeb20aeae4a7047266f53d8e272f3368bf5a1a1d7ff1dbf7f2",
+       "observations": [
+        {
+         "evidence": {
+          "artifact": {
+           "artifact_id": "art_25cc966cd8adb7315a29bc4eb6d77a873acf88c606bef3068e135c476e37929d",
+           "available": true,
+           "sha256": "25cc966cd8adb7315a29bc4eb6d77a873acf88c606bef3068e135c476e37929d"
+          },
+          "authority": "ast-static-analysis",
+          "confidence": "exact",
+          "coverage": {
+           "limits": [],
+           "omitted_count": 0,
+           "status": "complete",
+           "truncated": false
+          },
+          "evidence_ids": [],
+          "extractor": {
+           "executable_sha256": null,
+           "name": "rea-javascript-artifact-reconstruction",
+           "operation": "recover-source-module",
+           "version": "1"
+          },
+          "limitations": [
+           "Cross-function mutation and dynamic property resolution remain unknown.",
+           "Local call, argument, return, and closure relations are static candidates and do not prove runtime invocation.",
+           "Promise ownership covers explicit unshadowed Promise construction, static factories, aggregation, chaining, and await syntax only."
+          ],
+          "location": {
+           "available": true,
+           "value": {
+            "end": {
+             "column": 0,
+             "line": 18
+            },
+            "kind": "source-range",
+            "source": "src/ui/index.tsx",
+            "start": {
+             "column": 0,
+             "line": 1
+            }
+           }
+          },
+          "state": "observed"
+         },
+         "identifier_strategy": {
+          "stability": "observation-exact",
+          "strategy": "semantic-content-sha256"
+         },
+         "label": "src/ui/index.tsx",
+         "observation_id": "jag_observation_264704d17b490dc88aceb7331dd42ea712041fd00bb0ea987778b81a383eb1ee",
+         "properties": {
+          "container_sha256": "46cc2ab8ba6675af52df3def52dcea714e444b9383cc62841344ef7e0cc4586b",
+          "export_names": [
+           "HelloWorldDashboardWidget"
+          ],
+          "export_relationships": 1,
+          "import_relationships": 1,
+          "logical_module_key": "src/ui/index.tsx",
+          "module_format": "esm",
+          "omitted_export_names": 0,
+          "path": "src/ui/index.tsx",
+          "semantic_role": "source-module"
+         }
+        }
+       ]
+      }
+     ],
+     "root_node_ids": [
+      "jag_node_2f493c21e6360fc1581e721685cad36ac6cd88664f9f1e24ffbad578c9f94f01"
+     ],
+     "schema": "JavaScriptApplicationGraph"
+    },
+    "input_path": "/src/paperclip/packages/plugins/examples/plugin-hello-world-example",
+    "inventory_graph_sha256": "3a2582b33f66de7f0946307b8b9879002e0e57a8dda9f63863bb23c16a78bb96",
+    "inventory_manifest_id": "agm_b5fa6af80e1c2366051b6f7e26fd8e0609f0e3ce5912e3488732e1dec7685bc9",
+    "limitations": [
+     "CommonJS and ESM binding relationships were recovered from inert syntax and resolved only within the inventoried artifact container.",
+     "JavaScript and HTML were parsed as inert text; bundle bootstrap code was never executed.",
+     "Static imports, entrypoints, workers, endpoints, and storage relationships do not prove runtime execution."
+    ],
+    "root_artifact_sha256": "46cc2ab8ba6675af52df3def52dcea714e444b9383cc62841344ef7e0cc4586b",
+    "semantic_graph": {
+     "application_graph_id": "jag_29b2a4185a04babc64365e29804af687560fe1cbcf9ed9257530e4f43fe0eb3d",
+     "coverage": {
+      "families": [
+       {
+        "family": "boundary",
+        "omitted_relations": 0,
+        "retained_relations": 0,
+        "status": "partial",
+        "unknown_ids": []
+       },
+       {
+        "family": "call-flow",
+        "omitted_relations": 0,
+        "retained_relations": 0,
+        "status": "partial",
+        "unknown_ids": [
+         "jsrg_unknown_4db8178214e3c061e130a552794c0848cbb426057fad7ecc162a2f5d632d4d11",
+         "jsrg_unknown_e476cf62dce458f84530d20303a58bcc70fb74c79918a5dbc659da1e8b238a96",
+         "jsrg_unknown_eb832282f8259feafc20fefad3e70f09b149d11b1bec2df84f4d99ec48425543"
+        ]
+       },
+       {
+        "family": "child-process",
+        "omitted_relations": 0,
+        "retained_relations": 0,
+        "status": "partial",
+        "unknown_ids": []
+       }
+      ],
+      "limits": [],
+      "omitted_nodes": 0,
+      "omitted_relations": 0,
+      "status": "unknown",
+      "truncated": false
+     },
+     "fingerprints": [
+      {
+       "algorithm": "rea.javascript-semantic-function",
+       "components": {
+        "control_flow_sha256": "f7a67f9c449cc1e82e7719a6664fcf292138ef474cabc231ed147dbe5887858f",
+        "effects": [
+         "async"
+        ],
+        "literal_set_sha256": "25f265513096e4d9421d0ef388c175faa73b1910a42049ee06ce215e23ecdc8c",
+        "normalized_ast_sha256": "325626d35bc89a021312f3f39608945877870f1ce7430a4da1e928b765d90382",
+        "parameter_arity": 0,
+        "relation_shape_sha256": "553e5b707def8221845880672290238d69e8e0e1b770dd9cd37edf4394b221c9"
+       },
+       "evidence": {
+        "artifact": {
+         "artifact_id": "art_a454c2c6a54cd15b8ea661baa7b016502427b95f054409044d4d75ff28a2f034",
+         "available": true,
+         "sha256": "a454c2c6a54cd15b8ea661baa7b016502427b95f054409044d4d75ff28a2f034"
+        },
+        "authority": "ast-static-analysis",
+        "confidence": "exact",
+        "coverage": {
+         "limits": [],
+         "omitted_count": 0,
+         "status": "complete",
+         "truncated": false
+        },
+        "evidence_ids": [],
+        "extractor": {
+         "executable_sha256": null,
+         "name": "rea-javascript-semantic-analysis",
+         "operation": "analyze_javascript_application",
+         "version": "1"
+        },
+        "limitations": [],
+        "location": {
+         "available": true,
+         "value": {
+          "end": {
+           "column": 3,
+           "line": 23
+          },
+          "kind": "source-range",
+          "source": "src/worker.ts",
+          "start": {
+           "column": 2,
+           "line": 21
+          }
+         }
+        },
+        "state": "observed"
+       },
+       "fingerprint_id": "jsrg_fingerprint_5c1e075ea60d34c3cb8283a0498b3da4c77fdc078a7393c70e8e36d3342b25c8",
+       "fingerprint_sha256": "10cb4df9757d8384f527fd77941583e842726182ce8d465a7da57a2122c403df",
+       "function_node_id": "jsrg_node_21841707a059b1ce3dcfa338c301a5ccdbe7bee0a38fe3b16bfa386f3dde38ff",
+       "limitations": [
+        "The fingerprint is a static candidate and does not prove behavioral equivalence."
+       ],
+       "status": "complete"
+      },
+      {
+       "algorithm": "rea.javascript-semantic-function",
+       "components": {
+        "control_flow_sha256": "f7a67f9c449cc1e82e7719a6664fcf292138ef474cabc231ed147dbe5887858f",
+        "effects": [],
+        "literal_set_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "normalized_ast_sha256": "3be2421b46a29401ab117fc1fde96b172aaed6b663d6c9cbea195441e1ca35b7",
+        "parameter_arity": 1,
+        "relation_shape_sha256": "f3e94c63e5f990815cf756a32fe8e3cbdb2dddbcd9c0c1051822dedc91576a2c"
+       },
+       "evidence": {
+        "artifact": {
+         "artifact_id": "art_25cc966cd8adb7315a29bc4eb6d77a873acf88c606bef3068e135c476e37929d",
+         "available": true,
+         "sha256": "25cc966cd8adb7315a29bc4eb6d77a873acf88c606bef3068e135c476e37929d"
+        },
+        "authority": "ast-static-analysis",
+        "confidence": "exact",
+        "coverage": {
+         "limits": [],
+         "omitted_count": 0,
+         "status": "complete",
+         "truncated": false
+        },
+        "evidence_ids": [],
+        "extractor": {
+         "executable_sha256": null,
+         "name": "rea-javascript-semantic-analysis",
+         "operation": "analyze_javascript_application",
+         "version": "1"
+        },
+        "limitations": [],
+        "location": {
+         "available": true,
+         "value": {
+          "end": {
+           "column": 1,
+           "line": 17
+          },
+          "kind": "source-range",
+          "source": "src/ui/index.tsx",
+          "start": {
+           "column": 7,
+           "line": 8
+          }
+         }
+        },
+        "state": "observed"
+       },
+       "fingerprint_id": "jsrg_fingerprint_a34f8fcf6b0c441052db81e5823b26f1981c7cfe3e2cbd984b4f8417cacdc3c2",
+       "fingerprint_sha256": "57bde71863a61be4d382ff0f6e396486eaa597ea838f9d51e8eea1e46cf9c98d",
+       "function_node_id": "jsrg_node_aaf02d46171dc1edcd730706a31856eb1aa04774a5758ffa7f07cbb7ec24b763",
+       "limitations": [
+        "The fingerprint is a static candidate and does not prove behavioral equivalence."
+       ],
+       "status": "complete"
+      },
+      {
+       "algorithm": "rea.javascript-semantic-function",
+       "components": {
+        "control_flow_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "effects": [
+         "async"
+        ],
+        "literal_set_sha256": "b1233b0d2a6e1a03e46310f4e8a29f79cd19940942d2839180ea1b3dc745fd94",
+        "normalized_ast_sha256": "5b9e9ee398c36e130901b43272c5bc0b9fb48be4024e641aaa6be60f9db47cc1",
+        "parameter_arity": 1,
+        "relation_shape_sha256": "8bae83e459376f810a2ad5d40756ea1110447c3d7cf8899111ab7cb12ef2426c"
+       },
+       "evidence": {
+        "artifact": {
+         "artifact_id": "art_a454c2c6a54cd15b8ea661baa7b016502427b95f054409044d4d75ff28a2f034",
+         "available": true,
+         "sha256": "a454c2c6a54cd15b8ea661baa7b016502427b95f054409044d4d75ff28a2f034"
+        },
+        "authority": "ast-static-analysis",
+        "confidence": "exact",
+        "coverage": {
+         "limits": [],
+         "omitted_count": 0,
+         "status": "complete",
+         "truncated": false
+        },
+        "evidence_ids": [],
+        "extractor": {
+         "executable_sha256": null,
+         "name": "rea-javascript-semantic-analysis",
+         "operation": "analyze_javascript_application",
+         "version": "1"
+        },
+        "limitations": [],
+        "location": {
+         "available": true,
+         "value": {
+          "end": {
+           "column": 3,
+           "line": 16
+          },
+          "kind": "source-range",
+          "source": "src/worker.ts",
+          "start": {
+           "column": 2,
+           "line": 14
+          }
+         }
+        },
+        "state": "observed"
+       },
+       "fingerprint_id": "jsrg_fingerprint_ec5e3135c49ee78e788a73994249f7614c1e9517e39210362987f5c00d0aba93",
+       "fingerprint_sha256": "d047b9275b3cea95612cadef2a230a2f6cbefc09c3a6992f9a8b060fc71faf8c",
+       "function_node_id": "jsrg_node_aeb62ac69dd83f4fb8ba4f38adef9ea74d5b871e25a9b179f048d8d0fc6a392a",
+       "limitations": [
+        "The fingerprint is a static candidate and does not prove behavioral equivalence."
+       ],
+       "status": "complete"
+      }
+     ],
+     "graph_id": "jsrg_247dc0fa99078d3ca3e4d6ff47bb2a26cc6f561f3f77879e6f707febb6f44529",
+     "limitations": [
+      "Boundary extraction covers unshadowed JSON/global coercions plus parse and validation method candidates.",
+      "Child-process extraction covers asynchronous node:child_process creation, literal argv/env/stdio options, exit/error listeners, and kill signals.",
+      "Configuration extraction covers process.env, process.argv, node:fs reads, and direct logical defaults."
+     ],
+     "nodes": [
+      {
+       "application_node_ids": [],
+       "evidence": {
+        "artifact": {
+         "artifact_id": "art_25cc966cd8adb7315a29bc4eb6d77a873acf88c606bef3068e135c476e37929d",
+         "available": true,
+         "sha256": "25cc966cd8adb7315a29bc4eb6d77a873acf88c606bef3068e135c476e37929d"
+        },
+        "authority": "ast-static-analysis",
+        "confidence": "exact",
+        "coverage": {
+         "limits": [],
+         "omitted_count": 0,
+         "status": "complete",
+         "truncated": false
+        },
+        "evidence_ids": [],
+        "extractor": {
+         "executable_sha256": null,
+         "name": "rea-javascript-semantic-analysis",
+         "operation": "analyze_javascript_application",
+         "version": "1"
+        },
+        "limitations": [],
+        "location": {
+         "available": true,
+         "value": {
+          "end": {
+           "column": 18,
+           "line": 3
+          },
+          "kind": "source-range",
+          "source": "src/ui/index.tsx",
+          "start": {
+           "column": 6,
+           "line": 3
+          }
+         }
+        },
+        "state": "observed"
+       },
+       "function_node_id": null,
+       "identifier_strategy": {
+        "stability": "artifact-version",
+        "strategy": "semantic-content-sha256"
+       },
+       "identity": {
+        "artifact_sha256": "25cc966cd8adb7315a29bc4eb6d77a873acf88c606bef3068e135c476e37929d",
+        "module_path": "src/ui/index.tsx",
+        "role_key": "literal:scope:program:0:607:binding:WIDGET_LABEL:binding:\"Hello world plugin widget\"",
+        "source_range": {
+         "end": {
+          "column": 18,
+          "line": 3
+         },
+         "start": {
+          "column": 6,
+          "line": 3
+         }
+        }
+       },
+       "kind": "literal",
+       "label": "\"Hello world plugin widget\"",
+       "node_id": "jsrg_node_082127260f9bd0330ce280ad61b35eb792b5237eea6454e26aed25127d74eac8",
+       "properties": {
+        "value": "Hello world plugin widget"
+       }
+      },
+      {
+       "application_node_ids": [],
+       "evidence": {
+        "artifact": {
+         "artifact_id": "art_a454c2c6a54cd15b8ea661baa7b016502427b95f054409044d4d75ff28a2f034",
+         "available": true,
+         "sha256": "a454c2c6a54cd15b8ea661baa7b016502427b95f054409044d4d75ff28a2f034"
+        },
+        "authority": "ast-static-analysis",
+        "confidence": "exact",
+        "coverage": {
+         "limits": [],
+         "omitted_count": 0,
+         "status": "complete",
+         "truncated": false
+        },
+        "evidence_ids": [],
+        "extractor": {
+         "executable_sha256": null,
+         "name": "rea-javascript-semantic-analysis",
+         "operation": "analyze_javascript_application",
+         "version": "1"
+        },
+        "limitations": [],
+        "location": {
+         "available": true,
+         "value": {
+          "end": {
+           "column": 29,
+           "line": 27
+          },
+          "kind": "source-range",
+          "source": "src/worker.ts",
+          "start": {
+           "column": 25,
+           "line": 27
+          }
+         }
+        },
+        "state": "observed"
+       },
+       "function_node_id": null,
+       "identifier_strategy": {
+        "stability": "artifact-version",
+        "strategy": "semantic-content-sha256"
+       },
+       "identity": {
+        "artifact_sha256": "a454c2c6a54cd15b8ea661baa7b016502427b95f054409044d4d75ff28a2f034",
+        "module_path": "src/worker.ts",
+        "role_key": "reference:8:read:meta",
+        "source_range": {
+         "end": {
+          "column": 29,
+          "line": 27
+         },
+         "start": {
+          "column": 25,
+          "line": 27
+         }
+        }
+       },
+       "kind": "expression",
+       "label": "meta",
+       "node_id": "jsrg_node_0a79ae096c9bd8dc5d4573f79a1e344c8d4adee892fbc1e0cc85e604a9444f61",
+       "properties": {}
+      },
+      {
+       "application_node_ids": [
+        "jag_node_2353c973327dede634908ecaf62ff0bcb02b24a7cfd9079fd9736802d51291fe"
+       ],
+       "evidence": {
+        "artifact": {
+         "artifact_id": "art_9cdf3be97efba3a864c803a9b44ddf23abc728f0b1aa94edcf5876da4a596104",
+         "available": true,
+         "sha256": "9cdf3be97efba3a864c803a9b44ddf23abc728f0b1aa94edcf5876da4a596104"
+        },
+        "authority": "ast-static-analysis",
+        "confidence": "exact",
+        "coverage": {
+         "limits": [],
+         "omitted_count": 0,
+         "status": "complete",
+         "truncated": false
+        },
+        "evidence_ids": [],
+        "extractor": {
+         "executable_sha256": null,
+         "name": "rea-javascript-semantic-analysis",
+         "operation": "analyze_javascript_application",
+         "version": "1"
+        },
+        "limitations": [],
+        "location": {
+         "available": true,
+         "value": {
+          "end": {
+           "column": 39,
+           "line": 1
+          },
+          "kind": "source-range",
+          "source": "src/manifest.ts",
+          "start": {
+           "column": 14,
+           "line": 1
+          }
+         }
+        },
+        "state": "observed"
+       },
+       "function_node_id": null,
+       "identifier_strategy": {
+        "stability": "artifact-version",
+        "strategy": "semantic-content-sha256"
+       },
+       "identity": {
+        "artifact_sha256": "9cdf3be97efba3a864c803a9b44ddf23abc728f0b1aa94edcf5876da4a596104",
+        "module_path": "src/manifest.ts",
+        "role_key": "binding:scope:program:0:1115:binding:PaperclipPluginManifestV1",
+        "source_range": {
+         "end": {
+          "column": 39,
+          "line": 1
+         },
+         "start": {
+          "column": 14,
+          "line": 1
+         }
+        }
+       },
+       "kind": "binding",
+       "label": "PaperclipPluginManifestV1",
+       "node_id": "jsrg_node_0bb5b05bba648d321e3689e316f61078cc602aa23bd9edcbf8884a95dfd0c235",
+       "properties": {}
+      }
+     ],
+     "relations": [
+      {
+       "evidence": {
+        "artifact": {
+         "artifact_id": "art_a454c2c6a54cd15b8ea661baa7b016502427b95f054409044d4d75ff28a2f034",
+         "available": true,
+         "sha256": "a454c2c6a54cd15b8ea661baa7b016502427b95f054409044d4d75ff28a2f034"
+        },
+        "authority": "static-relationship-inference",
+        "confidence": "high",
+        "coverage": {
+         "limits": [],
+         "omitted_count": 0,
+         "status": "complete",
+         "truncated": false
+        },
+        "evidence_ids": [],
+        "extractor": {
+         "executable_sha256": null,
+         "name": "rea-javascript-semantic-analysis",
+         "operation": "analyze_javascript_application",
+         "version": "1"
+        },
+        "limitations": [
+         "This relationship is a conservative static candidate; it does not prove runtime execution or causal flow."
+        ],
+        "location": {
+         "available": true,
+         "value": {
+          "end": {
+           "column": 17,
+           "line": 3
+          },
+          "kind": "source-range",
+          "source": "src/worker.ts",
+          "start": {
+           "column": 6,
+           "line": 3
+          }
+         }
+        },
+        "state": "inferred"
+       },
+       "identifier_strategy": {
+        "stability": "relationship-exact",
+        "strategy": "semantic-content-sha256"
+       },
+       "properties": {},
+       "relation": "defines",
+       "relation_id": "jsrg_relation_014fe5947d97172b7479e15492dc6ceb5c477494f8e8b48ed81886d1c3d71177",
+       "resolution": "resolved",
+       "source_node_id": "jsrg_node_f41b8b5547a1cdff116d0af410eb839c677f448ddcf82cfc29043668afbf6690",
+       "target_node_id": "jsrg_node_784c67f54efc724a169e514e00e6679807aaf58eed7b2c58d55414859be96214"
+      },
+      {
+       "evidence": {
+        "artifact": {
+         "artifact_id": "art_9cdf3be97efba3a864c803a9b44ddf23abc728f0b1aa94edcf5876da4a596104",
+         "available": true,
+         "sha256": "9cdf3be97efba3a864c803a9b44ddf23abc728f0b1aa94edcf5876da4a596104"
+        },
+        "authority": "static-relationship-inference",
+        "confidence": "high",
+        "coverage": {
+         "limits": [],
+         "omitted_count": 0,
+         "status": "complete",
+         "truncated": false
+        },
+        "evidence_ids": [],
+        "extractor": {
+         "executable_sha256": null,
+         "name": "rea-javascript-semantic-analysis",
+         "operation": "analyze_javascript_application",
+         "version": "1"
+        },
+        "limitations": [
+         "This relationship is a conservative static candidate; it does not prove runtime execution or causal flow."
+        ],
+        "location": {
+         "available": true,
+         "value": {
+          "end": {
+           "column": 25,
+           "line": 17
+          },
+          "kind": "source-range",
+          "source": "src/manifest.ts",
+          "start": {
+           "column": 11,
+           "line": 17
+          }
+         }
+        },
+        "state": "inferred"
+       },
+       "identifier_strategy": {
+        "stability": "relationship-exact",
+        "strategy": "semantic-content-sha256"
+       },
+       "properties": {},
+       "relation": "reads",
+       "relation_id": "jsrg_relation_03c66d515aaada6564ddd4e7b5871884719323b0d59a8ec2ad0d45259ba6b412",
+       "resolution": "resolved",
+       "source_node_id": "jsrg_node_f52b2a37db39e300c39a2e7f0b1c0a66b8403d4df1079c70cd10d68b58e137d5",
+       "target_node_id": "jsrg_node_46561083fc14cab297eb731d3e7281eddfdc714b2954cb7c912b8782d29eb155"
+      },
+      {
+       "evidence": {
+        "artifact": {
+         "artifact_id": "art_9cdf3be97efba3a864c803a9b44ddf23abc728f0b1aa94edcf5876da4a596104",
+         "available": true,
+         "sha256": "9cdf3be97efba3a864c803a9b44ddf23abc728f0b1aa94edcf5876da4a596104"
+        },
+        "authority": "static-relationship-inference",
+        "confidence": "high",
+        "coverage": {
+         "limits": [],
+         "omitted_count": 0,
+         "status": "complete",
+         "truncated": false
+        },
+        "evidence_ids": [],
+        "extractor": {
+         "executable_sha256": null,
+         "name": "rea-javascript-semantic-analysis",
+         "operation": "analyze_javascript_application",
+         "version": "1"
+        },
+        "limitations": [
+         "This relationship is a conservative static candidate; it does not prove runtime execution or causal flow."
+        ],
+        "location": {
+         "available": true,
+         "value": {
+          "end": {
+           "column": 41,
+           "line": 14
+          },
+          "kind": "source-range",
+          "source": "src/manifest.ts",
+          "start": {
+           "column": 6,
+           "line": 14
+          }
+         }
+        },
+        "state": "inferred"
+       },
+       "identifier_strategy": {
+        "stability": "relationship-exact",
+        "strategy": "semantic-content-sha256"
+       },
+       "properties": {},
+       "relation": "writes-property",
+       "relation_id": "jsrg_relation_086553ec27ed73c96c46b4c957b8ff3333762a96258cad30cd2749b928682ac8",
+       "resolution": "resolved",
+       "source_node_id": "jsrg_node_939935c62d11839115bf18ce500e56e7636f5166c32ff4bd0a6751e641971cf6",
+       "target_node_id": "jsrg_node_42a506b5911f28a423681054f1832e5dad96e2d8662a73f043cb9760e41f3756"
+      }
+     ],
+     "root_artifact_sha256": "46cc2ab8ba6675af52df3def52dcea714e444b9383cc62841344ef7e0cc4586b",
+     "root_node_ids": [
+      "jsrg_node_46ae6441e267f92c09c3bb2d747d9eb4c3b24056e7b99859b9dcd86022b08279",
+      "jsrg_node_53e6c0df8cadf9f527d8aca5258090c4e624e03ffa155ec7d8063e5c55fc4cc3",
+      "jsrg_node_730e17029d184d418ff2ea17f9d179d9afdd5b50aaa6f1831aa8205d59e12146"
+     ],
+     "schema": "JavaScriptSemanticRelationGraph",
+     "unknowns": [
+      {
+       "candidate_node_ids": [],
+       "detail": "Static read object identity is partial.",
+       "evidence": {
+        "artifact": {
+         "artifact_id": "art_a454c2c6a54cd15b8ea661baa7b016502427b95f054409044d4d75ff28a2f034",
+         "available": true,
+         "sha256": "a454c2c6a54cd15b8ea661baa7b016502427b95f054409044d4d75ff28a2f034"
+        },
+        "authority": "unknown",
+        "confidence": "unknown",
+        "coverage": {
+         "limits": [],
+         "omitted_count": 0,
+         "status": "complete",
+         "truncated": false
+        },
+        "evidence_ids": [],
+        "extractor": {
+         "executable_sha256": null,
+         "name": "rea-javascript-semantic-analysis",
+         "operation": "analyze_javascript_application",
+         "version": "1"
+        },
+        "limitations": [
+         "Dynamic syntax prevents an exact static relationship."
+        ],
+        "location": {
+         "available": true,
+         "value": {
+          "end": {
+           "column": 33,
+           "line": 27
+          },
+          "kind": "source-range",
+          "source": "src/worker.ts",
+          "start": {
+           "column": 18,
+           "line": 27
+          }
+         }
+        },
+        "state": "unknown"
+       },
+       "family": "object-flow",
+       "node_id": "jsrg_node_9fc4cfaec5033ddc6e7754c7f99d116ea55004ff9bf96cd2e4a5ad90ef0acfc6",
+       "reason": "ambiguous-target",
+       "relation_kinds": [
+        "reads-property"
+       ],
+       "unknown_id": "jsrg_unknown_09638dc878cd870842450c99461900cbff3c3590a45cab9e2466fd34540d1267"
+      },
+      {
+       "candidate_node_ids": [],
+       "detail": "Static read object identity is partial.",
+       "evidence": {
+        "artifact": {
+         "artifact_id": "art_a454c2c6a54cd15b8ea661baa7b016502427b95f054409044d4d75ff28a2f034",
+         "available": true,
+         "sha256": "a454c2c6a54cd15b8ea661baa7b016502427b95f054409044d4d75ff28a2f034"
+        },
+        "authority": "unknown",
+        "confidence": "unknown",
+        "coverage": {
+         "limits": [],
+         "omitted_count": 0,
+         "status": "complete",
+         "truncated": false
+        },
+        "evidence_ids": [],
+        "extractor": {
+         "executable_sha256": null,
+         "name": "rea-javascript-semantic-analysis",
+         "operation": "analyze_javascript_application",
+         "version": "1"
+        },
+        "limitations": [
+         "Dynamic syntax prevents an exact static relationship."
+        ],
+        "location": {
+         "available": true,
+         "value": {
+          "end": {
+           "column": 19,
+           "line": 15
+          },
+          "kind": "source-range",
+          "source": "src/worker.ts",
+          "start": {
+           "column": 4,
+           "line": 15
+          }
+         }
+        },
+        "state": "unknown"
+       },
+       "family": "object-flow",
+       "node_id": "jsrg_node_c55ca9f8e6bc23bfbcfbe8637a45a428dc0e3625b14917aaf706a2c75868bc2c",
+       "reason": "ambiguous-target",
+       "relation_kinds": [
+        "reads-property"
+       ],
+       "unknown_id": "jsrg_unknown_0a7a8975f89f09d69d5656c4d746a665ae874bf00f846e04f25e500b1aafad5b"
+      },
+      {
+       "candidate_node_ids": [],
+       "detail": "Call target runWorker is imported from outside this source.",
+       "evidence": {
+        "artifact": {
+         "artifact_id": "art_a454c2c6a54cd15b8ea661baa7b016502427b95f054409044d4d75ff28a2f034",
+         "available": true,
+         "sha256": "a454c2c6a54cd15b8ea661baa7b016502427b95f054409044d4d75ff28a2f034"
+        },
+        "authority": "unknown",
+        "confidence": "unknown",
+        "coverage": {
+         "limits": [],
+         "omitted_count": 0,
+         "status": "complete",
+         "truncated": false
+        },
+        "evidence_ids": [],
+        "extractor": {
+         "executable_sha256": null,
+         "name": "rea-javascript-semantic-analysis",
+         "operation": "analyze_javascript_application",
+         "version": "1"
+        },
+        "limitations": [
+         "Dynamic syntax prevents an exact static relationship."
+        ],
+        "location": {
+         "available": true,
+         "value": {
+          "end": {
+           "column": 9,
+           "line": 27
+          },
+          "kind": "source-range",
+          "source": "src/worker.ts",
+          "start": {
+           "column": 0,
+           "line": 27
+          }
+         }
+        },
+        "state": "unknown"
+       },
+       "family": "call-flow",
+       "node_id": "jsrg_node_c16e9de9f2952ee964aed27a01bb437e3c5f6e89fac649c15a0f9994279bf73b",
+       "reason": "dynamic-call",
+       "relation_kinds": [
+        "calls"
+       ],
+       "unknown_id": "jsrg_unknown_4db8178214e3c061e130a552794c0848cbb426057fad7ecc162a2f5d632d4d11"
+      }
+     ]
+    },
+    "statistics": {
+     "findings": 14,
+     "invalid_utf8_files": 0,
+     "modules": 0,
+     "nested_asar_containers": 0,
+     "parse_failures": 0,
+     "parsed_javascript_files": 4,
+     "relevant_files": 6,
+     "text_bytes_read": 3698,
+     "truncated_scopes": 0,
+     "visited_ast_nodes": 220
+    },
+    "summary": {
+     "browser_windows": 0,
+     "context_bridge_apis": 0,
+     "explicit_web_preferences": 0,
+     "exposed_api_members": 0,
+     "ipc": {
+      "ambiguous_renderer_transmissions": 0,
+      "dynamic_channel_operations": 0,
+      "literal_channels": 0,
+      "main_handlers": 0,
+      "operations": 0,
+      "paired_renderer_transmissions": 0,
+      "renderer_listeners": 0,
+      "renderer_transmissions": 0,
+      "unpaired_literal_renderer_transmissions": 0
+     },
+     "native_addon_bindings": 0,
+     "preload_entrypoints": 0,
+     "resolved_native_addon_bindings": 0,
+     "resolved_utility_entrypoints": 0,
+     "sender_validation_observations": 0,
+     "utility_processes": 0
+    }
+   },
+   "operation": "analyze_javascript_application",
+   "parameters": {
+    "format": "auto"
+   },
+   "predicate_type": "rea.javascript-application-analysis",
+   "provider": {
+    "id": "rea-javascript-application",
+    "name": "REA JavaScript application analyzer",
+    "version": "1"
+   },
+   "raw_result": null,
+   "subject": {
+    "architecture": null,
+    "digest": {
+     "sha256": "46cc2ab8ba6675af52df3def52dcea714e444b9383cc62841344ef7e0cc4586b"
+    },
+    "format": "directory",
+    "local_path": "/src/paperclip/plugin-hello-world-example",
+    "name": "plugin-hello-world-example"
+   }
+  },
+  {
+   "authority": "analyst-inference",
+   "confidence": "derived",
+   "environment": null,
+   "evidence_id": "ev_f14ea5c1eeca0afa098d58727a7913b5cfdc8566cbc7fe7fd75f406ae9bc91de",
+   "evidence_links": [],
+   "limitations": [
+    "Artifact identity is unavailable for this observation.",
+    "Registry mutation evidence records analyst intent, not proof of the answer."
+   ],
+   "locations": [],
+   "normalized_result": {
+    "action": "record",
+    "question": "Does the hello-world plugin call any external service?",
+    "required_authority": "controlled-replay",
+    "required_confidence": "observed"
+   },
+   "operation": "record_unknown",
+   "parameters": {
+    "domain": "network",
+    "severity": "low"
+   },
+   "predicate_type": "rea.residual-unknown-mutation",
+   "provider": {
+    "id": "rea-unknown-registry",
+    "name": "REA residual unknown registry",
+    "version": "1"
+   },
+   "raw_result": null,
+   "subject": null
+  }
+ ],
+ "scenarios": [],
+ "unknowns": [
+  {
+   "contradicting_evidence_ids": [],
+   "domain": "network",
+   "mutation_evidence_ids": [
+    "ev_f14ea5c1eeca0afa098d58727a7913b5cfdc8566cbc7fe7fd75f406ae9bc91de"
+   ],
+   "previous_revision_digest": null,
+   "question": "Does the hello-world plugin call any external service?",
+   "recommended_probes": [
+    {
+     "operation": "capture_process_scenario",
+     "rationale": "Run it and watch traffic."
+    }
+   ],
+   "relationships": [],
+   "required_authority": "controlled-replay",
+   "required_confidence": "observed",
+   "required_environment": null,
+   "resolution": null,
+   "revision": 1,
+   "revision_digest": "38a9c075d8db1d8ffc9575c0a4618ba8db3f99682b69e5413b28630e199b3ac1",
+   "scope_digest": null,
+   "severity": "low",
+   "status": "open",
+   "supporting_evidence_ids": [],
+   "unknown_id": "unk_57d65e0c48ad3e810051c61628c59c0d28582d79e562416ec8714e5c50ce658d"
+  }
+ ]
+}

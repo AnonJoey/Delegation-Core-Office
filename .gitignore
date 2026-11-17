@@ -36,5 +36,10 @@ htmlcov/
 # -----------------------------------------------------------------------------
 audit_delegation_core.db*
 repo_classification.db*
+audit_test_fork.db*
 *.pid
 audit_pipeline.log
+audit_test_fork.log
+
+# Catalogo de skills: construido em cada maquina, nunca versionado (texto de terceiros)
+src/delegation_core/cores/agent_harness/data/skills.db

@@ -98,9 +98,9 @@ def test_lote_faz_uma_unica_escrita(vault, monkeypatch):
     escritas = {"n": 0}
 
     # Espiona `notes.gravar_estado`, que passou a ser o escritor quando a posse
-    # do arquivo de estado saiu do `vault.py` para o ciclo travado. Espionar o
-    # metodo antigo deixava este teste contar ZERO escritas e ficar verde por
-    # nao olhar mais nada.
+    # do arquivo de estado saiu do `vault.py`. Espionar o metodo antigo deixava
+    # este teste contar ZERO escritas e ficar verde por nao olhar mais nada, que
+    # e a forma de morte silenciosa que esta suite ja pegou outras vezes.
     from delegation_core import notes as notes_mod
     real = notes_mod.gravar_estado
 

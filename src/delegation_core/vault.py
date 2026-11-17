@@ -30,7 +30,6 @@ v0.12 improvements:
 
 import json
 import logging
-import re
 import threading
 from datetime import datetime
 from pathlib import Path, PurePosixPath, PureWindowsPath
@@ -50,6 +49,7 @@ from .embeddings import (
 
 logger = logging.getLogger("vault")
 
+
 # ── nomes, caminhos e frontmatter ────────────────────────────────────────────
 #
 # Extraidos para notes.py: sao funcoes puras, sem ChromaDB, e nove modulos as
@@ -60,6 +60,9 @@ from .notes import (  # noqa: F401
     _CHUNK_SUFFIX_RE,
     _CODE_SPAN_RE,
     _countable_wikilinks,
+    alias_link_targets,
+    problemas_declarados,
+    external_link_targets,
     _DATE_PREFIX_RE,
     _EXTRA_CHUNK_SUFFIX_RE,
     _frontmatter_parses,
@@ -72,6 +75,7 @@ from .notes import (  # noqa: F401
     client_slug,
     compose_note,
     ingested_link_stems,
+    contar_notas_markdown,
     link_names_for_stem,
     resolve_in_vault,
     resolve_vault_folder,
@@ -307,48 +311,19 @@ class VaultManager:
 
     # ── search ───────────────────────────────────────────────────────────────
 
-    #: Vault-relative path segment under which graph_build files its wiki articles.
-    GENERATED_SEGMENT = "graphs"
-    # "<date>-Code Graph Report — <graph>.md", written by graphbridge.
-    _REPORT_STEM_RE = re.compile(
-        r"^\d{4}-\d{2}-\d{2}-Code Graph Report — (?P<graph>.+)\.md$")
+    # A classificacao por caminho mora em notes.py (nao depende de indice).
+    GENERATED_SEGMENT = notes.GENERATED_SEGMENT
+    _REPORT_STEM_RE = notes.REPORT_STEM_RE
 
     @classmethod
     def classify_path(cls, rel_path: str) -> tuple[str, str]:
-        """Return (kind, graph_name) for a vault-relative note path.
-
-        A generated article lives at ``<folder>/graphs/<graph>/<stem>.md``; the
-        graph name is its own metadata field so a search can be pinned to one
-        codebase. Anything else is a hand-written note.
-        """
-        parts = [p for p in str(rel_path).replace("\\", "/").split("/") if p]
-        if len(parts) >= 3 and parts[1] == cls.GENERATED_SEGMENT:
-            return "generated", parts[2]
-        # graph_build's report is machine-written too, but it is filed at the top
-        # of its folder on purpose — graphbridge calls it the "discoverable entry
-        # point" — so it does not sit under graphs/ and was being graded as a
-        # hand-written note. That put 5 reports into the dashboard's knowledge
-        # graph and counted their code-derived [[Foo alloc]]-style artifacts as
-        # the user's broken links. Recognised by name rather than moved, so the
-        # entry point stays where it was designed to be.
-        if len(parts) == 2:
-            m = cls._REPORT_STEM_RE.match(parts[1])
-            if m:
-                return "generated", m.group("graph")
-        return "note", ""
+        """Return (kind, graph_name) for a vault-relative note path (notes.classificar_caminho)."""
+        return notes.classificar_caminho(rel_path)
 
     @classmethod
     def classify_subkind(cls, rel_path: str, content: str = "") -> str:
-        """Return subkind ('transcript', 'chat', 'generated', or 'curated') for a note."""
-        kind, _ = cls.classify_path(rel_path)
-        if kind == "generated":
-            return "generated"
-        p_lower = str(rel_path).lower()
-        if "transcript-" in p_lower or "session-transcript" in content[:600]:
-            return "transcript"
-        if "chat-" in p_lower or "claude-ai-export" in content[:600]:
-            return "chat"
-        return "curated"
+        """Return 'transcript', 'chat', 'generated' or 'curated' (notes.classificar_subtipo)."""
+        return notes.classificar_subtipo(rel_path, content)
 
     @classmethod
     def note_metadata(cls, rel_path: str, title: str, folder: str, content: str = "") -> dict:
@@ -367,7 +342,8 @@ class VaultManager:
 
     @uses_index
     def search(self, query: str, limit: int = 5, scope: str = "all",
-               graph: str = "", snippet_chars: int = 800, client: str = "") -> list[dict]:
+               graph: str = "", snippet_chars: int = 800, client: str = "",
+               folder: str = "") -> list[dict]:
         """Semantic search, optionally narrowed to one kind of indexed content.
 
         scope:
@@ -435,6 +411,11 @@ class VaultManager:
         client_key = client_slug(client, getattr(self.cfg, "client_aliases", None))
         if client_key:
             clause = {"client": client_key}
+            where = {"$and": [where, clause]} if where else clause
+        # Pasta dentro do `where`, como o cliente: filtrar depois deixaria uma
+        # pasta rara sem resultado nenhum (ver a nota do escopo acima).
+        if folder:
+            clause = {"folder": folder}
             where = {"$and": [where, clause]} if where else clause
 
         want = max(limit, 1)
@@ -811,7 +792,6 @@ class VaultManager:
         """
         return notes.atualizar_estado(self._index_state_path(), modificar)
 
-
     def stamp_indexed(self, rel_paths: list[str]) -> int:
         """Record that these notes are current in the index. Returns how many.
 
@@ -957,7 +937,7 @@ class VaultManager:
         # as 0 — the upgrade case this exists for.
         if state.pop(self._SCHEMA_KEY, 0) != self._INDEX_SCHEMA:
             if state:
-                logger.info("Index state schema changed — re-indexing every note once")
+                logger.info("Index state schema changed: re-indexing every note once")
             state = {}
             descartou_o_estado = True
         count = 0
@@ -1222,6 +1202,8 @@ class VaultManager:
         - **Notes outside the managed folders.** MEMORY.md at the vault root and
           anything staged in _processed/ resolve fine for a reader; only grading
           is scoped to vault_folders.
+        - **Documentos fora do vault**, via `cfg.external_link_dirs`. Ver
+          `notes.external_link_targets`, que explica o caso e o numero.
 
         vault_health() has always resolved this way. note_links() did not when it
         was written, and would have labelled 9 live targets in this vault as
@@ -1234,17 +1216,12 @@ class VaultManager:
                 continue
             for name in link_names_for_stem(f.name[:-3]):
                 targets.setdefault(name, f)
-        for folder in self.cfg.vault_folders:
-            root = self.cfg.vault / folder
-            if not root.exists():
-                continue
-            for f in root.rglob("*.md"):
-                try:
-                    content = f.read_text(encoding="utf-8")
-                except OSError:
-                    continue
-                for alias in frontmatter_aliases(content):
-                    targets.setdefault(alias.lower(), f)
+        # Depois do vault: `setdefault` faz a nota do vault vencer um homonimo.
+        for name, f in external_link_targets(self.cfg.external_link_dirs).items():
+            targets.setdefault(name, f)
+        for name, f in alias_link_targets(
+                self.cfg.vault, self.cfg.vault_folders).items():
+            targets.setdefault(name, f)
         return targets
 
     def note_links(self, rel_path: str) -> dict:
@@ -1459,9 +1436,11 @@ class VaultManager:
 
         # ── Pass 1: read every note once; collect resolution keys + per-note data ──
         # A link resolves against the union of filename stems AND Obsidian
-        # frontmatter aliases (v6) — mirroring how Obsidian itself resolves.
+        # frontmatter aliases (v6) - mirroring how Obsidian itself resolves.
+        from .extractor import is_dataless, materialize_if_dataless
         resolvable: set[str] = set()      # lowercased stems + aliases
         notes: list[dict] = []
+        dataless_notes: list[dict] = []
         for folder in self.cfg.vault_folders:
             fp = self.cfg.vault / folder
             if not fp.exists():
@@ -1470,22 +1449,43 @@ class VaultManager:
             # research/Client/…, meetings/…/2024-2025/…). Obsidian resolves links
             # by basename across the whole vault, so a non-recursive scan misses
             # subfolder notes and falsely counts every link to them as broken.
-            # Matches ChromaDB's recursive index — note that since v0.12 the
+            # Matches ChromaDB's recursive index - note that since v0.12 the
             # comparable figure is get_stats()['indexed_notes'] (distinct notes),
             # not ['indexed_rows'], which counts one row per chunk.
             for f in fp.rglob("*.md"):
+                note_stem = f.name[:-3].strip()
+                rel = f.relative_to(self.cfg.vault).as_posix()
+                if is_dataless(f) and not materialize_if_dataless(f, timeout=5.0):
+                    dataless_notes.append({"stem": note_stem, "folder": folder, "rel": rel})
+                    resolvable.update(link_names_for_stem(note_stem))
+                    continue
                 try:
                     content = f.read_text(encoding="utf-8")
                 except Exception:
+                    if is_dataless(f):
+                        dataless_notes.append({"stem": note_stem, "folder": folder, "rel": rel})
+                        resolvable.update(link_names_for_stem(note_stem))
                     continue
                 # strip only ".md"; dots in the name are part of the note identity.
                 # .strip() trailing whitespace so resolution matches _countable_wikilinks,
                 # which strips link targets (a few ingested files have trailing-space names).
-                note_stem = f.name[:-3].strip()
                 resolvable.update(link_names_for_stem(note_stem))
                 resolvable.update(a.lower() for a in frontmatter_aliases(content))
                 notes.append({"stem": note_stem, "folder": folder, "content": content,
-                              "rel": f.relative_to(self.cfg.vault).as_posix()})
+                              "rel": rel})
+
+        if dataless_notes and self._initialized and self.collection is not None:
+            try:
+                ids_dl = [f"{d['rel']}::chunk_0" for d in dataless_notes] + [d["rel"] for d in dataless_notes]
+                got = self.collection.get(ids=ids_dl, include=["metadatas", "documents"])
+                for meta in (got.get("metadatas") or []):
+                    if isinstance(meta, dict) and meta.get("title"):
+                        resolvable.update(link_names_for_stem(str(meta["title"]).strip()))
+                for doc in (got.get("documents") or []):
+                    if isinstance(doc, str):
+                        resolvable.update(a.lower() for a in frontmatter_aliases(doc))
+            except Exception:
+                pass
 
         # Obsidian resolves a wikilink against every note in the vault, not just
         # the folders delegation-core manages. Notes do live outside them —
@@ -1514,8 +1514,9 @@ class VaultManager:
             registro = {}
         ingested = ingested_link_stems(registro)
         total = needs_repair = truncated = orphans = broken_links = 0
-        malformed_frontmatter = 0
+        malformed_frontmatter = com_problema = 0
         malformed_notes: list[dict] = []
+        problema_notes: list[dict] = []
         # Collected alongside the counts, not by a second pass: the whole point
         # is that the detail and the summary cannot disagree.
         broken: list[dict] = []
@@ -1567,6 +1568,16 @@ class VaultManager:
                 if fm.get("truncated", "").lower() == "true":
                     truncated += 1
                     truncated_notes.append({"stem": n["stem"], "folder": n["folder"]})
+                # Balde proprio, e nao somado a needs_repair: as duas notas com
+                # `prompt_leak` declaram quality_score 0.7 e needs_review false,
+                # ou seja passam por saudaveis pelo criterio existente. Misturar
+                # esconderia de que tipo e cada problema, que e a razao pela qual
+                # malformed_frontmatter tambem tem balde proprio.
+                problemas = problemas_declarados(fm)
+                if problemas:
+                    com_problema += 1
+                    problema_notes.append({"stem": n["stem"], "folder": n["folder"],
+                                           "issues": problemas})
                 # Verbatim machine records — graph_build's wiki articles and the
                 # SessionEnd hook's raw transcripts — are a different kind of
                 # object from a curated note, and both distort these metrics.
@@ -1637,7 +1648,9 @@ class VaultManager:
             "generated_notes": generated,
             "broken_links": broken_links,
             "unindexed": len(unindexed_notes),
+            "dataless": len(dataless_notes),
             "malformed_frontmatter": malformed_frontmatter,
+            "com_problema_declarado": com_problema,
             "computed_at": datetime.now().isoformat(),
         }
         self._last_health_detail = {
@@ -1648,9 +1661,11 @@ class VaultManager:
             "needs_repair_items": repair_notes,
             "truncated_items": truncated_notes,
             "malformed_frontmatter_items": malformed_notes,
+            "com_problema_declarado_items": problema_notes,
             "folder_marker_items": markers,
             "ingested_link_items": ingested_links,
             "unindexed_items": unindexed_notes,
+            "dataless_items": dataless_notes,
         }
         try:
             cache_path.write_text(
@@ -1815,10 +1830,7 @@ class VaultManager:
             # being quietly redefined.
             "indexed_notes": docs,
             "indexed_rows": rows,
-            "vault_markdown_files": sum(
-                1 for path in self.cfg.vault.rglob("*.md")
-                if self.cfg.index_dir not in path.parents
-            ),
+            "vault_markdown_files": contar_notas_markdown(self.cfg.vault, self.cfg.index_dir),
             # The clients actually present in the index, as the filter sees
             # them. This is the verification surface for client_path_roots: a
             # derivation rule that mislabels shows up here as a bucket nobody

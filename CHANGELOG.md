@@ -5,6 +5,314 @@ This changelog is derived directly from the canonical versioning recorded across
 
 ---
 
+## Unreleased
+
+### Added
+
+- **`ingest_forget` acha a fonte registrada por caminho com link simbolico.** `forget` so procurava a grafia resolvida (`resolve()` segue o link); no servidor gss `/home/joey` e um link para `/home/GrimstoneSolutions`, e as 19 fontes mortas respondiam `registry_entry_removed: false` e continuavam no `ingest_status`. Agora casa as duas grafias, nas linhas do indice e no registro.
+- **Reparo do frontmatter ilegivel** (`reparo_frontmatter.reparar_frontmatter`). Tres causas com reparo seguro: item de lista de fluxo sem aspas (`tags: [a, @b]`), valor simples com `: ` no meio, e linhas `- ...` soltas, que voltam como `aliases:`. Corpo da nota intocado; sem reparo seguro devolve a nota igual com o motivo. `sanitize_note` usa como rede de seguranca. Script de uso unico: `~/.delegation_core/scripts_manutencao/reparar_frontmatter_do_vault.py` (simulacao por padrao, copia da original com `--aplicar`).
+- **Aliases gravados e lidos pelo YAML.** `ensure_aliases` so punha aspas quando o alias tinha `:#[]` e nao escapava aspas internas, e a leitura arrancava aspas que fazem parte do texto e devolvia um conjunto sem ordem. Medido em 04/11/2026: `@x`, `*x`, `!x`, `%x`, `'x`, `>x`, `|x`, `` `x `` e `Decisao: servidor "x"` quebravam o frontmatter da nota inteira; origem das 62 notas ilegiveis fora de `Reference/graphs`. Teste: `tests/test_alias_block_yaml.py`.
+- **Doctor avisa de chave desconhecida no `config.json`** (`check_config_keys`). `Config.load` descarta em silencio toda chave que nao e campo; no servidor gss o `llama_parallel` estava no arquivo e nao existia como campo. O aviso nomeia a chave e sugere o campo parecido (`llama_ctxx`, quis dizer `llama_ctx`?).
+- **`llama_parallel`** (padrao 1): quantos pedidos o llama-server atende ao mesmo tempo, enviado como `--parallel` quando maior que 1, e ajustavel pelo painel. Vinha de uma edicao sem commit no checkout antigo do Office do servidor.
+- **Reindex incremental compara o texto, nao so a data.** Quando a data de modificacao difere, o reindex compara os trechos que `index_note` gravaria com os que o indice ja tem; se forem iguais, so carimba a data nova e nao reembute. Medido no servidor gss em 04/11/2026: 41.685 de 81.478 notas com data de 28 a 29/10 (relink em massa) e BGE-m3 na CPU a 1,18 trechos por segundo, mais de dez horas de trabalho para texto que nao mudou. Trecho a mais ou a menos no indice, nota sem linhas e `force=True` seguem o caminho de sempre. Teste: `tests/test_reindex_por_conteudo.py`.
+- **Teste que confere o que o git versiona** (`tests/test_fonte_versionada.py`): todo `.py` do pacote tem que estar no indice do git. Nasceu de `.git/info/exclude` com `skills/`, que escondia o pacote `cores/agent_harness/skills/` e quebrava o clone limpo e o servidor.
+
+- **Consolidação dos 5 Núcleos Unificados do Servidor (`src/delegation_core/cores/`)**:
+  - **Agent Harness Core (`cores/agent_harness/`)**:
+    - Catálogo SQLite FTS5 de skills/regras de agentes com busca full-text e ranking ponderado (`SkillsRegistry`). O catálogo é construído na máquina (`skills/ingester.py`, em `~/.delegation_core/skills.db`) e não vem no repositório: o do fork reunia texto de repositórios de terceiros sem licença conferida.
+    - Motor heurístico anti-slop de purificação de prompts e remoção de clichês sintéticos de IA (`PromptSanitizer`).
+    - Analisador estático de código por AST (`ReverseEngTool`), adaptadores de navegador (`BrowserTool`) e workspace (`WorkspaceTool`).
+  - **Multimodal Media Core (`cores/multimodal/`)**:
+    - Ingestão multiformato integrada via motor nativo `MarkItDown` (PDF, DOCX, XLSX, PPTX, CSV, HTML, TXT).
+    - Camada de OCR Tesseract (`OCREngine`).
+    - Transcrição de áudio via Whisper (`SpeechToTextEngine`) e síntese neural de voz TTS via Audiblez/Kokoro/Piper (`TextToSpeechEngine`).
+    - Geração declarativa de diagramas Mermaid SVG (`DiagramGenerator`).
+  - **Orchestration Core (`cores/orchestration/`)**:
+    - Motor assíncrono de execução de DAGs (`DAGEngine`) e suporte a workflows YAML com retries e resolução de dependências (`DAGRunner`).
+    - Fila distribuída de tarefas com ordenação por prioridade para múltiplos agentes (`AgentTaskQueue` / Multica + Fleetbase).
+    - Agente de validação e correção autônoma de Pull Requests (`AutonomousCIRunner` / Pullfrog).
+    - Tracing e observabilidade de tokens LLM e latência (`LLMTelemetryTracker`) integrado com a persistência SQLite da `Telemetria`.
+  - **Local Platform Core (`cores/platform/`)**:
+    - Poda de contexto e redução de tokens com armazenamento reversível CCR via `ccr.Guarda` (`TokenPruningEngine`).
+    - Controle atômico de concorrência com verificação de PID/TTL em disco e controle de orçamento de iterações (`AgentExecutionGuard` / Paperclip + Hermes).
+    - Grafo de código em memória com suporte a consultas Cypher (`CodeGraphEngine`).
+    - Telemetria de hardware do host Corsair em tempo real (espaço Btrfs NVMe, carga de CPU) via `HardwareSupervisor`.
+    - Síntese de áudio para feedback de agentes (`VoiceboxEngine`) e faxina de artefatos mortos (`CodeSweeperAndNet`).
+  - **Homelab Gateway Core (`cores/self_hosted/`)**:
+    - Catálogo e gateway centralizado para 29 microserviços homelab mapeados em 14 domínios funcionais (`HomelabServiceGateway`).
+    - Despacho de requisições autenticado via token local e normalização case-insensitive de rotas.
+  - **Fachada Unificada e Ferramentas FastMCP**:
+    - Ponto de entrada centralizado `UnifiedCoresBridge` em `src/delegation_core/cores/unified_facade.py` coordenando os 5 núcleos.
+    - 8 ferramentas registradas no FastMCP em `server.py`: `cores_unified_status`, `cores_skills_search`, `cores_sanitize_prompt`, `cores_multimodal_ingest`, `cores_platform_session`, `cores_prune_context`, `cores_selfhosted_catalog`, `cores_selfhosted_route`.
+
+### Changed / Refactored
+
+- **Deduplicação e Fusão de Módulos com a Mesma Função**:
+  - `cores/multimodal/documents/markdown_converter.py` fundido com `delegation_core.markitdown` (eliminação de stub e conversão com parsers nativos).
+  - `cores/orchestration/telemetry/tracker.py` fundido com `delegation_core.telemetria` (gravação de spans no banco SQLite WAL central).
+  - `cores/orchestration/dag/engine.py` fundido com `delegation_core.dag_runner` (persistência em `dag_runs` e `dag_step_runs` em SQLite).
+  - `cores/platform/pruner/token_reducer.py` fundido com `delegation_core.compressao.ccr` (reversibilidade do texto podado via chave CCR hash).
+  - `cores/platform/guard/agent_guard.py` fundido com `delegation_core.adaptador_paperclip` (travas de concorrência atômicas em `.delegation_core/locks/`).
+  - `cores/agent_harness/tools/reverse_eng.py` fundido com `scripts/classify_repository.py` (extração estruturada de métodos assíncronos, docstrings e classes via AST).
+- **Auditoria Completa e Recursiva**:
+  - Relatório estruturado gerado em `docs/AUDITORIA_COMPLETA_RECURSIVA_DELEGATION_CORE_TEST.md`.
+  - Varredura de 1.342 arquivos (784 módulos Python, 124.267 linhas de código útil, 3.511 testes unitários coletados).
+  - 100% dos módulos Python compilando sem erros sintáticos no Python 3.14.8.
+  - Validação de 43 testes unitários específicos cobrindo todos os módulos fundidos sem quebra de retrocompatibilidade.
+
+- **ai-memory merged in, as a selective port ([ai-memory](https://github.com/akitaonrails/ai-memory), MIT,
+  revision `584ab792`; `docs/ai-memory.md`)**: five mechanisms the delegation-core lacked, all **off by
+  default** (`envelhecimento_enabled`, `passagem_enabled`, `resumo_niveis_enabled`, `autoridade_enabled`).
+  A literal merge is impossible (about 470k lines of Rust against a Python MCP daemon), so each mechanism
+  was read in the original, rewritten in Python and checked against the original compiled from the same
+  revision.
+  - **Forgetting** (`vault_forget_sweep`, `vault_note_feedback`): a note that is not read goes cold
+    (`salience * exp(-lambda * age)` plus a reinforcement per read that fades); a cold note becomes a
+    summary plus the durable facts mined from it (paths, URLs, error codes, identifiers; no model), and
+    `expires_at:` expires a note anywhere in the vault. Never deletes: the full text goes to note history
+    first and `vault_note_restore` brings it back (a restore counts as a read). Only `Sessions` goes cold by
+    default; pinned notes never do. Dry run unless `apply=true`.
+  - **Handoff** (`handoff_create`, `handoff_pickup`, `handoff_list`, `handoff_cancel`, and the session
+    hooks): a typed "where we stopped" snapshot, accepted by exactly one next session (atomic
+    compare-and-set; of two racing sessions one gets it), manual ones project-wide and beating the automatic
+    one the session-end hook extracts from the transcript (no model). Injected text is fenced as untrusted
+    data and metadata-only until accepted.
+  - **Tiered session-start brief** (`resumo_niveis_enabled`): each recent note shows an L0/L1 excerpt (or its
+    body when it fits) instead of just its path, pinned notes deepened first, coverage before depth.
+  - **Authority in search** (`autoridade_enabled`, `autoridade_forca`): decisions, procedures and `canonical`
+    notes rise, sessions and `superseded`/`historical` notes sink, bounded to 0.55 to 1.50. Acts on the RRF
+    rank as in the original, not on cosine similarity; "what did we do last session" questions are routed so
+    sessions are not buried.
+  - **Verification**: `scripts/oraculo_ai_memory` holds the original functions verbatim, compiled;
+    `scripts/paridade_ai_memory.py` runs 33,000 random cases through both and requires identical results
+    (floats bit for bit), and injects 25 known defects into the port, all caught. Four Rust/Python dialect
+    differences that changed the output (what a space, a line, a letter and a length are) are handled in
+    `texto_bytes.py`. Not taken: the SQLite/FTS5 stack, cold-cluster DBSCAN dedup, observation and ledger
+    pruning, workstreams, the auto-improve loop (`docs/ai-memory.md`, section 3).
+- **Read lifecycle in the API proxy (Headroom's `read_lifecycle`)**: a `Read` result whose file was
+  edited or written afterwards (stale: the content in context is no longer what is on disk) becomes
+  a short marker with the key of the original, which `recall_output` returns; with
+  `proxy_read_superseded` a `Read` re-read in full later does too. Fresh reads and anything under
+  512 bytes are never touched. Unlike cross-turn dedup this REPLACES bytes of earlier turns (once, at
+  the turn the edit appears), so it is off by default: `proxy_read_lifecycle`. Anthropic
+  `tool_result` with text content and OpenAI Chat `role: tool`. The Headroom module is copied
+  verbatim; the CCR store is the delegation-core one. Parity: 400 random conversations (with and
+  without superseded) identical to Headroom's `ReadLifecycleManager`; 3 deliberately injected defects
+  in the glue caught. Completes item 6.3.2.
+- **Cross-turn de-duplication in the API proxy (Headroom's `cross_turn_dedup`)**: a span of a tool
+  output that already appeared verbatim in an earlier tool output of the same request becomes a short
+  in-context pointer (`[↑3L same as msg 2: 'def foo...']`), also when an edit shifted the line numbers
+  by a constant. Cache-safe (a block is only compared with earlier ones, so appending a turn never
+  changes an earlier turn's bytes) and lossless (the first occurrence is never rewritten). Off by
+  default: `proxy_cross_turn_dedup` in `config.json`. Covers Anthropic `tool_result` and OpenAI Chat
+  `role: tool`; web fetch/search, `view` and `recall_output` results and anything with `cache_control`
+  are only references, never rewritten. The Headroom module is copied verbatim; the message pass is
+  adapted. Parity: 250 random conversations identical to Headroom's own `ContentRouter` (built from
+  source), 3 deliberately injected defects caught. The read lifecycle, the other half of item
+  6.3.2, is the entry above.
+- **Priority in the compressor pool (`compressao/pool.py`)**: when every worker is busy, waiting
+  calls are served by priority (`INTERATIVA` before `LOTE`, arrival order within each) instead of
+  plain arrival order, so a burst of batch work no longer queues an agent behind it.
+  `pool.comprimir(..., prioridade=pool.LOTE)`; the default is `INTERATIVA`, so the existing MCP
+  tools behave as before. A cancelled waiter hands its slot on, and the slot is released before the
+  thread fallback. No caller uses `LOTE` yet: the proxy and batch jobs come with items 6.1.2 and 6.1.3.
+- **RTK `wc` and `ls` modules, ported to Python (`filtros_saida/modulos/system`)**: `wc` as
+  `30L 96W 978B` (or a bare number, or a table without the common directory); `ls` as one line per
+  entry, directories first, sizes humanized, permissions as octal under `-l`, noise directories
+  (`node_modules`, `.git`, `target`...) hidden unless `-a`/`-A`, anything past 50 entries or hidden
+  kept in the recall store behind a hint. Parity against a real RTK binary: 3,000 of 3,000
+  commands on a tree with setuid and sticky entries, FIFOs, symlinks, UTF-8 names, old and new
+  mtimes and 2 MiB files; 12 deliberately injected defects are all caught.
+  `scripts/paridade_rtk_sistema.py`.
+- **RTK `grep` and `rg` module, ported to Python (`filtros_saida/modulos/system/search.py`)**:
+  matches grouped by file with RTK's caps (200 results, 25 per file, 80 columns), the rest
+  kept in the recall store behind a hint; `-l`, `-L` and `--files` fold their common directory
+  into a header; piped stdin is rewritten line by line as it arrives. Runs the exact engine the
+  agent typed. Parity against a real RTK binary over a file tree built to break groupers: 4,000
+  of 4,000 commands (stdout, stderr, exit code) with `/dev/null`, a pipe and a regular file as
+  stdin; 13 deliberately injected defects are all caught. `scripts/paridade_rtk_busca.py`.
+  Modules that serve more than one executable now receive the typed command (`comando=`).
+- **RTK `git` and `gh pr` modules, ported to Python (`filtros_saida/modulos/git`)**:
+  `git status`, `add`, `fetch`, `diff`, `log` and `show`, and `gh pr` list, view,
+  checks, status, create, merge, diff, comment and edit. RTK's git module runs git
+  several times per command, so these export `rodar(args, amb)` (RTK's `run_*`)
+  next to `filtrar`, and `delegation-core shell` hands them the command. The other
+  git subcommands and `gh issue|run|repo|api` stay as before. Also ported: RTK's
+  argument tokenizer (POSIX dialect), `compact_diff` and the `run_filtered` line
+  normalization. Parity against a real RTK binary: 5,850 of 5,850 git commands
+  across 13 repository states (rebase, merge conflict, detached HEAD, large and
+  Latin-1 blobs, remotes...), and 4,000 of 4,000 `gh pr` runs on a fake `gh`,
+  which also exercises `compact_diff` on synthetic diffs; mutation-tested.
+  `scripts/paridade_rtk_git.py`, `scripts/paridade_rtk_gh.py`.
+- **SmartCrusher (Headroom's JSON compressor, ported from Rust)**: arrays of
+  objects become a schema-plus-CSV table when that saves at least 15%
+  (no row lost); otherwise the analyzer picks a sampling strategy (smart
+  sample, top-N, cluster, time series) that keeps errors, outliers, change
+  points and query matches, and the cut rows go to the CCR store behind a
+  `<<ccr:hash N_rows_offloaded>>` marker that `recall_output` resolves. Large
+  base64 and HTML strings become markers too. `compress_output` routes JSON to
+  it (`kind=json`), and so does the API proxy. Parity with Headroom's Rust core
+  built from source: 8,128 of 8,128 crushes identical across eight
+  configurations, 1,196 of 1,196 document compactions; mutation-tested.
+- **API proxy (Headroom's proxy, merged into the daemon)**: off by default
+  (`proxy_enabled`, port 8789). Compresses large tool outputs in Anthropic
+  Messages, OpenAI Chat Completions and OpenAI Responses requests with
+  delegation-core's compressors, deterministically so the provider's prompt
+  cache keeps hitting; responses, streaming included, pass through
+  byte-for-byte. Cut originals go to the CCR store and come back through the
+  `recall_output` MCP tool (no injected retrieval tool). Savings land in the
+  usage ledger; `proxy_stats`; `delegation-core proxy env|status|run`. Never
+  logs request bodies or auth headers.
+- **Kompress (Headroom's ModernBERT text compressor)**: copied verbatim with
+  small glue modules (CCR store mapped to delegation-core's, telemetry a
+  no-op). `compress_output` uses it for prose after lossless compaction, on
+  CPU by default, only when the model is already cached; `delegation-core
+  kompress setup|status`. Measured: a 3,295-token architecture doc to 1,954.
+- **Agent hooks in Python (ported from RTK's hooks)**: one script per host
+  (Claude Code, Codex, Cursor, VS Code, Copilot CLI and IDE, Gemini,
+  Antigravity, Vibe, Trae, Droid) plus a Hermes plugin, all answering in
+  the host's own format; TypeScript shims for OpenCode and Pi call the same
+  Python decision through `delegation-core rewrite`. Unlike RTK, a hook never
+  grants permission. `delegation-core hook <host>`. RTK's 69 Rust command
+  modules are annotated (`rtk_modulos.json`) and routed to delegation-core's
+  compressors in `filter_output` and `delegation-core shell`.
+- **Headroom compressors (headroomlabs-ai/headroom, Apache 2.0)**: log, diff and
+  search compressors plus the adaptive sizer and keyword signals, ported from
+  Headroom's Rust core; its content detector and reversible lossless
+  compaction copied verbatim from its Python. One tool, `compress_output`,
+  detects the type and routes; cut originals go to a CCR store that
+  `recall_output` reads. Parity against the Rust core built from the same
+  source: diff and search identical on every input tested (218 diffs, 160
+  rg/grep outputs), log 1006/1029 (the rest differ only in cut size, miniz
+  vs zlib).
+- **RTK output filters (rtk-ai/rtk, Apache 2.0)**: the 62 TOML filters copied
+  verbatim and RTK's filter engine, lossiness, recall store and "never worse"
+  guard ported from Rust (`filtros_saida`). All 151 RTK inline tests pass;
+  against a real RTK binary, 408 of 420 outputs are identical, recall hashes
+  included (the other 12 are `dotnet build` and `uv sync`, which RTK routes to
+  dedicated Rust modules). Tools `filter_output`, `recall_output`; CLI
+  `delegation-core shell`, `recall`, `filters list|verify|hook`.
+- **From REA (morluto/rea, MIT)**: MCP tool annotations derived from the
+  scope classification; `doctor` reports each MCP client registration as
+  aligned, stale, missing, invalid or not installed; open-question registry
+  (`question_*`) where answering needs vault evidence and every update
+  carries the expected revision; progress notifications on the five long
+  synchronous tools; `tools/list` hides tools disabled in config or missing
+  the `[graph]` extra, listed with reason and fix in `capabilities()`;
+  exact-input cache for local `compress`; three argument prompts with
+  `completion/complete`; generated, test-guarded catalog of user-visible
+  errors (`docs/erros-visiveis.csv`, `delegation-core errors-catalog`).
+- **REA itself as a window**: `window_open("rea")` mounts `rea-agents@3.2.1`
+  through npx; `rea_import_evidence` turns a REA evidence bundle into a vault
+  note and its open unknowns into open questions. Tested against a bundle
+  produced by REA 3.2.1 over MCP.
+- **Paperclip memory provider**: `memory_capture`, `memory_upsert`,
+  `memory_query`, `memory_list`, `memory_get` and `memory_forget` follow the
+  `MemoryAdapter` contract of Paperclip's memory plan (company scope required,
+  agent and project visibility, cursor paging, `usage`), stored as vault notes
+  under `Reference/paperclip/<company>/`. `integracoes/paperclip-plugin/` is a
+  plugin skeleton for Paperclip's alpha SDK; its MCP client was run against a
+  test-drive daemon, the plugin itself was not run inside Paperclip.
+- **Install operations (from Paperclip's CLI)**: `update --channel
+  branch|stable` (stable = newest `v*` tag by version order) and
+  `update --rollback` to the commit recorded before the last update, both in a
+  detached HEAD, never rewriting history; `update_channel` in config.
+  `test-drive` runs a throwaway daemon with its own HOME, vault (sample notes
+  or a copy via `--from`), port and CPU embeddings, refusing any directory that
+  resolves into the real install. `clients --cursor --opencode`.
+- **Status cards and standup (from Paperclip)**: saved searches with a
+  per-reader fingerprint of result paths and mtimes, so `status_cards`
+  reports only what changed for the calling client; `standup` gathers notes,
+  processes, watchdog, approvals, proposals and usage for the last N hours.
+- **Process ownership and verification (from Paperclip issues)**: atomic
+  `process_claim` across processes (file lock, covered by a 12-process race
+  test that fails without it), `parent` and `blocked_by`, `evidence` on
+  updates with `verification` set on done, and `process_watchdog` for stale
+  work, forgotten claims, done-without-evidence, bad blockers and cycles.
+- **Search evaluation and feedback (from Paperclip's search rubric)**:
+  `delegation-core eval-search` (ported from master PR 23) now takes graded
+  relevance 0 to 3 and reports nDCG@k and p50/p95 latency, with `--gate`
+  targets MRR 0.95 and nDCG 0.90. `search_feedback` votes and
+  `feedback_report`; `delegation-core feedback export` turns useful votes into
+  evaluation questions.
+- **Memory operations (from Paperclip's memory plan)**: `written_by`
+  provenance on `write_note`; optimistic concurrency with `vault_note_hash` and
+  `expected_hash`; `vault_forget_note` (moves to `.lixeira/`, unindexes, keeps
+  history, restorable); `vault_correct_note` (exact single-occurrence passage,
+  dated correction line); `vault_propose_edit`/`vault_proposals` plus
+  `delegation-core proposals` so low-trust agents propose and a person applies.
+- **Config revisions (from Paperclip)**: every config change keeps the previous
+  file (last 30, mode 0600); `delegation-core config history|revert` and the
+  read-only `config_history` tool, with secrets masked.
+- **Install portability and backups (from Paperclip)**: `delegation-core export`
+  packs config without secrets plus small state files, with sha256 per file;
+  `import` is a dry run unless `--apply`, rewrites path prefixes with `--map`,
+  and copies every file it replaces to `import_backup/` first. `backup` keeps a
+  rotating set; `doctor` warns when the newest is older than 7 days, on invalid
+  `tool_policies`, and on pending approvals.
+- **Tool governance (from Paperclip)**: a `destructive` class on top of
+  read/write, and per-client `tool_policies` (`allow`, `block`,
+  `require_approval`, `rate_limit:N/S`) by tool or by class. Approval is
+  human-only through `delegation-core approvals`, single-use, bound to the
+  argument hash, and expires. New tools `tool_policy` and `approval_list`.
+- **Declarative ingestion configuration**: Added `ingest_sources` and exclusion
+  patterns to configure allow-listed external document sources, per-source
+  settings, and safe exclusions before ingestion.
+- **Ingestion configuration guide**: Documented when and how to configure
+  recurring external sources after the initial setup.
+
+### Fixed
+
+- **`filter_output` no longer holds the daemon's event loop**: its work (ported RTK modules, TOML
+  filters, the SQLite recall store) now runs in a thread, as `compress_output` already did.
+  Measured with the M5 script on a ~700 KB `ps aux`: the longest loop stall fell from about 24 ms
+  to about 5 ms (from 20 ms to 6 ms with 8 simultaneous calls). What remains is GIL contention,
+  not blocking; with a 300 ms stall simulated in the work, the loop went from 310 ms stopped to
+  under 100 ms. Test: `tests/test_filter_output_fora_do_laco.py`.
+- `test_export_tira_segredo` looked for the client token `T2` in the export,
+  which also matches the `created` timestamp between 20:00 and 23:59; the
+  token is now distinctive.
+
+- **Exclusive background jobs with different arguments were dropped**: two
+  `ingest_folder_bg` calls for different folders returned the same job id and
+  only the first folder was indexed; the second reply even named its own
+  folder. Exclusive jobs now coalesce only on identical arguments; others wait
+  in a `queued` state and run one at a time. Also present in production.
+- **`python -m delegation_core` exit code**: it always exited 0, because
+  `__main__.py` discarded `main()`'s return value. The installed
+  `delegation-core` script was not affected. Found by the `shell` test.
+- **Hybrid search after a note disappears**: a note deleted, moved or
+  forgotten within the 30 s between lexical index syncs made `search_vault`
+  fail with `FileNotFoundError`. The hit is now skipped and the path dropped
+  from the lexical index; `vault_forget_note` drops it immediately. Found by
+  the end-to-end test-drive run.
+- **Ingestion registry race**: The registry read-modify-write is now held under
+  a cross-process lock. Atomic writes already prevented torn files, but not
+  lost updates: on 2026-08-31 two concurrent ingests each read the registry,
+  each added its own entry, and the last writer erased the other, silently
+  dropping two indexed sources. Covered by a test that spawns two real
+  processes and fails without the lock. New self-contained `locking.py` module
+  (POSIX `fcntl`, Windows `msvcrt`).
+- **Windows automatic startup**: Recreated the Startup launcher through the
+  virtual environment Python runtime instead of the blocked legacy executable.
+- **Cross-platform service checks**: Made service definition tests select the
+  platform-specific launcher behavior.
+- **Vault index reporting**: Distinguished physical Markdown files, indexed
+  documents, and ChromaDB chunks in startup metrics.
+- **Configuration permission handling**: Saved configuration permissions using
+  a filesystem path compatible with Windows.
+
+### Changed
+
+- **Repository hygiene**: Organized `.gitignore` rules into documented blocks.
+
+---
+
+## Nao lancado (producao, ate o PR 24)
+
+### Fixed
+- **Mac com MLX: toda geracao local falhava.** O engine mandava `"model": "local"` fixo, e o `mlx_lm.server` trata o nome como um repositorio a carregar: medido em 06/10/2026 com mlx-lm 0.32, toda chamada voltava "Cannot find an appropriate cached snapshot". Com o servidor fora do ar, o engine ainda tentava subir o llama-server com `--ctx-size` e `-fa`, que o `mlx_lm.server` recusa. Novo campo `motor_local` (`llamacpp` ou `mlx`): com `mlx`, o pedido leva `"default_model"` (o modelo que o servidor subiu com `--model`), e o engine sobe o proprio `mlx_lm.server` com `--model`, `--host`, `--port` e `--chat-template-args`, esperando ate 300 s. `llama_model` aceita o id do repositorio no Hugging Face. Testado de ponta a ponta contra o `mlx_lm.server` real, com o servidor ja no ar e com o engine subindo-o. O `mlx-lm` 0.32 ja traz as arquiteturas novas (`qwen3_5`, `gemma4`, `gpt_oss`, `llama4`, `mistral4`); `docs/INSTALL_MAC_MLX.md` atualizado.
+
 ## Nao lancado - A API do dashboard na 8788 passa a exigir o bearer token, e a sondagem do daemon deixa de depender de uma unica leitura
 
 ### Security
@@ -15,16 +323,20 @@ This changelog is derived directly from the canonical versioning recorded across
 - **A busca em modo local rotula o resumo.** Mesmo relato: o resumo do modelo local inventou uma data e so o verificador percebeu. `search_vault` agora devolve `summary_source: "local_model"` e `summary_warning` quando o texto veio do modelo local, e o `doctor` diz no check `engine_mode` que, em modo local, todo resumo vem dele. `tests/test_search_resumo_local_rotulado.py`; sem o campo, 2 de 3 falham. Nao medido: a taxa de resumos errados, o relato cita um caso.
 
 ### Added
-- **Doctor avisa de chave desconhecida no `config.json`** (`check_config_keys`). `Config.load` descarta em silencio toda chave que nao e campo; no servidor gss o `llama_parallel` estava no arquivo e nao existia como campo. O aviso nomeia a chave e sugere o campo parecido (`llama_ctxx`, quis dizer `llama_ctx`?).
-- **`llama_parallel`** (padrao 1): quantos pedidos o llama-server atende ao mesmo tempo, enviado como `--parallel` quando maior que 1, e ajustavel pelo painel. Vinha de uma edicao sem commit no checkout antigo do Office do servidor.
-- **Reindex incremental compara o texto, nao so a data.** Quando a data de modificacao difere, o reindex compara os trechos que `index_note` gravaria com os que o indice ja tem; se forem iguais, so carimba a data nova e nao reembute. Medido no servidor gss em 04/11/2026: 41.685 de 81.478 notas com data de 28 a 29/10 (relink em massa) e BGE-m3 na CPU a 1,18 trechos por segundo, mais de dez horas de trabalho para texto que nao mudou. Trecho a mais ou a menos no indice, nota sem linhas e `force=True` seguem o caminho de sempre. Teste: `tests/test_reindex_por_conteudo.py`.
 - **`doctor` check `context_weight`: quanto o `~/.claude/CLAUDE.md` carrega em toda sessao, contando os `@imports`.** Avisa acima de 16 KB. Medido aqui: 48 KB (`AGENT_GUIDE.md` 47 KB). `tests/test_doctor_peso_do_contexto.py` (8 testes); com a leitura dos imports removida 3 falham, e um mutante que le `@` no meio da linha e pego.
 - **`doctor` check `ingest_registry` agora avisa fonte parada e fonte que falha em massa.** Parada: ultima carga ha mais de 14 dias. Falha: erros de pelo menos 25% da ultima carga. Relato de 04/11/2026: `Documents/Work` parada desde 29/09, com 791 erros, sem aviso algum. Entradas reconstruidas do indice nao tem data e sao ditas como "sem data", sem alarme. `tests/test_doctor_fonte_parada.py` (7 testes); cada limiar mutado e pego.
 
 ### Fixed
-- **`ingest_forget` acha a fonte registrada por caminho com link simbolico.** `forget` so procurava a grafia resolvida (`resolve()` segue o link); no servidor gss `/home/joey` e um link para `/home/GrimstoneSolutions`, e as 19 fontes mortas respondiam `registry_entry_removed: false` e continuavam no `ingest_status`. Agora casa as duas grafias, nas linhas do indice e no registro.
 - **Aliases gravados e lidos pelo YAML.** `ensure_aliases` so punha aspas quando o alias tinha `:#[]` e nao escapava aspas internas, e a leitura arrancava aspas que fazem parte do texto e devolvia um conjunto sem ordem. Medido em 04/11/2026: `@x`, `*x`, `!x`, `%x`, `'x`, `>x`, `|x` e `Decisao: servidor "x"` quebravam o frontmatter da nota inteira; origem de 62 das 352 notas ilegiveis do vault. Teste: `tests/test_alias_block_yaml.py`.
 - **Reparo do frontmatter ilegivel** (`reparo_frontmatter.reparar_frontmatter`): quota item de lista de fluxo e valor simples com `: `, recupera linhas `- ...` soltas como `aliases:`, nunca toca o corpo e desiste com o motivo quando nao ha reparo seguro. `sanitize_note` usa como rede de seguranca.
+- **Em `engine_mode: agent` o delegation-core subia o modelo local de 12B a cada nota escrita e o deixava carregado.** Medido em 04/11/2026: `write_note` e `vault_update_note` agendam a extracao de fatos (`fatos_vault.apos_escrita`), que chamava `perguntar_local` com `force_local=True` e subia o `llama-server`: 10 GB de VRAM ocupados, GPU em 0%, mais de 10 minutos depois da ultima chamada. A descarga por ociosidade (`local_idle_shutdown_sec`) so conhece o processo do `LocalTaskWorker`, e cada `perguntar_local` criava um motor descartavel que ficava dono de um processo que ninguem parava; os jobs noturnos de fatos, digestao e sonho faziam o mesmo. Decisao do usuario: em modo agent o servidor local fica desligado e, se a tarefa for grande, o job diz e pergunta. Agora `modelo_local_liberado(cfg)` e falso em modo agent, e a extracao na escrita, `fatos`, `digestao` e `sonho` adiam devolvendo `{"skipped": "agent_mode", "pending": N, "offer": ...}` com quanto falta e como autorizar. `local_em_modo_agent: true` e a autorizacao: o modelo sobe, o motor passa a ser um por porta (dono do processo) e um temporizador o desliga apos `local_idle_shutdown_sec` sem fila. Em local e hybrid nada muda. `tests/test_modo_agent_sem_modelo_local.py` (17 testes); onze mutantes de comportamento pegos, mais dois do temporizador e do motor compartilhado. Nao medido: o ganho de VRAM com a autorizacao ligada (o caminho foi testado com um motor falso, nao com o gemma).
+- **A digestao resumia a mesma transcricao varias vezes e resumia os proprios resumos.** Medido em 04/11/2026 rodando o job: das 15 notas criadas, so 12 fontes distintas; uma transcricao foi resumida 3 vezes e 2 resumos eram resumos de resumo. Causa: o nome do resumo herda o titulo da transcricao ("Resumo da sessao - Session Transcript ..."), casa com o filtro de transcricao bruta e entao nao era reconhecido como resumo; a original seguia pendente e o resumo entrava na fila. Junto, a troca do travessao (`replace`) rodava no corpo inteiro e adulterava a chave `digere:` e o wikilink de um stem com travessao, e a transcricao voltava a ser resumida. Agora o resumo se reconhece pelo cabecalho (`digere:`), nunca pelo nome, e a troca vale so para o texto que o modelo escreveu. Tres testes novos; dois mutantes pegos. As 15 notas de hoje foram saneadas a mao (as duplicadas e os resumos de resumo, movidos para fora do vault).
+- **`vault_rename_note` falhava para qualquer nota porque dez notas do vault nao sao UTF-8.** Achado em 04/11/2026: `'utf-8' codec can't decode byte 0x92`. A varredura de links so tolerava `OSError`, e um `UnicodeDecodeError` (rascunhos de certificados em Windows-1252, em `Reference/.../LD POST DRAFT`) abortava a renomeacao inteira. Agora essas notas ficam de fora da varredura, sem serem reescritas, e o resultado traz `skipped_unreadable` com os caminhos; um link que apontasse para a nota renomeada dentro de um desses arquivos nao e reapontado. `tests/test_rename_note.py`, mutante pego.
+- **A digestao criava notas com travessao no titulo, nos aliases e as vezes no nome do arquivo.** Em 04/11/2026, 14 das 15 notas criadas tinham o travessao do titulo da transcricao (o titulo da daily de 05/08, com dois travessoes separando data e parte), 3 delas tambem no nome; so o corpo era limpo. Travessao e meia-risca no titulo viram hifen. Teste e mutante pego.
+- **A digestao noturna ficava presa nas mesmas 5 notas-indice e nunca andava.** Medido em 04/11/2026 rodando o job de verdade, com o modelo local autorizado: `pendentes_antes: 357, feitos: 0, falhas: 5, restam: 352`, noite apos noite, desde pelo menos 28/10. As cinco da frente da fila eram notas-indice de reuniao dividida (1,3 a 1,7 KB, so links para `<nome>-parte-1` e `-parte-2`, onde esta a fala); o modelo respondia NOTHING em 0,4 s a cada uma, a falha nao era lembrada e as mesmas cinco consumiam a cota de `maximo` toda noite, deixando as outras 352 sem andar. Agora (1) a nota-indice nao entra na fila, porque suas partes ja estao nela; (2) nota em que o modelo nao acha o que resumir fica lembrada em `.digestao/vazias.json` (nome + tamanho + mtime, e volta a ser tentada se o arquivo mudar); (3) so resumo feito e erro real gastam a cota de `maximo`, com teto de 5 x `maximo` tentativas por execucao. O resultado leva `vazias`. `tests/test_digestao_fila.py` (7 testes); seis mutantes pegos. Medido na mesma execucao: o job de fatos extraiu as 94 notas pendentes (417 fatos, 0 falhas) em tres rodadas de 509, 384 e 130 s, com 12,15 GB de VRAM, e o modelo saiu sozinho 300 s depois do ultimo uso, sem zumbi (isso fecha o "nao medido" da entrada de modo agent).
+- **A agenda guardava so a contagem das falhas da digestao.** `digestao-noturna` acusava `falhas: 5, feitos: 0` todas as noites e o motivo se perdia no `{k: len(v)}` da acao. Agora o resultado leva `motivos` com os tres primeiros. A causa das 5 falhas continua desconhecida: a proxima execucao com o modelo liberado a mostra.
+- **O `doctor` dizia que o historico estava bem com o banco corrompido.** O agendador `historico-horario` falhou 166 vezes com `database disk image is malformed` e o check `note_history` so media o tamanho dos objetos. Agora ele roda `PRAGMA quick_check` em modo leitura e, se falhar, diz como reconstruir (`.recover`) e avisa para nao sincronizar `.historico/versoes.sqlite3*`: era um `rsync` bidirecional a cada 60 s que levava o banco vivo e o `-wal` de uma maquina para a outra. Tres testes.
+- **Treze ferramentas de `cores/` estavam sem escopo, e seis testes ja falhavam.** `dag_run` (executa shell), `convert_to_markdown` e `cores_multimodal_ingest` (leem caminho arbitrario), `cores_osint_hunt` (rede), `cores_platform_session` e `cores_selfhosted_route` (chama Vaultwarden e outros, com `user_token` padrao `local-admin`) exigem `write`; as informativas ficam em `read`. Seis testes falhavam desde `5bd37af`: 26 imports e 2 achados reais do pyflakes em `cores/` (chave `name` duplicada no gateway, variavel sem uso), `subprocess.run` sem `sem_janela()` em `dag_runner`, catalogo de erros desatualizado, a copia vendorizada do Headroom (diferia por uma linha deliberada de `c9ba453`, agora declarada no teste) e o limite de linhas de `vault.py` (1811 contra 2020 do monolito original, limite subido a 1900).
 - **`delegation-core update` instalava arquivos velhos do `build/` do checkout e podia quebrar o daemon.** Achado em 04/11/2026 ao atualizar esta maquina: depois do `update`, o `heartbeat` falhava com `module 'delegation_core.recuperacao' has no attribute 'reconstrucao_pendente'`. O pip constroi dentro do checkout e o setuptools reaproveita `build/lib`; um `build/` de 05/10 (ignorado pelo git) levava uma pasta `recuperacao/` que a fonte ja tinha trocado por `recuperacao.py`. O pip instalou as duas, a pasta venceu na importacao. Medido: com `build/` movido e o `update` repetido, a pasta sumiu do instalado e o `heartbeat` voltou. Agora `_pip_install` apaga so a saida do setuptools (`build/lib` e `build/bdist.*`) antes de instalar, e o fim do update (no codigo novo) confere o instalado: `verify_install` lista os `.py` que existem no pacote e a fonte nao tem, sem tratar como erro os arquivos que mudam em runtime (bancos). `tests/test_installer_update.py` (5 testes novos); cada um dos quatro mutantes testados e pego, depois de um teste fraco ser reforcado.
 - **`ingest_folder` recusa as pastas de sessoes de agentes (`~/.claude/projects`, `~/.codex/sessions`) e as pula quando estao dentro de uma pasta maior.** Relato de 04/11/2026: 1.824 trechos de sessoes do Claude Code no indice e um arquivo de configuracao de sessao como primeiro resultado de busca. Essas transcricoes ja chegam a `Sessions/` pelo hook de fim de sessao. Uma pasta declarada em `ingest_sources` vence a regra, porque quem a escreveu quer o conteudo. O retorno lista `skipped_agent_sessions`. `tests/test_ingest_sessoes_de_agentes.py`; tres mutantes pegos. Nao tratei o que ja esta no indice: quem ja ingeriu essas pastas remove com `ingest_forget`.
 
@@ -119,7 +431,6 @@ This changelog is derived directly from the canonical versioning recorded across
 - **O worker do modelo local regravava a fila inteira a cada 2 segundos, ocioso.** `claim_next` gravava o `local_tasks.json` inteiro com `fsync` mesmo quando nao havia nada para rodar nem tarefa agendada para promover. Com o arquivo de 2 MB medido em 06/10/2026, sao 43.200 regravacoes por dia num daemon parado. Agora so grava quando algo mudou.
 - **Cada consulta a fila local relia o arquivo inteiro.** `local_task_status` e companhia parseavam o JSON todo a cada chamada: 5,9 ms com 545 tarefas. A fila guarda o ultimo conteudo em memoria e so rele quando o arquivo muda por fora (caminho, mtime e tamanho): 0,02 ms.
 - **22 ferramentas MCP ainda rodavam no laco de eventos.** Eram `async` sem nenhum `await`, a mesma classe do travamento de 26/09 corrigido no PR 7; entre elas as `local_task_*`. Viraram `def` (threadpool), e as que gravam configuracao (`window_open/close`, `workspace_save/apply`, `graph_hook_install/uninstall`) levam a mesma trava de escrita das outras. `tests/test_ferramentas_fora_do_laco.py` falha se uma ferramenta async sem await voltar. Medido que o cliente continua identificado no threadpool com o fastmcp instalado (3.4.2); com fastmcp 4 ele se perde em toda ferramenta, async ou nao, e o pyproject segue travando `<4`.
-- **Mac com MLX: toda geracao local falhava.** O engine mandava `"model": "local"` fixo, e o `mlx_lm.server` trata o nome como um repositorio a carregar: medido em 06/10/2026 com mlx-lm 0.32, toda chamada voltava "Cannot find an appropriate cached snapshot". Com o servidor fora do ar, o engine ainda tentava subir o llama-server com `--ctx-size` e `-fa`, que o `mlx_lm.server` recusa. Novo campo `motor_local` (`llamacpp` ou `mlx`): com `mlx`, o pedido leva `"default_model"` (o modelo que o servidor subiu com `--model`), e o engine sobe o proprio `mlx_lm.server` com `--model`, `--host`, `--port` e `--chat-template-args`, esperando ate 300 s. `llama_model` aceita o id do repositorio no Hugging Face. Testado de ponta a ponta contra o `mlx_lm.server` real, com o servidor ja no ar e com o engine subindo-o. O `mlx-lm` 0.32 ja traz as arquiteturas novas (`qwen3_5`, `gemma4`, `gpt_oss`, `llama4`, `mistral4`); `docs/INSTALL_MAC_MLX.md` atualizado.
 - **Tarefa exclusiva com argumentos diferentes sumia.** Dois `ingest_folder_bg` seguidos, de pastas diferentes, voltavam com o mesmo `job_id`, e so a primeira pasta era indexada; a resposta do segundo ainda citava a propria pasta. Medido em 05/10/2026 com duas pastas de codigo. Agora uma tarefa exclusiva so se junta a outra com os mesmos argumentos; as demais esperam em `queued` e rodam uma por vez, mantendo a regra de nunca rodar duas ingestoes juntas. As respostas dos `_bg` dizem o estado real.
 - **`update` rodava os passos finais com o codigo da versao anterior.** O processo do `update` importa os modulos antes do `git pull` e do `pip install`, entao tudo que ele chamava depois vinha da versao velha. No update para a v0.15.0 os hooks de sessao nao foram registrados e tiveram de ser registrados a mao. Agora os passos que vem depois do pip (docs, hooks, servico) rodam num interpretador novo, pelo comando interno `update-finish`. Se o filho falhar, os passos rodam no processo atual como antes, e o passo `finish_in_new_code` do relatorio diz qual dos dois aconteceu. A correcao vale a partir do update seguinte a esta versao: o update que instala esta correcao ainda roda o codigo anterior.
 

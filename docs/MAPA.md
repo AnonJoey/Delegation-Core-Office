@@ -132,6 +132,13 @@ processo. A CLI que escreve no índice entrega o trabalho ao daemon
   delegation-core-office skill is installed under `~/.agents/skills/` without
   overwriting a user-owned skill.
 
+**Núcleos consolidados do ecossistema local (`cores/`)**
+- `cores/unified_facade.py`: `UnifiedCoresBridge`, fachada única de invocação e despacho FastMCP.
+- `cores/agent_harness/`: `SkillsRegistry` (catálogo SQLite FTS5 construído na máquina em `~/.delegation_core/skills.db`), `PromptSanitizer` (anti-slop e limpeza de clichês), `ReverseEngTool` (análise estática AST), `BrowserTool` e `WorkspaceTool`.
+- `cores/multimodal/`: `MultimodalPipeline` (roteamento por extensão), `MarkItDown` (conversor local multi-formato), `OCREngine` (Tesseract), `SpeechToTextEngine` (Whisper), `TextToSpeechEngine` (Audiblez) e `DiagramGenerator` (Mermaid).
+- `cores/orchestration/`: `DAGEngine` (execução assíncrona com SQLite WAL), `DAGRunner` (YAML), `AgentTaskQueue` (fila multiagente com prioridade), `AutonomousCIRunner` (Pullfrog) e `LLMTelemetryTracker` (LangWatch com persistência central).
+- `cores/platform/`: `UnifiedLocalPlatform` (sessão de agente local), `TokenPruningEngine` (poda de tokens com CCR reversível via `ccr.Guarda`), `AgentExecutionGuard` (travas atômicas com TTL e orçamento Hermes), `CodeGraphEngine` (grafo em memória Cypher), `HardwareSupervisor` (telemetria Corsair Btrfs NVMe), `VoiceboxEngine` e `CodeSweeperAndNet`.
+
 **Fora do pacote**
 - `dashboard/`: a casca Tauri e a interface.
 - `skills/`: skills distribuídas junto, só as de licença aberta (Apache 2.0 ou MIT) e a do próprio delegation-core. As de documento da Anthropic (docx, pdf, pptx, xlsx) saíram em 16/11/2026: a licença delas proíbe copiar e distribuir.

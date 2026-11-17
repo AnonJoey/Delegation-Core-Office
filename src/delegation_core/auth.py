@@ -44,6 +44,12 @@ logger = logging.getLogger("auth")
 LOCAL_CLIENT_ID = "delegation-core-local"
 
 
+
+def _iguais(a: str, b: str) -> bool:
+    """compare_digest em bytes: com str, um caractere nao ASCII levanta TypeError."""
+    return hmac.compare_digest(a.encode("utf-8", "surrogatepass"),
+                               b.encode("utf-8", "surrogatepass"))
+
 class LocalTokenAuth(AuthProvider):
     """Accepts exactly one shared secret, presented as ``Authorization: Bearer``.
 
@@ -54,9 +60,13 @@ class LocalTokenAuth(AuthProvider):
     authorization server behind it.
     """
 
-    def __init__(self, token: str, base_url: str | None = None):
+    def __init__(self, token: str, base_url: str | None = None, tokens_nomeados=None):
         super().__init__(base_url=base_url)
         self._token = token or ""
+        # Tokens por cliente com escopo (escopos.py): funcao que devolve
+        # {nome: {"token": ..., "scope": "read"|"write"}}. Funcao, e nao dict,
+        # para criar e revogar token valer sem reiniciar o daemon.
+        self._nomeados = tokens_nomeados or (lambda: {})
         if not self._token:
             # Reachable only if something constructed this directly instead of
             # going through ensure_server_token(). Fail closed and say so: a
@@ -69,13 +79,24 @@ class LocalTokenAuth(AuthProvider):
     async def verify_token(self, token: str) -> AccessToken | None:
         # compare_digest over the raw strings: a plain == leaks how many leading
         # characters matched through timing. Cheap to do right, so do it right.
-        if not self._token or not token:
+        if not token:
             return None
         # Em bytes: compare_digest levanta TypeError para str com caractere nao
         # ASCII, e o cabecalho e entrada de quem chama. Medido em 16/11/2026:
         # `Authorization: Bearer cafe` com acento devolvia 500 em vez de 401.
-        if not hmac.compare_digest(token.encode("utf-8", "surrogatepass"),
-                                   self._token.encode("utf-8", "surrogatepass")):
-            logger.warning("Rejected an MCP request carrying an invalid bearer token")
-            return None
-        return AccessToken(token=token, client_id=LOCAL_CLIENT_ID, scopes=[])
+        # Vale para o token mestre e para os tokens por cliente.
+        if self._token and _iguais(token, self._token):
+            return AccessToken(token=token, client_id=LOCAL_CLIENT_ID, scopes=["master"])
+        from .escopos import escopos_de
+        try:
+            nomeados = self._nomeados() or {}
+        except Exception as e:  # noqa: BLE001 - config ilegivel: so o mestre passa
+            logger.warning("client tokens unreadable: %s", e)
+            nomeados = {}
+        for nome, d in nomeados.items():
+            t = (d or {}).get("token", "")
+            if t and _iguais(token, t):
+                return AccessToken(token=token, client_id=f"client:{nome}",
+                                   scopes=escopos_de((d or {}).get("scope", "read")))
+        logger.warning("Rejected an MCP request carrying an invalid bearer token")
+        return None

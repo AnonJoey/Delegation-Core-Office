@@ -53,8 +53,19 @@ class ProcessTracker:
 
     # ── public API ────────────────────────────────────────────────────────────
 
-    def create(self, name: str, description: str = "", steps: list | None = None) -> dict:
-        with self._lock:
+    def _travado(self):
+        """Trava de thread E de processo: daemon, painel e CLI gravam o mesmo
+        arquivo, e o claim so e atomico se ninguem ler no meio."""
+        from contextlib import ExitStack
+        from .locking import arquivo_travado
+        pilha = ExitStack()
+        pilha.enter_context(self._lock)
+        pilha.enter_context(arquivo_travado(self.store_path))
+        return pilha
+
+    def create(self, name: str, description: str = "", steps: list | None = None,
+               parent: str = "", blocked_by: list | None = None) -> dict:
+        with self._travado():
             processes = self._read()
             proc = {
                 "id": "proc_" + uuid.uuid4().hex[:6],
@@ -69,6 +80,11 @@ class ProcessTracker:
                 ],
                 "notes": [],
             }
+            if parent:
+                pai = _find_process(processes, parent)
+                proc["parent"] = pai["id"] if pai else parent
+            if blocked_by:
+                proc["blocked_by"] = [(_find_process(processes, b) or {"id": b})["id"] for b in blocked_by]
             processes.append(proc)
             self._write(processes)
             logger.info("Process created: %s (%s)", proc["id"], name)
@@ -96,8 +112,10 @@ class ProcessTracker:
         note: str = "",
         step_done: int = -1,
         status: str = "",
+        evidence: str = "",
+        blocked_by: list | None = None,
     ) -> dict | None:
-        with self._lock:
+        with self._travado():
             processes = self._read()
             proc = _find_process(processes, process_id)
             if proc is None:
@@ -121,18 +139,138 @@ class ProcessTracker:
                         step_done, process_id, len(steps),
                     )
 
+            if evidence:
+                proc.setdefault("evidence", []).append({"text": evidence, "timestamp": _now()})
+                changed = True
+
+            if blocked_by is not None:
+                proc["blocked_by"] = [(_find_process(processes, b) or {"id": b})["id"]
+                                      for b in blocked_by if b]
+                changed = True
+
             if status:
                 if status not in VALID_STATUSES:
                     logger.warning("Invalid status '%s' ignored", status)
                 else:
                     proc["status"] = status
                     changed = True
+                    if status == "done":
+                        # O vigia de verificacao do Paperclip: "feito" sem
+                        # evidencia fica marcado, nao recusado.
+                        proc["verification"] = "verified" if proc.get("evidence") else "missing_evidence"
+                    if status in ("done", "cancelled"):
+                        proc.pop("owner", None)
+                        proc.pop("claimed_at", None)
 
             if changed:
                 proc["updated"] = _now()
                 self._write(processes)
 
             return proc
+
+    def claim(self, process_id: str, owner: str, stale_hours: float = 24.0,
+              force: bool = False) -> dict:
+        """Pega o processo para `owner`, atomico entre processos.
+
+        {"process": ...} se pegou (ou ja era dele); {"error": ..., "owner": ...}
+        se outro tem e o claim nao esta velho. Claim velho (sem atualizacao ha
+        `stale_hours`) pode ser tomado, e a nota registra de quem.
+        """
+        from datetime import timedelta
+        with self._travado():
+            processes = self._read()
+            proc = _find_process(processes, process_id)
+            if proc is None:
+                return {"error": f"Process not found: {process_id}"}
+            if proc["status"] != "active":
+                return {"error": f"process is {proc['status']}, not active"}
+            dono = proc.get("owner")
+            if dono and dono != owner and not force:
+                ref = proc.get("claimed_at") or proc["updated"]
+                if proc["updated"] > ref:
+                    ref = proc["updated"]
+                velho = datetime.fromisoformat(ref) < datetime.now() - timedelta(hours=stale_hours)
+                if not velho:
+                    return {"error": f"already claimed by {dono}", "owner": dono, "claimed_at": proc.get("claimed_at")}
+                proc["notes"].append({"text": f"claim taken from {dono} (stale) by {owner}", "timestamp": _now()})
+            abertos = [b for b in proc.get("blocked_by", [])
+                       if (_find_process(processes, b) or {}).get("status") != "done"]
+            if abertos and not force:
+                return {"error": "blocked", "blocked_by": abertos}
+            proc["owner"] = owner
+            proc["claimed_at"] = _now()
+            proc["updated"] = _now()
+            self._write(processes)
+            return {"process": proc}
+
+    def release(self, process_id: str, owner: str) -> dict:
+        with self._travado():
+            processes = self._read()
+            proc = _find_process(processes, process_id)
+            if proc is None:
+                return {"error": f"Process not found: {process_id}"}
+            if proc.get("owner") not in (None, owner):
+                return {"error": f"claimed by {proc['owner']}, not {owner}"}
+            proc.pop("owner", None)
+            proc.pop("claimed_at", None)
+            proc["updated"] = _now()
+            self._write(processes)
+            return {"process": proc}
+
+    def watchdog(self, stale_days: float = 7.0) -> dict:
+        """O que precisa de olho: parado, claim esquecido, feito sem evidencia,
+        bloqueado por processo cancelado ou inexistente, e ciclo de bloqueio."""
+        from datetime import timedelta
+        processes = self._read()
+        por_id = {p["id"]: p for p in processes}
+        corte = (datetime.now() - timedelta(days=stale_days)).isoformat(timespec="seconds")
+        achados = {"stale": [], "stale_claims": [], "done_without_evidence": [],
+                   "bad_blockers": [], "blocked": [], "cycles": []}
+        for p in processes:
+            ref = {"id": p["id"], "name": p["name"]}
+            if p["status"] == "active" and p["updated"] < corte:
+                achados["stale"].append({**ref, "updated": p["updated"]})
+                if p.get("owner"):
+                    achados["stale_claims"].append({**ref, "owner": p["owner"]})
+            if p["status"] == "done" and p.get("verification") == "missing_evidence":
+                achados["done_without_evidence"].append(ref)
+            if p["status"] == "active":
+                for b in p.get("blocked_by", []):
+                    alvo = por_id.get(b)
+                    if alvo is None or alvo["status"] == "cancelled":
+                        achados["bad_blockers"].append({**ref, "blocker": b,
+                                                        "reason": "missing" if alvo is None else "cancelled"})
+                    elif alvo["status"] != "done":
+                        achados["blocked"].append({**ref, "blocker": b})
+        # Busca em profundidade por todas as arestas, nao so a primeira de cada no.
+        cor: dict[str, int] = {}
+        pilha: list[str] = []
+        vistos: set = set()
+
+        def visitar(no: str) -> None:
+            cor[no] = 1
+            pilha.append(no)
+            for b in por_id[no].get("blocked_by", []):
+                if b not in por_id:
+                    continue
+                if cor.get(b) == 1:
+                    ciclo = pilha[pilha.index(b):]
+                    if frozenset(ciclo) not in vistos:
+                        vistos.add(frozenset(ciclo))
+                        achados["cycles"].append(list(ciclo))
+                elif not cor.get(b):
+                    visitar(b)
+            pilha.pop()
+            cor[no] = 2
+
+        for no in por_id:
+            if not cor.get(no):
+                visitar(no)
+        achados["count"] = sum(len(v) for v in achados.values())
+        return achados
+
+    def children(self, process_id: str) -> list:
+        return [p for p in self._read() if p.get("parent") == process_id]
 
     def summary(self) -> dict:
         """Compact summary for heartbeat — counts and active process names."""

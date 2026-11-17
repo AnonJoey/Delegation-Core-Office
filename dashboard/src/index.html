@@ -75,6 +75,21 @@
           <button class="ribbon-btn" data-tab="fleet" title="Fleet Inspector  (Ctrl+4)" aria-label="Fleet Inspector">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect><rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect><line x1="6" y1="6" x2="6.01" y2="6"></line><line x1="6" y1="18" x2="6.01" y2="18"></line></svg>
           </button>
+          <button class="ribbon-btn" data-tab="skills" title="Agent Skills & Prompt Sanitizer Studio" aria-label="Skills & Sanitizer">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+          </button>
+          <button class="ribbon-btn" data-tab="orchestrator" title="Visual DAG Flow & LangWatch Tracing" aria-label="Orchestrator & DAG">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="3"></circle><circle cx="18" cy="6" r="3"></circle><circle cx="18" cy="18" r="3"></circle><path d="M8.5 7.5l7 7M9 6h6M18 9v6"></path></svg>
+          </button>
+          <button class="ribbon-btn" data-tab="multimodal" title="Multimodal Lab (MarkItDown, OCR, Speech, Mermaid)" aria-label="Multimodal Media">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+          </button>
+          <button class="ribbon-btn" data-tab="telemetry" title="Homelab Telemetry & System Guards (Corsair Btrfs, CPU, Locks)" aria-label="Homelab Telemetry">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>
+          </button>
+          <button class="ribbon-btn" data-tab="vigia" title="Vigia: alerts, schedule, recall, usage  (Ctrl+5)" aria-label="Vigia">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+          </button>
           <span class="ribbon-indicator" id="tab-indicator" aria-hidden="true"></span>
           <div class="ribbon-spacer"></div>
           <div class="ribbon-select-wrap" title="Engine mode">
@@ -156,6 +171,7 @@
                     <div class="search-input-group">
                       <input type="search" id="vector-search-input" placeholder="Search concepts, topics, or queries..." autocomplete="off" />
                       <button id="vector-search-btn" class="btn-primary">Search</button>
+                      <button id="vector-ask-btn" class="btn-secondary-sm" title="Answer from the vault with the local model; only claims whose quotes check out are shown">Ask</button>
                     </div>
                   </div>
                   <div class="search-results-pane" id="vector-search-results">
@@ -168,6 +184,71 @@
           <div class="dock-panel" id="dock-fleet">
             <div class="mcp-conn-list" id="mcp-conn-list">
               <div class="pane-state"><div class="pane-state-title">Scanning connections…</div></div>
+            </div>
+          </div>
+          <!-- Dock: Skills -->
+          <div class="dock-panel" id="dock-skills">
+            <div class="dock-panel-inner">
+              <div class="notes-toolbar">
+                <div class="search-box">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                  <input type="search" id="skills-filter" placeholder="Search 3,162 skills..." autocomplete="off" spellcheck="false" />
+                </div>
+              </div>
+              <div class="dock-meta-bar">
+                <span class="badge-accent" id="skills-count-badge">3,162 Skills</span>
+                <span class="text-subtle">FTS5 Engine</span>
+              </div>
+              <div class="dock-item-list" id="skills-list">
+                <div class="pane-state"><div class="spinner"></div><div class="pane-state-title">Loading skills database…</div></div>
+              </div>
+            </div>
+          </div>
+          <!-- Dock: Orchestrator DAG -->
+          <div class="dock-panel" id="dock-orchestrator">
+            <div class="dock-panel-inner">
+              <div class="tasks-toolbar">
+                <span class="dock-section-title">Pipelines & Workflows</span>
+                <button id="btn-run-dag-workflow" class="btn-primary-sm" type="button">▶ Run DAG</button>
+              </div>
+              <div class="dock-item-list" id="dag-runs-list">
+                <div class="pane-state"><div class="pane-state-title">No DAG runs yet</div><div class="pane-state-hint">Click 'Run DAG' to execute a workflow.</div></div>
+              </div>
+            </div>
+          </div>
+          <!-- Dock: Multimodal -->
+          <div class="dock-panel" id="dock-multimodal">
+            <div class="dock-panel-inner">
+              <div class="dock-header-sub">
+                <span class="dock-section-title">Multimodal Studio</span>
+              </div>
+              <div class="quick-nav-list">
+                <button class="quick-nav-btn active" data-mm-panel="converter">Universal Ingestion (MarkItDown/OCR)</button>
+                <button class="quick-nav-btn" data-mm-panel="diagram">DeepDiagram (Mermaid)</button>
+              </div>
+            </div>
+          </div>
+          <!-- Dock: Homelab Telemetry -->
+          <div class="dock-panel" id="dock-telemetry">
+            <div class="dock-panel-inner">
+              <div class="dock-header-sub">
+                <span class="dock-section-title">Platform & Hardware</span>
+                <button id="btn-refresh-telemetry" class="btn-icon-only" title="Refresh metrics">↻</button>
+              </div>
+              <div class="telemetry-glance" id="telemetry-glance-view">
+                <div class="glance-metric">
+                  <span class="glance-label">NVMe Btrfs (@home)</span>
+                  <span class="glance-val" id="glance-nvme">Checking…</span>
+                </div>
+                <div class="glance-metric">
+                  <span class="glance-label">CPU Load (1m / 5m)</span>
+                  <span class="glance-val" id="glance-load">-- / --</span>
+                </div>
+                <div class="glance-metric">
+                  <span class="glance-label">Agent Concurrency</span>
+                  <span class="glance-val" id="glance-locks">0 locks</span>
+                </div>
+              </div>
             </div>
           </div>
         </aside>
@@ -189,6 +270,7 @@
                     <button class="btn-action-sm" id="btn-save-note" title="Save changes" hidden>Save</button>
                     <button class="btn-action-sm" id="btn-cancel-edit" title="Discard changes" hidden>Cancel</button>
                     <button class="btn-action-sm" id="btn-rename-note" title="Rename this note and repoint links to it">Rename</button>
+                    <button class="btn-action-sm" id="btn-note-history" title="Saved versions of this note: diff and restore">History</button>
                     <button class="btn-action-sm" id="btn-new-note" title="Create a note in this folder">New</button>
                     <button class="btn-action-sm" id="btn-copy-path" title="Copy note path">Copy Path</button>
                   </div>
@@ -208,6 +290,7 @@
                   <textarea id="note-editor" class="note-editor" hidden spellcheck="false"></textarea>
                   <div id="note-editor-status" class="note-editor-status" hidden></div>
                   <div id="note-links" class="note-links" hidden></div>
+                  <div id="note-history" class="note-history" hidden></div>
                 </div>
               </div>
             </div>
@@ -244,6 +327,294 @@
                 <div class="pane-state">
                   <div class="spinner"></div>
                   <div class="pane-state-title">Scanning connected clients…</div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Tab 5: Vigia (alertas, agenda, recordacao, uso) -->
+          <section class="tab-content" id="tab-vigia">
+            <div class="fleet-inspector vigia">
+              <div class="fleet-header">
+                <div>
+                  <h2>Vigia</h2>
+                  <p class="muted" id="vigia-sub">Alerts, scheduled tasks, what search recalls, and what each tool costs.</p>
+                </div>
+                <button id="vigia-refresh-btn" class="btn-secondary-sm">Refresh</button>
+              </div>
+              <div class="vigia-grid">
+                <div class="vigia-card"><h3>Needs attention</h3><div id="vigia-atencao"></div></div>
+                <div class="vigia-card"><h3>Facts</h3>
+                  <div style="display:flex; gap:6px; margin-bottom:8px;">
+                    <input type="search" id="fatos-q" placeholder="subject, attribute or value (e.g. llama port)" autocomplete="off" style="flex:1" />
+                    <button id="fatos-buscar" class="btn-secondary-sm">Find</button>
+                    <button id="fatos-divergentes" class="btn-secondary-sm" title="Where notes disagree">Disagreements</button>
+                  </div>
+                  <div id="vigia-fatos"></div></div>
+                <div class="vigia-card"><h3>Alerts</h3><div id="vigia-alertas"></div></div>
+                <div class="vigia-card"><h3>Schedule</h3><div id="vigia-agenda"></div></div>
+                <div class="vigia-card"><h3>Recall</h3><div id="vigia-recordacao"></div></div>
+                <div class="vigia-card"><h3>Tool usage</h3><div id="vigia-uso"></div></div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Tab: Skills & Prompt Sanitizer Studio -->
+          <section class="tab-content" id="tab-skills">
+            <div class="skills-studio">
+              <div class="studio-header">
+                <div>
+                  <h2>Agent Skills & Prompt Sanitizer Studio</h2>
+                  <p class="muted">SQLite FTS5 Registry (3,162 skills) + Anti-Slop / Anti-Hallucination Purifier.</p>
+                </div>
+                <div class="badge-group">
+                  <span class="badge-status online">FTS5 Active</span>
+                  <span class="badge-accent" id="skills-studio-count">3,162 Indexed</span>
+                </div>
+              </div>
+
+              <div class="skills-split-layout">
+                <!-- Left: Skill Inspector -->
+                <div class="skill-inspector-panel">
+                  <div class="panel-card" id="skill-inspector-card">
+                    <div class="pane-state">
+                      <div class="pane-state-title">Select a Skill</div>
+                      <div class="pane-state-hint">Choose a skill from the left dock to inspect metadata and execution prompt.</div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Right: Prompt Sanitizer Sandbox -->
+                <div class="sanitizer-panel">
+                  <div class="panel-card">
+                    <div class="panel-header-row">
+                      <h3>Anti-Slop Prompt Sanitizer</h3>
+                      <span class="badge-subtle" id="sanitizer-score-badge">Score: --</span>
+                    </div>
+                    <p class="subtle-text">Audit prompts for buzzwords, hyperbole, and vagueness, generating factual purified variants.</p>
+                    
+                    <div class="sanitizer-input-wrap">
+                      <textarea id="sanitizer-input" placeholder="Paste prompt or agent output to audit and purify..." rows="4"></textarea>
+                      <button id="btn-sanitize-prompt" class="btn-primary">Audit & Purify</button>
+                    </div>
+
+                    <div class="sanitizer-audit-results" id="sanitizer-results-box" hidden>
+                      <div class="audit-cliches-row">
+                        <span class="cliches-label">Detected Patterns:</span>
+                        <div id="sanitizer-cliches-chips" class="cliches-chips"></div>
+                      </div>
+                      <div class="purified-output-block">
+                        <div class="block-header">
+                          <span>Factual Purified Version</span>
+                          <button id="btn-copy-purified" class="btn-action-sm">Copy</button>
+                        </div>
+                        <pre id="sanitizer-purified-text"></pre>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Tab: Orchestrator Visual DAG & LangWatch -->
+          <section class="tab-content" id="tab-orchestrator">
+            <div class="orchestrator-studio">
+              <div class="studio-header">
+                <div>
+                  <h2>Visual DAG Pipelines & LangWatch Tracing</h2>
+                  <p class="muted">Dagu asynchronous DAG runner with LangWatch distributed span tracing.</p>
+                </div>
+                <div style="display:flex; gap:8px;">
+                  <button id="btn-trigger-workflow" class="btn-primary">▶ Execute Workflow</button>
+                </div>
+              </div>
+
+              <!-- DAG Flow Viewer -->
+              <div class="dag-visualizer-card">
+                <div class="panel-header-row">
+                  <h3>Execution Flow Graph (Dagu DAG)</h3>
+                  <span class="badge-status online" id="dag-status-pill">Ready</span>
+                </div>
+                <div class="dag-canvas-container" id="dag-canvas-container">
+                  <div class="dag-nodes-flow" id="dag-flow-nodes">
+                    <div class="dag-node completed">
+                      <span class="node-title">1. Context Ingest</span>
+                      <span class="node-detail">150 in / 40 out</span>
+                    </div>
+                    <div class="dag-node-connector">➔</div>
+                    <div class="dag-node completed">
+                      <span class="node-title">2. Headroom Pruner</span>
+                      <span class="node-detail">110 in / 30 out</span>
+                    </div>
+                    <div class="dag-node-connector">➔</div>
+                    <div class="dag-node completed">
+                      <span class="node-title">3. Agent Execution</span>
+                      <span class="node-detail">280 in / 120 out</span>
+                    </div>
+                    <div class="dag-node-connector">➔</div>
+                    <div class="dag-node completed">
+                      <span class="node-title">4. LangWatch Span</span>
+                      <span class="node-detail">50 in / 25 out</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- LangWatch Spans Waterfall Table -->
+              <div class="spans-table-card">
+                <div class="panel-header-row">
+                  <h3>LangWatch Spans Waterfall</h3>
+                  <span class="text-subtle" id="spans-summary-text">Telemetry Active</span>
+                </div>
+                <div class="table-responsive">
+                  <table class="telemetry-table" id="langwatch-spans-table">
+                    <thead>
+                      <tr>
+                        <th>Trace ID</th>
+                        <th>Span / Step</th>
+                        <th>Model</th>
+                        <th>Tokens In</th>
+                        <th>Tokens Out</th>
+                        <th>Duration</th>
+                        <th>Timeline</th>
+                      </tr>
+                    </thead>
+                    <tbody id="spans-table-body">
+                      <tr><td colspan="7" class="muted text-center">No trace executions yet. Click "Execute Workflow" above.</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Tab: Multimodal Media Lab -->
+          <section class="tab-content" id="tab-multimodal">
+            <div class="multimodal-studio">
+              <div class="studio-header">
+                <div>
+                  <h2>Multimodal Media Lab</h2>
+                  <p class="muted">MarkItDown Universal Conversion + OCRmyPDF + DeepDiagram (Mermaid).</p>
+                </div>
+                <div class="badge-group">
+                  <span class="badge-accent">MarkItDown</span>
+                  <span class="badge-accent">OCRmyPDF</span>
+                  <span class="badge-accent">DeepDiagram</span>
+                </div>
+              </div>
+
+              <div class="multimodal-grid">
+                <!-- Panel 1: Document & File Ingestion -->
+                <div class="panel-card">
+                  <h3>Universal File Ingestion</h3>
+                  <p class="subtle-text">Extract Markdown from PDF, DOCX, XLSX, PPTX, HTML, or scanned images.</p>
+                  <div class="form-row-action">
+                    <input type="text" id="mm-file-input" placeholder="Absolute or relative file path (e.g. README.md)..." />
+                    <button id="btn-mm-convert" class="btn-primary">Ingest & Convert</button>
+                  </div>
+                  <div class="markdown-preview-box" id="mm-convert-preview">
+                    <div class="pane-state"><div class="pane-state-title">Ready for File Ingestion</div><div class="pane-state-hint">Specify a path above to extract clean Markdown.</div></div>
+                  </div>
+                </div>
+
+                <!-- Panel 2: DeepDiagram Mermaid Studio -->
+                <div class="panel-card">
+                  <h3>DeepDiagram Architecture Studio</h3>
+                  <p class="subtle-text">Generate architecture diagrams in Mermaid format.</p>
+                  <div class="form-row-action">
+                    <input type="text" id="mm-diagram-prompt" placeholder="Prompt (e.g. Microservices Auth Gateway -> Service A, B)..." />
+                    <button id="btn-mm-generate-diagram" class="btn-primary">Generate Diagram</button>
+                  </div>
+                  <div class="diagram-output-container">
+                    <div class="diagram-code-pane" id="mm-diagram-code-pane">
+                      <pre id="mm-diagram-code">flowchart TD
+    A[Entrada Multimodal] --> B[Extracao e OCR]
+    B --> C[Processamento LLM]
+    C --> D[Saida Estruturada]</pre>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Tab: Homelab Telemetry & Guards -->
+          <section class="tab-content" id="tab-telemetry">
+            <div class="telemetry-studio">
+              <div class="studio-header">
+                <div>
+                  <h2>Homelab Platform Telemetry & Guards</h2>
+                  <p class="muted">Corsair MP600 NVMe (Btrfs), Host Load, Paperclip Locks & Headroom AST Pruner.</p>
+                </div>
+                <button id="btn-telemetry-full-refresh" class="btn-secondary-sm">↻ Refresh Metrics</button>
+              </div>
+
+              <div class="telemetry-cards-grid">
+                <!-- Card 1: NVMe Corsair MP600 (Btrfs) -->
+                <div class="panel-card telemetry-card">
+                  <div class="panel-header-row">
+                    <h3>Corsair MP600 NVMe (@home)</h3>
+                    <span class="badge-status online" id="hw-btrfs-status">HEALTHY</span>
+                  </div>
+                  <div class="gauge-container">
+                    <div class="gauge-bar-wrapper">
+                      <div class="gauge-bar-fill" id="hw-btrfs-fill" style="width: 25%;"></div>
+                    </div>
+                    <div class="gauge-labels-row">
+                      <span id="hw-btrfs-used-pct">--% used</span>
+                      <span id="hw-btrfs-free-gb">-- GB free of -- GB</span>
+                    </div>
+                  </div>
+                  <div class="card-detail-subtext">Filesystem: Btrfs subvolume @home | Mount: /home</div>
+                </div>
+
+                <!-- Card 2: Host CPU Load -->
+                <div class="panel-card telemetry-card">
+                  <div class="panel-header-row">
+                    <h3>Host System Load</h3>
+                    <span class="badge-accent">Linux x86_64</span>
+                  </div>
+                  <div class="load-metrics-row">
+                    <div class="load-metric-box">
+                      <span class="metric-num" id="hw-load-1m">0.00</span>
+                      <span class="metric-tag">1 min avg</span>
+                    </div>
+                    <div class="load-metric-box">
+                      <span class="metric-num" id="hw-load-5m">0.00</span>
+                      <span class="metric-tag">5 min avg</span>
+                    </div>
+                  </div>
+                  <div class="card-detail-subtext">Supervisor: HardwareSupervisor</div>
+                </div>
+
+                <!-- Card 3: Agent Execution Guard & Concurrency -->
+                <div class="panel-card telemetry-card">
+                  <div class="panel-header-row">
+                    <h3>Paperclip Concurrency Guard</h3>
+                    <span class="badge-status online">Active Locks</span>
+                  </div>
+                  <div class="guard-stat-row">
+                    <span>Max Concurrent Agents: <strong>4</strong></span>
+                    <span>Iteration Budget: <strong>30</strong></span>
+                  </div>
+                  <div class="card-detail-subtext">Atomic lockfiles guard ~/.delegation_core against concurrent drift.</div>
+                </div>
+
+                <!-- Card 4: Headroom & RTK AST Token Pruning Simulator -->
+                <div class="panel-card telemetry-card full-width">
+                  <div class="panel-header-row">
+                    <h3>Headroom & RTK Context Pruning Simulator</h3>
+                    <span class="badge-accent">8-Stage AST Reduction</span>
+                  </div>
+                  <p class="subtle-text">Simulate token compression on large source files or prompts before dispatching to LLM.</p>
+                  <div class="pruner-playground">
+                    <textarea id="prune-test-input" rows="3" placeholder="Paste source code or long prompt to test AST compression..."></textarea>
+                    <div class="prune-action-bar">
+                      <button id="btn-test-prune" class="btn-primary-sm">Run Pruning Benchmark</button>
+                      <span class="prune-stats-badge" id="prune-stats-result" hidden>Reduction: --% | Saved: -- tokens</span>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
