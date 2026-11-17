@@ -21,7 +21,7 @@ class _G:
 
 
 def test_casos_do_oraculo():
-    casos = json.loads((FIX / "diff_oraculo.json").read_text())["cases"]
+    casos = json.loads((FIX / "diff_oraculo.json").read_text(encoding="utf-8"))["cases"]
     for c in casos:
         r = DiffCompressor().compress(c["input"], c["context"], store=_G())
         assert r.compressed == c["compressed"], c["context"]

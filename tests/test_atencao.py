@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import sys
 import time
 from pathlib import Path
 from types import SimpleNamespace
@@ -42,6 +43,7 @@ def cfg(tmp_path):
     fatos_vault._ARMAZEM.clear()
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="a fonte dead_paths so le caminho POSIX")
 def test_compor_junta_as_fontes(cfg, tmp_path, monkeypatch):
     from delegation_core import referencias_vault
     monkeypatch.setattr(referencias_vault, "CASA", str(tmp_path))

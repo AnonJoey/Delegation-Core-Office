@@ -61,6 +61,7 @@ def _uso(t0: float, **extra) -> list[dict]:
 
 
 def _fm_ler(texto: str) -> tuple[dict, str]:
+    texto = texto.replace("\r\n", "\n")   # nota gravada no Windows tem CR
     if not texto.startswith("---\n"):
         return {}, texto
     fim = texto.find("\n---\n", 4)

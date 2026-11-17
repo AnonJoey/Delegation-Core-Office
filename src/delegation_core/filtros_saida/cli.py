@@ -26,6 +26,18 @@ import sys
 _COMPOSTO = re.compile(r"[|;&<>`\n]|\$\(")
 
 
+
+def _no_shell(comando: str):
+    """(argv, shell=) para rodar `comando` no shell do sistema.
+
+    `sh -c` onde houver `sh` (Linux, macOS, Windows com o Git Bash no PATH); sem ele, o shell
+    padrao do Python (`cmd.exe` no Windows). Ate 17/11/2026 era "/bin/sh" fixo, e no Windows
+    todo `delegation-core shell` dava FileNotFoundError."""
+    import os
+    import shutil
+    sh = shutil.which("sh") or ("/bin/sh" if os.path.exists("/bin/sh") else None)
+    return ([sh, "-c", comando], False) if sh else (comando, True)
+
 def cmd_run(args) -> int:
     from . import execucao, motor
     comando = args.comando
@@ -44,13 +56,15 @@ def cmd_run(args) -> int:
         # Modulo do RTK portado: stdout e stderr juntos, como no RTK, salvo o
         # modulo que o RTK roda com `stdout_only` (o stderr segue para o stderr).
         so_stdout = getattr(achado[1], "SO_STDOUT", False)
-        p = subprocess.run(["/bin/sh", "-c", modulos.comando_do_rtk(comando)], stdout=subprocess.PIPE,
+        argv, usar_shell = _no_shell(modulos.comando_do_rtk(comando))
+        p = subprocess.run(argv, shell=usar_shell, stdout=subprocess.PIPE,
                            stderr=None if so_stdout else subprocess.STDOUT)
         print(modulos.aplicar(comando, p.stdout.decode("utf-8", "replace"), p.returncode, injetado=True)["output"])
         return p.returncode
     f = motor.achar(comando)
     juntar = bool(f and f.filter_stderr)
-    p = subprocess.run(["/bin/sh", "-c", comando], stdout=subprocess.PIPE,
+    argv, usar_shell = _no_shell(comando)
+    p = subprocess.run(argv, shell=usar_shell, stdout=subprocess.PIPE,
                        stderr=subprocess.PIPE if juntar else None)
     saida = p.stdout.decode("utf-8", "replace")
     if juntar:

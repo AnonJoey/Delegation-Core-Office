@@ -18,14 +18,16 @@ _FRONTMATTER = re.compile(r"^---\n(.*?)\n---\n", re.DOTALL)
 def ler_cabeca(caminho: Path, n: int = CABECA_BYTES) -> str | None:
     try:
         with Path(caminho).open("rb") as f:
-            return f.read(n).decode("utf-8", errors="ignore")
+            # CRLF vira LF: nota gravada no Windows tem CR, e o frontmatter abaixo procura `\n`
+            # (no Windows a fixacao, as etiquetas e o expires_at sumiam; CI de 17/11/2026).
+            return f.read(n).decode("utf-8", errors="ignore").replace("\r\n", "\n")
     except OSError:
         return None
 
 
 def frontmatter_de(texto: str) -> dict:
     """O frontmatter como dicionario; `{}` se nao houver, se estiver quebrado ou se nao for um mapa."""
-    m = _FRONTMATTER.match(texto)
+    m = _FRONTMATTER.match(texto.replace("\r\n", "\n"))
     if m is None:
         return {}
     try:
@@ -39,6 +41,7 @@ def frontmatter_de(texto: str) -> dict:
 
 def dividir(texto: str) -> tuple[dict, str]:
     """(frontmatter, corpo) de uma nota inteira."""
+    texto = texto.replace("\r\n", "\n")
     m = _FRONTMATTER.match(texto)
     if m is None:
         return {}, texto

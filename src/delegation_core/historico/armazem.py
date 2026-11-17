@@ -210,8 +210,16 @@ class Historico:
         return vs[n - 1] if 0 < n <= len(vs) else None
 
     def texto(self, caminho: str, n: int = 1) -> str | None:
+        """O texto da versao, com quebra de linha `\n`.
+
+        O objeto guarda os bytes como estavam no disco, e no Windows eles tem CRLF. Quem recebe
+        este texto grava em modo texto, que no Windows volta a por CR antes de cada LF: sem
+        normalizar aqui, restaurar dava `\r\r\n` e a nota voltava com as linhas dobradas
+        (CI de 17/11/2026)."""
         v = self._por_n(caminho, n)
-        return None if v is None else self.conteudo(v["sha"]).decode("utf-8", errors="replace")
+        if v is None:
+            return None
+        return self.conteudo(v["sha"]).decode("utf-8", errors="replace").replace("\r\n", "\n")
 
     def diff(self, caminho: str, de: int = 2, para: int = 1, contexto: int = 3) -> dict:
         """Diff unificado entre duas versoes, pela posicao (1 = a mais nova)."""

@@ -30,7 +30,7 @@ class _G:
 
 
 def test_casos_do_oraculo():
-    casos = json.loads((FIX / "log_oraculo.json").read_text())["cases"]
+    casos = json.loads((FIX / "log_oraculo.json").read_text(encoding="utf-8"))["cases"]
     iguais = 0
     for c in casos:
         r = LogCompressor().compress(c["input"], c["bias"], store=_G())

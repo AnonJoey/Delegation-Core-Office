@@ -20,7 +20,7 @@ class _G:
 
 
 def test_casos_do_oraculo():
-    for c in json.loads((FIX / "busca_oraculo.json").read_text())["cases"]:
+    for c in json.loads((FIX / "busca_oraculo.json").read_text(encoding="utf-8"))["cases"]:
         r = SearchCompressor().compress(c["input"], c["context"], c["bias"], store=_G())
         assert r.compressed == c["compressed"], c["name"]
         assert r.compressed_match_count == c["count"]

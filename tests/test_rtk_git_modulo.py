@@ -300,7 +300,7 @@ def repo(tmp_path):
     # autocrlf = input: no Windows o write_text grava CRLF, e o blob no repositorio precisa ser LF
     # para o `git show` sair igual nos tres sistemas (CI de 17/11/2026).
     (casa / "gitconfig").write_text("[user]\n\tname = T\n\temail = t@x.y\n[init]\n\tdefaultBranch = main\n"
-                                    "[core]\n\tautocrlf = input\n")
+                                    "[core]\n\tautocrlf = input\n\tsafecrlf = false\n")
     r = tmp_path / "repo"
     r.mkdir()
     env = {"PATH": os.environ["PATH"], "HOME": str(casa), "GIT_CONFIG_NOSYSTEM": "1", "LC_ALL": "C",
@@ -468,6 +468,7 @@ def test_shell_entrega_comando_simples_ao_modulo():
     assert modulos.rodavel("echo oi") is None
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="o sh do Git Bash expande ~ como /c/Users/...")
 def test_shell_expande_o_que_o_shell_expandiria(tmp_path, monkeypatch):
     monkeypatch.setenv("ALVO", "src")
     monkeypatch.chdir(tmp_path)

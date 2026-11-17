@@ -65,7 +65,8 @@ def test_wc_de_verdade(tmp_path):
     o, e, c = rodar("nao-existe")
     # A mensagem vem do wc de verdade: o GNU diz "wc: X: No such...", o BSD do macOS diz
     # "wc: X: open: No such...". O modulo repassa a do sistema, sem reescrever.
-    assert c == 1 and e.startswith("wc: nao-existe: ") and e.endswith("No such file or directory\n")
+    # O nome do programa tambem varia: "wc" no Linux, "/usr/bin/wc" no Git Bash do Windows.
+    assert c == 1 and "wc: nao-existe: " in e and e.endswith("No such file or directory\n")
 
 
 # ── ls ───────────────────────────────────────────────────────────────────────
