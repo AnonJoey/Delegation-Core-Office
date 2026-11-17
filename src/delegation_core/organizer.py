@@ -494,7 +494,9 @@ async def _process_sections(
 
     for title, section_text in sections:
         try:
-            label = f"{src.stem} — {title}"
+            # Hifen e nao travessao: a regra de escrita desta casa proibe o
+            # travessao em nota do vault, e este label VIRA o titulo da nota.
+            label = f"{src.stem} - {title}"
 
             if cfg.synthesis_enabled:
                 note_content = await synthesize(engine, sc, section_text, label, fmt, today_str)

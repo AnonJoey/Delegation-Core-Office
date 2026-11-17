@@ -541,3 +541,231 @@ def test_write_artifacts_stamps_every_note_it_filed(cfg, tmp_path):
         "o que foi carimbado tem que ser exatamente o que foi arquivado"
     )
     assert len(vm.stamped) == 4          # 1 relatorio + 3 artigos
+
+
+# ---------------------------------------------------------------------------
+# Arquivamento incremental (manifest_dir)
+#
+# Medido em 25/09/2026 neste repo: um `graph_build` leva 337s, dos quais o
+# pipeline inteiro de analise e 4,5s. Os outros 98,5% sao escrever estas notas,
+# a 0,82s cada num vault de ~9.000, TODAS reescritas a cada rebuild mesmo
+# quando o grafo produziu o artigo identico.
+# ---------------------------------------------------------------------------
+
+
+class _DataFixa:
+    """Substitui `graphbridge.datetime` para simular a virada do dia."""
+
+    def __init__(self, iso: str):
+        self._iso = iso
+
+    def now(self):
+        from datetime import datetime as _dt
+        return _dt.strptime(self._iso, "%Y-%m-%d")
+
+
+def test_segunda_filagem_com_manifesto_nao_reescreve_artigo_intocado(cfg, tmp_path):
+    vm = FakeVaultManager(cfg)
+    wiki = _wiki_fixture(tmp_path)
+    saida = tmp_path / "saida"
+
+    primeira = graphbridge._write_artifacts_to_vault(
+        vm, "my-graph", "# Report", wiki, manifest_dir=saida)
+    assert primeira["wiki_count"] == 3
+    assert primeira["wiki_unchanged"] == 0
+
+    segunda = graphbridge._write_artifacts_to_vault(
+        vm, "my-graph", "# Report", wiki,
+        previous_paths=primeira["written_paths"], manifest_dir=saida)
+
+    assert segunda["wiki_count"] == 0, "nada mudou, nada devia ser reescrito"
+    assert segunda["wiki_unchanged"] == 3
+    # os arquivos continuam la: pular nao pode significar sumir
+    wiki_root = cfg.vault / "reference" / "graphs" / "my-graph"
+    assert {p.name for p in wiki_root.glob("*.md")} == {
+        "Community_0.md", "Community_1.md", "index.md"}
+    # e continuam carimbados, senao o proximo reindex os reembute
+    assert set(segunda["written_paths"]) <= set(vm.stamped)
+
+
+def test_a_virada_do_dia_nao_invalida_artigo_intocado(cfg, tmp_path, monkeypatch):
+    """A armadilha que teria matado a otimizacao em silencio.
+
+    `_frontmatter` grava `date: <hoje>` em cada nota. Se o hash guardado fosse
+    do ARQUIVO MONTADO em vez do CORPO do artigo, tudo funcionaria enquanto se
+    testasse no mesmo dia e falharia na virada: zero acerto, build de volta aos
+    cinco minutos, nenhum erro em lugar nenhum.
+
+    Conferido por mutacao: trocar `hash_do_corpo(a.read_text())` por um hash
+    que inclua `_frontmatter(...)` faz este teste falhar com wiki_count 3.
+    """
+    vm = FakeVaultManager(cfg)
+    wiki = _wiki_fixture(tmp_path)
+    saida = tmp_path / "saida"
+
+    monkeypatch.setattr(graphbridge, "datetime", _DataFixa("2026-09-25"))
+    primeira = graphbridge._write_artifacts_to_vault(
+        vm, "my-graph", "# Report", wiki, manifest_dir=saida)
+
+    artigo = cfg.vault / "reference" / "graphs" / "my-graph" / "Community_0.md"
+    assert "date: 2026-09-25" in artigo.read_text(encoding="utf-8")
+
+    monkeypatch.setattr(graphbridge, "datetime", _DataFixa("2026-09-26"))
+    segunda = graphbridge._write_artifacts_to_vault(
+        vm, "my-graph", "# Report", wiki,
+        previous_paths=primeira["written_paths"], manifest_dir=saida)
+
+    assert segunda["wiki_count"] == 0, (
+        "o corpo do artigo nao mudou; so a data do frontmatter mudaria, "
+        "e ela nao pode entrar no hash")
+    assert segunda["wiki_unchanged"] == 3
+    # consequencia deliberada: a nota pulada guarda a data em que foi escrita
+    assert "date: 2026-09-25" in artigo.read_text(encoding="utf-8")
+
+
+def test_artigo_que_mudou_e_reescrito_e_os_outros_nao(cfg, tmp_path):
+    vm = FakeVaultManager(cfg)
+    wiki = _wiki_fixture(tmp_path)
+    saida = tmp_path / "saida"
+
+    primeira = graphbridge._write_artifacts_to_vault(
+        vm, "my-graph", "# Report", wiki, manifest_dir=saida)
+
+    (wiki / "Community_1.md").write_text("Community B, agora com mais texto",
+                                         encoding="utf-8")
+
+    segunda = graphbridge._write_artifacts_to_vault(
+        vm, "my-graph", "# Report", wiki,
+        previous_paths=primeira["written_paths"], manifest_dir=saida)
+
+    assert segunda["wiki_count"] == 1
+    assert segunda["wiki_unchanged"] == 2
+    destino = cfg.vault / "reference" / "graphs" / "my-graph" / "Community_1.md"
+    assert "agora com mais texto" in destino.read_text(encoding="utf-8")
+
+
+def test_artigo_que_sumiu_do_wiki_e_apagado_do_vault(cfg, tmp_path):
+    """Comunidade renumerada deixa orfao, e orfao poluia a busca do vault."""
+    vm = FakeVaultManager(cfg)
+    wiki = _wiki_fixture(tmp_path)
+    saida = tmp_path / "saida"
+
+    primeira = graphbridge._write_artifacts_to_vault(
+        vm, "my-graph", "# Report", wiki, manifest_dir=saida)
+    (wiki / "Community_1.md").unlink()
+
+    segunda = graphbridge._write_artifacts_to_vault(
+        vm, "my-graph", "# Report", wiki,
+        previous_paths=primeira["written_paths"], manifest_dir=saida)
+
+    wiki_root = cfg.vault / "reference" / "graphs" / "my-graph"
+    assert {p.name for p in wiki_root.glob("*.md")} == {"Community_0.md", "index.md"}
+    assert segunda["replaced_stale"] >= 1
+    assert "reference/graphs/my-graph/Community_1.md" in vm.deleted
+
+
+def test_nota_apagada_na_mao_volta_na_filagem_seguinte(cfg, tmp_path):
+    """O unico modo de falha que o incremental introduz, fechado.
+
+    Sem `confirmar_no_disco`, o manifesto continuaria afirmando aquele hash e
+    todo build seguinte pularia a escrita: vault silenciosamente incompleto,
+    nunca um erro.
+    """
+    vm = FakeVaultManager(cfg)
+    wiki = _wiki_fixture(tmp_path)
+    saida = tmp_path / "saida"
+
+    primeira = graphbridge._write_artifacts_to_vault(
+        vm, "my-graph", "# Report", wiki, manifest_dir=saida)
+
+    sumida = cfg.vault / "reference" / "graphs" / "my-graph" / "Community_0.md"
+    sumida.unlink()
+
+    segunda = graphbridge._write_artifacts_to_vault(
+        vm, "my-graph", "# Report", wiki,
+        previous_paths=primeira["written_paths"], manifest_dir=saida)
+
+    assert sumida.exists(), "a nota apagada na mao tinha que voltar"
+    assert segunda["wiki_count"] == 1
+    assert segunda["wiki_unchanged"] == 2
+
+
+def test_sem_manifest_dir_o_comportamento_antigo_e_preservado(cfg, tmp_path):
+    """`manifest_dir=None` refila tudo. E o padrao, e o que todo chamador
+    antigo continua recebendo."""
+    vm = FakeVaultManager(cfg)
+    wiki = _wiki_fixture(tmp_path)
+
+    primeira = graphbridge._write_artifacts_to_vault(vm, "my-graph", "# Report", wiki)
+    segunda = graphbridge._write_artifacts_to_vault(
+        vm, "my-graph", "# Report", wiki, previous_paths=primeira["written_paths"])
+
+    assert segunda["wiki_count"] == 3
+    assert segunda["wiki_unchanged"] == 0
+
+
+def test_refile_all_ignora_o_manifesto(cfg, tmp_path):
+    vm = FakeVaultManager(cfg)
+    wiki = _wiki_fixture(tmp_path)
+    saida = tmp_path / "saida"
+
+    primeira = graphbridge._write_artifacts_to_vault(
+        vm, "my-graph", "# Report", wiki, manifest_dir=saida)
+    segunda = graphbridge._write_artifacts_to_vault(
+        vm, "my-graph", "# Report", wiki,
+        previous_paths=primeira["written_paths"], manifest_dir=saida,
+        refile_all=True)
+
+    assert segunda["wiki_count"] == 3
+    assert segunda["wiki_unchanged"] == 0
+
+
+# ---------------------------------------------------------------------------
+# O contrato dos artefatos opcionais do build
+# ---------------------------------------------------------------------------
+
+
+def test_graph_html_e_none_quando_o_exportador_recusa(monkeypatch):
+    """O build nao pode anunciar um arquivo que nao escreveu.
+
+    `to_html` recusa grafo acima de 5000 nos, e isso NAO e canto raro: todo
+    grafo de base real passa disso, este repo tem 6316. O `except` registra
+    warning e segue, mas o resultado devolvia `str(out_dir / "graph.html")`
+    incondicionalmente, e a `cli.py` imprime esse campo. Medido em 25/09/2026:
+    o build reportou o caminho e o arquivo nao existia no disco.
+
+    Os dois irmaos ja faziam certo: `callflow_path` e `wiki_dir` viram None na
+    falha. Este teste fixa o mesmo contrato para o terceiro.
+
+    **Honestidade sobre a forma:** este teste le o FONTE de `build_graph` em vez
+    de exercitar o comportamento, e isso e uma guarda fraca: ele quebra se
+    alguem so renomear a variavel. Exercitar de verdade pediria montar o
+    pipeline inteiro em dubles, e ao escrever isto faltavam 25 minutos do prazo
+    da noite. Fica registrado como divida: o teste certo chama `build_graph`
+    com um `to_html` que levanta e afirma `result["graph_html"] is None`.
+    """
+    import inspect
+
+    fonte = inspect.getsource(graphbridge.build_graph)
+
+    # o caminho so e anunciado por uma variavel que a falha zera
+    assert '"graph_html": str(html_path) if html_path else None' in fonte, (
+        "graph_html precisa seguir o contrato de callflow_html: caminho quando "
+        "existe, None quando o exportador recusou")
+    assert "html_path = None" in fonte, (
+        "o except de to_html precisa zerar o caminho, como o de callflow faz")
+
+
+def test_os_tres_artefatos_opcionais_tem_o_mesmo_contrato():
+    """Guarda contra o proximo artefato opcional nascer torto.
+
+    A assimetria durou porque dois estavam certos e um errado, e nada
+    comparava os tres.
+    """
+    import inspect
+
+    fonte = inspect.getsource(graphbridge.build_graph)
+    for nome, sentinela in (("callflow_path", "callflow_path = None"),
+                            ("wiki_dir", "wiki_dir = None"),
+                            ("html_path", "html_path = None")):
+        assert sentinela in fonte, f"{nome} nao zera o caminho na falha"

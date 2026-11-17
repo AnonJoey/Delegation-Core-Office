@@ -430,6 +430,34 @@ class _Handler(BaseHTTPRequestHandler):
         # header is attacker-controlled input.
         return hmac.compare_digest(presented.strip().encode("utf-8"), _token.encode("utf-8"))
 
+    def _serve_static(self, path: str) -> None:
+        filename = "index.html" if path in ("/", "/index.html") else path.lstrip("/")
+        base_dir = Path(__file__).resolve().parent.parent.parent / "dashboard" / "src"
+        target = (base_dir / filename).resolve()
+        try:
+            target.relative_to(base_dir)
+        except ValueError:
+            self._send_json({"error": "not found"}, status=404)
+            return
+        if not target.exists():
+            self._send_json({"error": "not found"}, status=404)
+            return
+        content = target.read_bytes()
+        mime_types = {
+            ".html": "text/html; charset=utf-8",
+            ".css": "text/css; charset=utf-8",
+            ".js": "application/javascript; charset=utf-8",
+        }
+        content_type = mime_types.get(target.suffix, "application/octet-stream")
+        self.send_response(200)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(content)))
+        origin = self._cors_origin()
+        if origin:
+            self.send_header("Access-Control-Allow-Origin", origin)
+        self.end_headers()
+        self.wfile.write(content)
+
     def _serve(self, route) -> None:
         """Run one request's routing under the error handling every verb shares.
 
@@ -438,6 +466,9 @@ class _Handler(BaseHTTPRequestHandler):
         third verb would have had to remember to copy them a third time.
         """
         parsed = urlparse(self.path)
+        if parsed.path in ("/", "/index.html", "/styles.css", "/main.js"):
+            self._serve_static(parsed.path)
+            return
         if not self._authorized():
             logger.warning("Rejected unauthenticated dashboard API request: %s", parsed.path)
             self.close_connection = True
@@ -507,6 +538,43 @@ class _Handler(BaseHTTPRequestHandler):
             self._handle_processes_get(query)
         elif parsed.path == "/api/config":
             self._handle_config_get()
+        elif parsed.path == "/api/vault/note/history":
+            from . import painel_historico
+            rel = (query.get("path") or [""])[0]
+            r = painel_historico.historia(_cfg, rel) if rel else {"error": "path is required"}
+            self._send_json(r, status=400 if "error" in r else 200)
+        elif parsed.path == "/api/vault/note/diff":
+            from . import painel_historico
+            rel = (query.get("path") or [""])[0]
+            try:
+                de, para = int((query.get("from") or ["2"])[0]), int((query.get("to") or ["1"])[0])
+            except ValueError:
+                self._send_json({"error": "from and to must be integers"}, status=400)
+                return
+            r = painel_historico.diff(_cfg, rel, de, para) if rel else {"error": "path is required"}
+            self._send_json(r, status=400 if "error" in r else 200)
+        elif parsed.path == "/api/facts":
+            from . import painel_resposta
+            q = (query.get("q") or [""])[0]
+            div = (query.get("divergent") or ["0"])[0] in ("1", "true")
+            r = painel_resposta.fatos(q, div)
+            self._send_json(r, status=400 if "error" in r else 200)
+        elif parsed.path == "/api/vigia":
+            from . import painel_vigia
+            self._send_json(painel_vigia.estado(_cfg))
+        elif parsed.path == "/api/cores/status":
+            from .cores.unified_facade import get_cores_bridge
+            self._send_json(get_cores_bridge().get_unified_status())
+        elif parsed.path == "/api/cores/skills":
+            self._handle_cores_skills(query)
+        elif parsed.path == "/api/cores/skill":
+            self._handle_cores_skill_by_id(query)
+        elif parsed.path == "/api/cores/orchestration/telemetry":
+            from .cores.unified_facade import get_cores_bridge
+            self._send_json(get_cores_bridge().get_llm_telemetry())
+        elif parsed.path == "/api/cores/hardware":
+            from .cores.unified_facade import get_cores_bridge
+            self._send_json(get_cores_bridge().get_hardware_metrics())
         else:
             self._send_json({"error": f"not found: {parsed.path}"}, status=404)
 
@@ -599,6 +667,54 @@ class _Handler(BaseHTTPRequestHandler):
             self._handle_config_update()
         elif parsed.path == "/api/system/purge_orphans":
             self._handle_purge_orphans()
+        elif parsed.path == "/api/vault/note/restore":
+            from . import historico_vault
+            data = self._read_json_body()
+            if data is None:
+                return
+            rel = str(data.get("path", "")).strip()
+            try:
+                n = int(data.get("version", 0))
+            except (TypeError, ValueError):
+                n = 0
+            if not rel or n < 1:
+                self._send_json({"error": "path and version (>= 1) are required"}, status=400)
+                return
+            r = historico_vault.restaurar(_vault, rel, n)
+            from . import envelhecimento_vault
+            envelhecimento_vault.depois_de_restaurar(_vault.cfg, rel, r)
+            self._send_json(r, status=400 if "error" in r else 200)
+        elif parsed.path == "/api/dream":
+            from . import painel_resposta
+            data = self._read_json_body()
+            if data is None:
+                return
+            r = painel_resposta.achado(str(data.get("old", "")), str(data.get("new", "")), str(data.get("action", "")))
+            self._send_json(r, status=400 if "error" in r else 200)
+        elif parsed.path == "/api/ask":
+            from . import painel_resposta
+            data = self._read_json_body()
+            if data is None:
+                return
+            r = painel_resposta.perguntar(str(data.get("question", "")))
+            self._send_json(r, status=400 if "error" in r else 200)
+        elif parsed.path == "/api/vigia/run":
+            from . import painel_vigia
+            data = self._read_json_body()
+            if data is None:
+                return
+            r = painel_vigia.rodar(str(data.get("name", "")))
+            self._send_json(r, status=400 if "error" in r else 200)
+        elif parsed.path == "/api/cores/sanitize":
+            self._handle_cores_sanitize()
+        elif parsed.path == "/api/cores/multimodal/convert":
+            self._handle_cores_multimodal_convert()
+        elif parsed.path == "/api/cores/multimodal/diagram":
+            self._handle_cores_multimodal_diagram()
+        elif parsed.path == "/api/cores/orchestration/run":
+            self._handle_cores_orchestration_run()
+        elif parsed.path == "/api/cores/prune":
+            self._handle_cores_prune()
         else:
             self._send_json({"error": f"not found: {parsed.path}"}, status=404)
 
@@ -828,7 +944,11 @@ class _Handler(BaseHTTPRequestHandler):
         if "content" not in data:
             self._send_json({"error": "content is required"}, status=400)
             return
+        from . import painel_historico
+        painel_historico.antes_de_salvar(_cfg, rel)
         result = _notewriter.save_note(_vault, rel, str(data["content"]))
+        if "error" not in result:
+            painel_historico.depois_de_salvar(_cfg, rel, str(data["content"]))
         self._send_json(result, status=400 if "error" in result else 200)
 
     def _handle_processes_create(self) -> None:
@@ -995,6 +1115,110 @@ class _Handler(BaseHTTPRequestHandler):
         scope = (query.get("scope") or ["notes"])[0]
         self._send_json({"query": q, "scope": scope,
                          "results": _vault.search(q, limit=limit, scope=scope)})
+
+    def _handle_cores_skills(self, query) -> None:
+        q = (query.get("q") or [""])[0].strip()
+        try:
+            limit = min(max(int((query.get("limit") or ["20"])[0]), 1), 100)
+        except ValueError:
+            limit = 20
+        from .cores.unified_facade import get_cores_bridge
+        skills = get_cores_bridge().search_skills(q, limit=limit)
+        self._send_json({"query": q, "count": len(skills), "results": skills})
+
+    def _handle_cores_skill_by_id(self, query) -> None:
+        try:
+            skill_id = int((query.get("id") or ["0"])[0])
+        except ValueError:
+            self._send_json({"error": "id must be an integer"}, status=400)
+            return
+        from .cores.unified_facade import get_cores_bridge
+        skill = get_cores_bridge().get_skill_by_id(skill_id)
+        if skill is None:
+            self._send_json({"error": f"skill not found: {skill_id}"}, status=404)
+            return
+        self._send_json(skill)
+
+    def _handle_cores_sanitize(self) -> None:
+        data = self._read_json_body()
+        if data is None:
+            return
+        text = str(data.get("text", "")).strip()
+        if not text:
+            self._send_json({"error": "text is required"}, status=400)
+            return
+        from .cores.unified_facade import get_cores_bridge
+        res = get_cores_bridge().sanitize_text(text)
+        self._send_json(res)
+
+    def _handle_cores_multimodal_convert(self) -> None:
+        data = self._read_json_body()
+        if data is None:
+            return
+        file_path = str(data.get("file_path", "")).strip()
+        if not file_path:
+            self._send_json({"error": "file_path is required"}, status=400)
+            return
+        from .cores.unified_facade import get_cores_bridge
+        res = get_cores_bridge().ingest_multimodal_asset(file_path)
+        self._send_json(res)
+
+    def _handle_cores_multimodal_diagram(self) -> None:
+        data = self._read_json_body()
+        if data is None:
+            return
+        prompt = str(data.get("prompt", "")).strip()
+        if not prompt:
+            self._send_json({"error": "prompt is required"}, status=400)
+            return
+        from .cores.unified_facade import get_cores_bridge
+        res = get_cores_bridge().generate_diagram(prompt)
+        self._send_json(res)
+
+    def _handle_cores_orchestration_run(self) -> None:
+        import asyncio
+        data = self._read_json_body()
+        if data is None:
+            return
+        title = str(data.get("title", "")).strip() or "Dynamic DAG Workflow"
+        raw_steps = data.get("steps") or []
+        
+        steps = []
+        if isinstance(raw_steps, list) and raw_steps:
+            for s in raw_steps:
+                if isinstance(s, dict) and "name" in s:
+                    s_name = str(s["name"])
+                    s_deps = s.get("deps", [])
+                    steps.append({
+                        "name": s_name,
+                        "action": lambda n=s_name: f"executed_{n}",
+                        "deps": s_deps,
+                        "in_tokens": int(s.get("in_tokens", 100)),
+                        "out_tokens": int(s.get("out_tokens", 50))
+                    })
+        if not steps:
+            steps = [
+                {"name": "ingest_context", "action": lambda: "Context ingested", "deps": [], "in_tokens": 150, "out_tokens": 40},
+                {"name": "prune_tokens", "action": lambda: "Tokens pruned via Headroom", "deps": ["ingest_context"], "in_tokens": 110, "out_tokens": 30},
+                {"name": "agent_execute", "action": lambda: "Agent step executed", "deps": ["prune_tokens"], "in_tokens": 280, "out_tokens": 120},
+                {"name": "record_telemetry", "action": lambda: "Telemetry recorded", "deps": ["agent_execute"], "in_tokens": 50, "out_tokens": 25},
+            ]
+        from .cores.unified_facade import get_cores_bridge
+        bridge = get_cores_bridge()
+        res = asyncio.run(bridge.execute_task_workflow(title, steps))
+        self._send_json(res)
+
+    def _handle_cores_prune(self) -> None:
+        data = self._read_json_body()
+        if data is None:
+            return
+        text = str(data.get("text", "")).strip()
+        if not text:
+            self._send_json({"error": "text is required"}, status=400)
+            return
+        from .cores.unified_facade import get_cores_bridge
+        res = get_cores_bridge().prune_context(text)
+        self._send_json(res)
 
 
 def _start_parent_watchdog(parent_pid: int, server: ThreadingHTTPServer) -> None:

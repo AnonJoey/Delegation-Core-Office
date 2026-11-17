@@ -275,6 +275,32 @@ def _config_real_intacta():
         )
 
 
+@pytest.fixture(autouse=True)
+def _sem_reordenador_real(monkeypatch):
+    """Nenhum teste carrega o cross-encoder de verdade (2 GB, e GPU se houver).
+
+    Nesta maquina o modelo esta no cache e a placa tem espaco, entao sem isto
+    todo teste que passa pelo search_vault carregaria o reordenador real. Quem
+    testa a busca hibrida poe um duble no lugar de `busca_hibrida.reordenador`.
+    O estado do modulo tambem e zerado, porque indice lexico e reordenador sao
+    guardados por processo.
+    """
+    from delegation_core import busca_hibrida
+
+    monkeypatch.setattr(busca_hibrida, "reordenador", lambda cfg: None)
+    monkeypatch.setattr(busca_hibrida, "_estado", {"indice": None, "sincronizado_em": 0.0,
+                                                   "reordenador": None, "motivo_sem_reordenador": ""})
+
+
+@pytest.fixture(autouse=True)
+def _sem_extracao_de_fatos_em_segundo_plano(monkeypatch):
+    """Escrever nota viva agenda extracao de fatos pelo modelo local (fatos_vault.apos_escrita).
+
+    Na suite isso chamaria o llama de verdade na porta 8181. O agendador
+    padrao vira um que nao agenda; teste que quiser o caminho passa o seu.
+    """
+    from delegation_core import fatos_vault
+    monkeypatch.setattr(fatos_vault, "SUBMETER_PADRAO", lambda *a, **k: None)
 
 @pytest.fixture
 def backend_chroma(monkeypatch):
@@ -308,3 +334,32 @@ def _token_do_dashboard(request, monkeypatch):
     from tests._dashboard_auth import TOKEN
 
     monkeypatch.setattr(dashboard_api, "_token", TOKEN)
+
+
+@pytest.fixture
+def catalogo_de_skills():
+    """Catalogo de skills pequeno e conhecido, no estado temporario do teste.
+
+    O catalogo real e construido na maquina de quem usa e nao vem no repositorio (texto de
+    terceiros sem licenca conferida); testes que precisam de busca usam este."""
+    from delegation_core.cores.agent_harness import db
+    conn = db.get_connection()
+    linhas = [
+        ("ECC", "Git commit discipline", "ECC/git-commit.md", "harness-skills",
+         "Write small git commit messages; one change per commit."),
+        ("ECC", "Python testing", "ECC/python-tests.md", "harness-skills",
+         "Use pytest for python projects; keep fixtures small."),
+        ("ECC", "Code review", "ECC/review.md", "harness-skills",
+         "Review the diff before the commit; read every changed line."),
+        ("superpowers", "TDD loop", "superpowers/tdd.md", "tdd-discipline",
+         "Red, green, refactor. Write the failing python test first."),
+        ("humanizer", "Plain prose", "humanizer/prose.md", "prose-naturalization",
+         "Prefer short sentences and concrete words over filler."),
+    ]
+    with conn:
+        conn.execute("DELETE FROM skills")
+        for repo, titulo, rel, cat, texto in linhas:
+            conn.execute("INSERT INTO skills (source_repo, title, rel_path, category, content, char_count) "
+                         "VALUES (?, ?, ?, ?, ?, ?)", (repo, titulo, rel, cat, texto, len(texto)))
+    conn.close()
+    return len(linhas)

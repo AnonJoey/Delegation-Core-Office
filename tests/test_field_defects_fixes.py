@@ -170,3 +170,17 @@ def test_ghost_row_resilience(test_cfg):
     # Must not raise 'NoneType' object has no attribute 'get' and should gracefully return the valid hit
     assert len(hits) == 1
     assert hits[0]["title"] == "Real Note"
+
+
+@pytest.mark.parametrize("rel,esperado", [
+    ("Sessions/2026-07-03-Human-AmplifIed-tarde-transcricao.md", "transcript"),
+    ("Sessions/2026-08-12-Viagem para EUA (transcricao).md", "transcript"),
+    ("Sessions/2026-08-27-Daily-Equipe-Dev-transcrição.md", "transcript"),
+    ("Sessions/2026-08-27-Daily-Equipe-Dev-TRANSCRICAO.md", "transcript"),
+    ("Reference/2026-08-28-Digestao da transcricao da reuniao.md", "curated"),
+    ("Reference/transcricoes e como ler.md", "curated"),
+])
+def test_transcricao_em_portugues_e_transcript(rel, esperado):
+    """56 notas e 684 linhas do indice real estavam como curated e fugiam do peso."""
+    from delegation_core.vault import VaultManager
+    assert VaultManager.classify_subkind(rel, "") == esperado

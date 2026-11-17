@@ -51,3 +51,27 @@ def test_handler_exists_for_registered_subcommand(command):
 def test_unknown_subcommand_is_still_rejected():
     """A parser that accepted anything would pass the checks above trivially."""
     assert "invalid choice" in _run("no-such-command").stderr
+
+
+def test_cmd_status_mostra_commit_do_checkout(monkeypatch, tmp_path, capsys):
+    """cmd_status mostra o commit e o branch do checkout de origem."""
+    from delegation_core import config, installer
+
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    fake_cfg = config.Config(vault_path=str(vault), engine_mode="agent")
+    monkeypatch.setattr(config.Config, "load", classmethod(lambda cls: fake_cfg))
+    monkeypatch.setattr(cli, "_index_row_counts", lambda _c: ({"vault_bge_m3": 42}, "daemon"))
+    monkeypatch.setattr(installer, "source_root", lambda: tmp_path)
+    monkeypatch.setattr(installer, "is_git_checkout", lambda p: p == tmp_path)
+    respostas = {
+        ("rev-parse", "--short", "HEAD"): (0, "5c466b6"),
+        ("rev-parse", "--abbrev-ref", "HEAD"): (0, "master"),
+    }
+    monkeypatch.setattr(installer, "_git", lambda _r, *a: respostas.get(a, (1, "")))
+
+    cli.cmd_status(None)
+    saida = capsys.readouterr().out
+    assert "commit" in saida
+    assert "5c466b6 (master)" in saida
+

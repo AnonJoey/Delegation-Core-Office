@@ -1,0 +1,9 @@
+[package]
+name = "ai-memory-core"
+version = "0.0.0"
+edition = "2024"
+publish = false
+description = "Casca minima dos tipos do ai-memory-core que as funcoes copiadas usam. Nao e o crate original."
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }

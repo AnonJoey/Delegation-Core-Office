@@ -64,6 +64,10 @@ MAINTENANCE_COOLDOWN = 30 * 60  # seconds — don't re-trigger if fired recently
 REINDEX_LOG = Path.home() / ".delegation_core" / "reindex.log"
 REINDEX_COOLDOWN = 30 * 60  # seconds — don't re-trigger if fired recently
 MAX_NOTES = 8
+ATENCAO_PATH = Path.home() / ".delegation_core" / "atencao.json"
+ATENCAO_MAX_IDADE = 24 * 3600  # daemon parado ha um dia: o arquivo e velho demais para valer
+ATENCAO_MAX_ITENS = 8
+ATENCAO_MAX_VISTAS = 500
 
 
 def _detached_popen_kwargs() -> dict:
@@ -219,6 +223,43 @@ def _separar_lotes(new_notes):
     return lotes, soltas
 
 
+def _atencao(state: dict, now: float) -> list[str]:
+    """Itens de `atencao.json` (gravado pelo daemon) ainda nao mostrados em sessao anterior.
+
+    Cada item tem `chave` estavel; a chave mostrada vai para `state`, entao o
+    mesmo aviso nao se repete a cada sessao. Chave nova e aviso novo: alerta
+    que fechou e reabriu (a chave leva o inicio), divergencia com valor novo,
+    achado novo, contagem de caminhos mortos que mudou.
+    """
+    d = _load_json(ATENCAO_PATH)
+    itens = d.get("itens") or []
+    if not itens or now - float(d.get("gerado_em") or 0) > ATENCAO_MAX_IDADE:
+        return []
+    vistas = list(state.get("atencao_vistas") or [])
+    novos = [i for i in itens if isinstance(i, dict) and i.get("chave") and i["chave"] not in vistas]
+    if not novos:
+        return []
+    linhas = ["## Needs attention (delegation-core)", ""]
+    for i in novos[:ATENCAO_MAX_ITENS]:
+        linhas.append(f"- {i.get('texto', '')} (`{i.get('dica', '')}`)")
+    if len(novos) > ATENCAO_MAX_ITENS:
+        linhas.append(f"- ...and {len(novos) - ATENCAO_MAX_ITENS} more")
+    state["atencao_vistas"] = (vistas + [i["chave"] for i in novos[:ATENCAO_MAX_ITENS]])[-ATENCAO_MAX_VISTAS:]
+    return linhas
+
+
+def _resumo_em_niveis(config: dict, vault, soltas) -> str:
+    """O trecho de cada nota recente, em vez do caminho so, quando `resumo_niveis_enabled`. "" se desligado ou se falhar."""
+    if not config.get("resumo_niveis_enabled") or not soltas:
+        return ""
+    try:
+        from delegation_core.resumo_vault import ORCAMENTO_PADRAO, renderizar
+
+        return renderizar(vault, soltas, int(config.get("resumo_niveis_orcamento") or ORCAMENTO_PADRAO))
+    except Exception:
+        return ""  # o resumo antigo (so caminhos) cobre qualquer falha
+
+
 def main():
     config = _load_json(CONFIG_PATH)
     vault_path = config.get("vault_path", "")
@@ -288,12 +329,16 @@ def main():
         if reindex_triggered:
             state["last_reindex_trigger"] = now
 
+    atencao = _atencao(state, now)
     state["inbox_marca"] = inbox_marca
     state["last_check"] = now
     try:
         STATE_PATH.write_text(json.dumps(state), encoding="utf-8")
     except Exception:
         pass
+
+    if atencao:
+        print("\n".join(atencao))
 
     if first_run:
         if inbox_count:
@@ -328,12 +373,16 @@ def main():
             "by delegation-core's own relink/maintenance passes, which is most of "
             "any large batch below:"
         )
-        for mtime, f in soltas[:MAX_NOTES]:
-            rel = f.relative_to(vault).as_posix()
-            when = datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M")
-            lines.append(f"- `{rel}` ({when})")
-        if len(soltas) > MAX_NOTES:
-            lines.append(f"- ...and {len(soltas) - MAX_NOTES} more")
+        em_niveis = _resumo_em_niveis(config, vault, soltas)
+        if em_niveis:
+            lines.append(em_niveis.rstrip("\n"))
+        else:
+            for mtime, f in soltas[:MAX_NOTES]:
+                rel = f.relative_to(vault).as_posix()
+                when = datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M")
+                lines.append(f"- `{rel}` ({when})")
+            if len(soltas) > MAX_NOTES:
+                lines.append(f"- ...and {len(soltas) - MAX_NOTES} more")
         for inicio, fim, quantas in lotes:
             lines.append(f"- **lote de {quantas} notas** entre {inicio} e {fim} "
                          f"— assinatura de um passe da propria ferramenta")

@@ -29,6 +29,15 @@ EXCECOES = {
     ("wizard.py", "_startup_launchd"): "launchctl, so macOS",
     ("wizard.py", "_install_linux_packages"): "apt, so Linux, mostra o progresso ao usuario",
     ("wizard.py", "_step_mlx"): "pip do motor MLX, so macOS, mostra o progresso ao usuario",
+    # Do fork (filtros de saida e test-drive). Os filtros rodam como comando de shell dentro do
+    # terminal do usuario, que ja tem console, e herdam esse terminal; os modulos do RTK usam
+    # /bin/sh e nunca foram validados no Windows.
+    ("cli.py", "cmd_run"): "filtro de saida: roda o comando por /bin/sh dentro do terminal do usuario, so POSIX",
+    ("__init__.py", "argumentos_do_shell"): "printf por /bin/sh, so POSIX",
+    ("ambiente.py", "capturar_bytes"): "modulo do RTK: herda o terminal do usuario, que ja tem console",
+    ("ambiente.py", "repassar"): "modulo do RTK: escreve no terminal do usuario",
+    ("ambiente.py", "transmitir"): "modulo do RTK: repassa a saida ao terminal do usuario",
+    ("test_drive.py", "cmd_test_drive"): "sobe o daemon em primeiro plano para o usuario ver (Ctrl-C)",
 }
 
 

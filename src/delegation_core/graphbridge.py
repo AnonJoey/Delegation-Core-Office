@@ -27,7 +27,7 @@ needs a DelegationEngine at all.
 Filing layout (corrected after the first real multi-hundred-article build, a
 598-article graph of Graphify itself):
 
-    <Reference>/<date>-Code Graph Report — <graph>.md   report, with BGE backlinks
+    <Reference>/<date>-Code Graph Report - <graph>.md   report, with BGE backlinks
     <Reference>/graphs/<graph>/index.md                 wiki nav root
     <Reference>/graphs/<graph>/Community_0.md, …        articles, original stems
 
@@ -41,24 +41,20 @@ registry so the next rebuild can clear its predecessor.
 import json
 import logging
 import re
+import shutil
 from datetime import datetime
 from pathlib import Path
+
+from . import arquivamento
+from . import diferenca
 
 logger = logging.getLogger("graphbridge")
 
 
-def _load_registry(cfg) -> dict:
-    path = cfg.graphs_registry_path
-    try:
-        return json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
-    except Exception as e:
-        logger.warning("Could not load graphs registry: %s", e)
-        return {}
-
-
-def _save_registry(cfg, registry: dict) -> None:
-    cfg.graphs_dir.mkdir(parents=True, exist_ok=True)
-    cfg.graphs_registry_path.write_text(json.dumps(registry, indent=2), encoding="utf-8")
+# Moram em registro_grafos.py (folha): codigo_vault e vigia so leem o registro,
+# e importar o graphbridge inteiro por isso fechava o ciclo graphbridge -> linker
+# -> vault -> ... -> codigo_vault -> graphbridge.
+from .registro_grafos import _load_registry, _save_registry  # noqa: E402,F401
 
 
 def _slugify(name: str) -> str:
@@ -156,7 +152,8 @@ def _write_wiki_article(vault_manager, wiki_folder: str, graph_name: str, articl
     return rel
 
 
-def _clear_previous_filing(vault_manager, previous_paths: list[str], wiki_dir_rel: str) -> int:
+def _clear_previous_filing(vault_manager, previous_paths: list[str], wiki_dir_rel: str,
+                            manter: "set[str] | None" = None) -> int:
     """Remove a graph's previously filed vault notes before refiling it.
 
     Without this, every rebuild left the last run's articles behind: community
@@ -164,6 +161,13 @@ def _clear_previous_filing(vault_manager, previous_paths: list[str], wiki_dir_re
     on a later day never overwrote anything. Deletes the ChromaDB rows too, so
     stale articles stop surfacing in search immediately rather than at the next
     full reindex.
+
+    `manter` e o que o arquivamento incremental decidiu nao reescrever. Sem
+    ele nada disto funciona: a varredura abaixo e um `rglob` na pasta inteira,
+    nao a lista recebida em `previous_paths`, entao ela apaga justamente os
+    artigos intocados que a filagem ia preservar, e eles nao voltam, porque o
+    passo seguinte os pula. O conjunto e estreitado no fim, depois da
+    contencao, para que nenhuma checagem de caminho dependa deste argumento.
     """
     from .notes import resolve_in_vault
 
@@ -206,6 +210,11 @@ def _clear_previous_filing(vault_manager, previous_paths: list[str], wiki_dir_re
         if p.is_file() and rel not in stale:
             stale.append(rel)
 
+    # Estreitar DEPOIS da montagem, nunca antes: assim `manter` decide apenas
+    # o que sobrevive, e nao tem como alargar o que pode ser apagado.
+    if manter:
+        stale = [rel for rel in stale if rel not in manter]
+
     # A contencao mora na MONTAGEM de `stale`, acima, e nao aqui: as duas
     # entradas passam por resolve_in_vault antes de entrar na lista. Uma segunda
     # checagem neste laco sobreviveu a mutacao -- nenhum teste conseguia
@@ -221,40 +230,92 @@ def _clear_previous_filing(vault_manager, previous_paths: list[str], wiki_dir_re
 
 
 def _write_artifacts_to_vault(vault_manager, graph_name: str, report_md: str,
-                               wiki_dir: Path | None, previous_paths: list[str] | None = None) -> dict:
+                               wiki_dir: Path | None, previous_paths: list[str] | None = None,
+                               manifest_dir: "Path | None" = None,
+                               refile_all: bool = False) -> dict:
     """File GRAPH_REPORT.md + the per-community/god-node wiki articles into the vault.
 
     Layout:
-        <Reference>/<date>-Code Graph Report — <graph>.md   ← discoverable entry point
+        <Reference>/<date>-Code Graph Report - <graph>.md   <- discoverable entry point
         <Reference>/graphs/<graph>/index.md                 ← wiki nav root
         <Reference>/graphs/<graph>/Community_0.md, ...      ← articles, original stems
 
     The report stays in the folder root because it is the one note a human or a
     search is likely to want; the wiki is a self-contained directory beside it.
+
+    **This function is the build.** Measured on this repo in 25/09/2026, a
+    `graph_build` takes 337s, of which the entire analysis pipeline (detect,
+    extract, build, cluster, analyse, report, json, callflow, wiki) is 4,5s.
+    The other 98,5% is filing these notes: ~0,82s each on a vault of ~9.000
+    notes, deleted and rewritten in full on every rebuild even when the graph
+    produced the identical article.
+
+    `manifest_dir` turns that into incremental filing: articles whose body hash
+    is unchanged since the last filing are left alone, which measured 70,4% of
+    them after a one-function source change. Passing ``None`` keeps the old
+    behaviour of refiling everything, and so does ``refile_all=True``.
+
+    **`refile_all` is deliberately NOT wired to the build's `force`.** Once a
+    graph exists, `build_graph` is a no-op unless `force=true`, so every
+    rebuild there is a forced one: tying the two would disable this path
+    permanently while looking wired. The repair for a vault whose ChromaDB
+    rows were lost is `vault_reindex_bg`, which is the tool that owns that
+    job; the repair for a note deleted from disk is automatic, because
+    `confirmar_no_disco` drops it from the manifest.
+
+    The report note is always rewritten: its filename carries the date, so it
+    is a different path each day, and it is one note out of ~330.
     """
     folder = _resolve_folder(vault_manager.cfg, "reference")
     wiki_folder = f"{folder}/{WIKI_SUBDIR}/{graph_name}"
 
-    removed = _clear_previous_filing(vault_manager, previous_paths or [], wiki_folder)
+    artigos = sorted(wiki_dir.glob("*.md")) if wiki_dir is not None and wiki_dir.is_dir() else []
+    # O hash e do CORPO do artigo, nunca do arquivo montado: `_frontmatter`
+    # grava a data de hoje, entao hashear o arquivo daria 100% de acerto no
+    # mesmo dia e ZERO no dia seguinte, sem erro nenhum, so lentidao de volta.
+    desejado = {
+        f"{wiki_folder}/{a.name}": arquivamento.hash_do_corpo(a.read_text(encoding="utf-8"))
+        for a in artigos
+    }
 
-    written = [_write_vault_note(vault_manager, folder, f"Code Graph Report — {graph_name}", report_md)]
+    anterior: dict[str, str] = {}
+    if manifest_dir is not None and not refile_all:
+        anterior = arquivamento.confirmar_no_disco(
+            vault_manager.cfg.vault, arquivamento.ler(manifest_dir))
+    plano = arquivamento.planejar(desejado, anterior)
+    manter = set(plano.manter)
+
+    # So apaga o que NAO vai ser reescrito no lugar: artigo cuja comunidade
+    # sumiu, e o relatorio do dia anterior, cujo nome tem data e por isso nunca
+    # e sobrescrito. Reescrever um artigo ja sobrescreve o arquivo e troca as
+    # linhas dele no ChromaDB, entao apagar antes era trabalho repetido.
+    obsoletos = [p for p in (previous_paths or []) if p not in desejado]
+    removed = _clear_previous_filing(vault_manager, obsoletos, wiki_folder, manter=manter)
+
+    written = [_write_vault_note(vault_manager, folder, f"Code Graph Report - {graph_name}", report_md)]
 
     wiki_written: list[str] = []
-    if wiki_dir is not None and wiki_dir.is_dir():
-        for article in sorted(wiki_dir.glob("*.md")):
-            wiki_written.append(_write_wiki_article(vault_manager, wiki_folder, graph_name, article))
+    for article in artigos:
+        rel = f"{wiki_folder}/{article.name}"
+        if rel in manter:
+            continue
+        wiki_written.append(_write_wiki_article(vault_manager, wiki_folder, graph_name, article))
 
-    todos = written + wiki_written
+    todos = written + sorted(desejado)
     # Sem isto, cada uma destas notas fica sem carimbo em .chroma_index.json e o
     # proximo reindex incremental a reembute inteira, mesmo intocada. Num grafo
     # de tamanho real sao milhares: e o que transformava um reindex de cinco
     # notas novas em uma reconstrucao de vinte e cinco minutos.
     vault_manager.stamp_indexed(todos)
 
+    if manifest_dir is not None:
+        arquivamento.gravar(manifest_dir, desejado)
+
     return {
         "report_path": written[0],
         "wiki_folder": wiki_folder,
         "wiki_count": len(wiki_written),
+        "wiki_unchanged": len(manter),
         "replaced_stale": removed,
         "written_paths": todos,
     }
@@ -526,14 +587,37 @@ async def build_graph(cfg, vault_manager, source_path: str,
             str(root), suggested_questions=questions,
         )
         (out_dir / "GRAPH_REPORT.md").write_text(report_md, encoding="utf-8")
-        to_json(G, communities, str(out_dir / "graph.json"), force=True,
+
+        # O grafo anterior e guardado ANTES de ser sobrescrito, e so por isso
+        # existe contra o que comparar. `graph_diff` estava implementada e sem
+        # chamador desde sempre pela falta disto, e nao por falta da funcao.
+        # Copia e nao move: se o `to_json` abaixo falhar, o grafo velho continua
+        # no lugar em vez de virar so o `.anterior`.
+        grafo_json = out_dir / "graph.json"
+        anterior = out_dir / "graph.anterior.json"
+        try:
+            if grafo_json.is_file():
+                shutil.copy2(grafo_json, anterior)
+        except OSError as e:
+            logger.warning("nao foi possivel guardar o grafo anterior (%s)", e)
+
+        to_json(G, communities, str(grafo_json), force=True,
                 community_labels=community_labels)
 
+        # `graph_html` tem que seguir o mesmo contrato dos irmaos: caminho quando
+        # o arquivo existe, None quando nao existe. Ele era o unico dos tres que
+        # devolvia o caminho incondicionalmente, e nao num canto raro: o
+        # exportador recusa grafo acima de 5000 nos, e todo grafo de base real
+        # passa disso (este repo tem 6316). Ou seja, o caso comum era o build
+        # dizer "graph.html: <caminho>" para um arquivo que nunca foi escrito, e
+        # a cli.py imprime exatamente esse campo.
+        html_path = out_dir / "graph.html"
         try:
-            to_html(G, communities, str(out_dir / "graph.html"),
+            to_html(G, communities, str(html_path),
                     community_labels=community_labels)
         except Exception as e:
             logger.warning("graph.html export skipped for %s: %s", graph_name, e)
+            html_path = None
 
         callflow_path = out_dir / "callflow.html"
         try:
@@ -581,9 +665,11 @@ async def build_graph(cfg, vault_manager, source_path: str,
         "community_count": len(communities),
         "god_nodes": gods[:5],
         "graph_json": str(out_dir / "graph.json"),
-        "graph_html": str(out_dir / "graph.html"),
+        "graph_html": str(html_path) if html_path else None,
         "callflow_html": str(callflow_path) if callflow_path else None,
         "wiki_articles": wiki_count,
+        # None quando nao havia grafo anterior, que e diferente de "nada mudou".
+        "mudou_desde_o_anterior": diferenca.comparar(anterior, grafo_json),
     }
 
     if not file_to_vault:
@@ -591,7 +677,9 @@ async def build_graph(cfg, vault_manager, source_path: str,
         return result
 
     try:
-        filed = _write_artifacts_to_vault(vault_manager, graph_name, report_md, wiki_dir, previous_paths)
+        filed = _write_artifacts_to_vault(vault_manager, graph_name, report_md,
+                                          wiki_dir, previous_paths,
+                                          manifest_dir=out_dir)
         # Record what landed in the vault so the next rebuild can clean up after
         # this one — community numbering is not stable across runs.
         registry[graph_name]["vault_paths"] = filed.get("written_paths", [])
@@ -736,3 +824,26 @@ def export_graph(cfg, name: str, fmt: str) -> dict:
     return {"status": "ok", "name": graph_name, "format": fmt,
             "path": str(dest), "opens_in": opens_in,
             "node_count": G.number_of_nodes()}
+
+
+def abrir_para_consulta(cfg, name: str):
+    """O grafo `name` carregado para consulta, com a raiz do codigo para trecho.
+
+    Devolve (grafo, None) ou (None, dict de erro). A carga vive em
+    `consulta_grafo`, que nao sabe o que e registro: aqui so se traduz nome em
+    caminho, e se descobre a raiz do codigo pelo `source_path` do registro.
+    """
+    from . import erros
+    from .consulta_grafo import carregar
+
+    graph_name = _slugify(name)
+    graph_path = cfg.graphs_dir / graph_name / "graph.json"
+    if not graph_path.exists():
+        return None, erros.nao_encontrado(f"No graph found for '{graph_name}'. graph_list shows the built graphs; graph_build creates one.")
+    raiz = (_load_registry(cfg).get(graph_name) or {}).get("source_path")
+    if raiz and not Path(raiz).is_dir():
+        raiz = None
+    try:
+        return carregar(graph_path, raiz), None
+    except (OSError, ValueError) as e:
+        return None, erros.falha(f"Could not load graph '{graph_name}': {e}")

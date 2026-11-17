@@ -18,6 +18,7 @@ from pathlib import Path
 RAIZ = Path(__file__).resolve().parents[1]
 DOCS = ("AGENT_GUIDE.md", "AGENT_GUIDE_CURTO.md", "CLAUDE_SYSTEM_PROMPT.md")
 ALVO = RAIZ / "versoes_entregues_docs.json"
+ALVO_PACOTE = RAIZ / "src" / "delegation_core" / "versoes_entregues_docs.json"
 
 
 def hash_do_doc(conteudo: bytes) -> str:
@@ -41,7 +42,10 @@ def main() -> None:
     for doc in DOCS:
         atual.setdefault(doc, set()).update(historico(doc))
         atual[doc].add(hash_do_doc((RAIZ / doc).read_bytes()))
-    ALVO.write_text(json.dumps({k: sorted(v) for k, v in sorted(atual.items())}, indent=1) + "\n", encoding="utf-8")
+    conteudo_json = json.dumps({k: sorted(v) for k, v in sorted(atual.items())}, indent=1) + "\n"
+    ALVO.write_text(conteudo_json, encoding="utf-8")
+    if ALVO_PACOTE.parent.exists():
+        ALVO_PACOTE.write_text(conteudo_json, encoding="utf-8")
     for k, v in sorted(atual.items()):
         print(len(v), k)
 

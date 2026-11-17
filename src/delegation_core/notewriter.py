@@ -68,10 +68,33 @@ def post_write_links(vault, note_path: Path, rel_path: str, folder: str, stem: s
         vault_health_cache().unlink(missing_ok=True)
     except Exception:
         pass
+    # fato da nota viva extraido ja, em segundo plano: sem isso a decisao
+    # escrita de manha so vira fato as 04:47 do dia seguinte, e ate la o
+    # `current` do vault_facts mostra o valor velho
+    try:
+        from . import fatos_vault
+        fatos_vault.apos_escrita(vault, rel_path)
+    except Exception as e:  # noqa: BLE001
+        logger.debug("fatos apos escrita falhou para %s: %s", rel_path, e)
+
+
+def _proteger(cfg, texto: str) -> tuple[str, dict]:
+    """Cobre segredo antes de gravar e indexar (pacote `segredos`).
+
+    Nota indexada e buscavel: um token colado numa sessao viraria resultado de
+    busca. Medido em 26/09 o vault tinha zero, entao isto e porta fechada antes
+    de alguem passar, e nao limpeza. `redigir_segredos=false` desliga.
+    """
+    if not getattr(cfg, "redigir_segredos", True):
+        return texto, {}
+    from .segredos import redigir
+
+    token = getattr(cfg, "server_token", "") or ""
+    return redigir(texto, (token,) if token else ())
 
 
 def create_note(vault, folder: str, title: str, content: str,
-                ai_generated: bool = True) -> dict:
+                ai_generated: bool = True, extras: tuple = ()) -> dict:
     """Write a new dated note into `folder` and index it.
 
     Filename is `{date}-{safe title}.md`, disambiguated by unique_note_path so a
@@ -93,7 +116,8 @@ def create_note(vault, folder: str, title: str, content: str,
     # compose_note rather than concatenation: callers routinely include their own
     # frontmatter block, which stacked a second one under the generated block and
     # silently turned every key they wrote into body text.
-    full = sem_nul(compose_note(title, content, today, ai_generated=ai_generated))
+    full = sem_nul(compose_note(title, content, today, ai_generated=ai_generated, extras=extras))
+    full, cobertos = _proteger(cfg, full)
     try:
         dest.write_text(full, encoding="utf-8")
     except OSError as e:
@@ -119,7 +143,10 @@ def create_note(vault, folder: str, title: str, content: str,
     if vault.index_note(full, {"title": title, "path": rel, "folder": folder}):
         vault.stamp_indexed([rel])
     post_write_links(vault, dest, rel, folder, dest.stem)
-    return {"status": "ok", "path": rel, "folder": folder, "name": dest.name}
+    r = {"status": "ok", "path": rel, "folder": folder, "name": dest.name}
+    if cobertos:
+        r["secrets_redacted"] = cobertos
+    return r
 
 
 def save_note(vault, rel_path: str, content: str) -> dict:
@@ -139,6 +166,7 @@ def save_note(vault, rel_path: str, content: str) -> dict:
         return {"error": "Only .md notes can be saved"}
 
     content = sem_nul(content)
+    content, cobertos = _proteger(cfg, content)
     try:
         dest.write_text(content, encoding="utf-8")
     except OSError as e:
@@ -155,7 +183,10 @@ def save_note(vault, rel_path: str, content: str) -> dict:
         pass
     # Deliberately no post_write_links here: appending a "## Related" block to
     # text the user just typed would edit their note behind them on every save.
-    return {"status": "ok", "path": rel, "bytes": len(content.encode("utf-8"))}
+    r = {"status": "ok", "path": rel, "bytes": len(content.encode("utf-8"))}
+    if cobertos:
+        r["secrets_redacted"] = cobertos
+    return r
 
 
 # `[[target]]`, `[[target#section]]`, `[[target|display]]`, `[[target#s|d]]`.
@@ -233,6 +264,7 @@ def rename_note(vault, rel_path: str, new_title: str, retitle: bool = True) -> d
     staged.append((src, own, own_new))
 
     referrers = []
+    skipped_unreadable: list[str] = []
     for folder in cfg.vault_folders:
         root = cfg.vault / folder
         if not root.exists():
@@ -243,6 +275,12 @@ def rename_note(vault, rel_path: str, new_title: str, retitle: bool = True) -> d
             try:
                 text = f.read_text(encoding="utf-8")
             except OSError:
+                continue
+            except UnicodeDecodeError:
+                # Nota que nao e UTF-8 (rascunhos em Windows-1252, visto em 2026-11-04: dez no vault).
+                # Reescreve-la corromperia o arquivo, e deixar a excecao subir bloqueava toda renomeacao.
+                skipped_unreadable.append(f.relative_to(cfg.vault).as_posix())
+                logger.warning("rename_note: %s is not UTF-8; its links, if any, were not repointed", f)
                 continue
             retargeted = _retarget(text, old_stem, new_stem)
             if retargeted != text:
@@ -294,4 +332,5 @@ def rename_note(vault, rel_path: str, new_title: str, retitle: bool = True) -> d
         pass
 
     return {"status": "ok", "path": new_rel, "previous_path": rel_path,
-            "links_rewritten": len(referrers), "referrers": referrers}
+            "links_rewritten": len(referrers), "referrers": referrers,
+            "skipped_unreadable": skipped_unreadable}

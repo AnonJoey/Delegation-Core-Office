@@ -31,6 +31,8 @@ import sys
 from pathlib import Path
 from .procs import sem_janela
 
+from . import dispositivos
+
 CONFIG_DIR = Path.home() / ".delegation_core"
 
 #: Folders delegation-core creates itself; a case-variant sibling of a
@@ -813,7 +815,22 @@ def check_local_fallback(cfg) -> dict:
 
 
 def _caminho_do_cli():
-    """Onde mora o cli.py DESTA instalacao. Separado para o teste apontar noutro."""
+    """Onde mora o cli.py DESTA instalacao. Separado para o teste apontar noutro.
+
+    Derivado do proprio arquivo e nao de `from . import cli`, que era a metade
+    artificial de um ciclo: `cli` importa `doctor` para RODAR o doctor, que e a
+    direcao natural, e `doctor` importava `cli` so para saber ONDE o arquivo
+    esta. Dependencia de localizacao, nao de comportamento, e os dois moram no
+    mesmo pacote.
+
+    O ciclo nao derrubava nada porque os dois imports eram tardios, dentro de
+    funcao, que e o contorno classico. Contorno funcionando nao e ausencia de
+    problema: nenhum dos dois modulos podia ser entendido nem testado sem o
+    outro existir.
+
+    Importar `cli` aqui tambem custava caro sem precisar: ele puxa a arvore de
+    subcomandos inteira so para que alguem leia um `__file__`.
+    """
     return Path(__file__).with_name("cli.py")
 
 
@@ -873,6 +890,123 @@ def check_index_writers() -> dict:
         }
     return {"check": "index_writers", "status": "ok",
             "detail": "every CLI command that opens the index routes through the daemon"}
+
+
+def check_gpu_visivel(cfg) -> dict:
+    """A placa existe na maquina e esta escondida deste processo?
+
+    Nascida de um caso real, medido em 26/09/2026. O drop-in de systemd
+    `cpu-embeddings.conf` poe `CUDA_VISIBLE_DEVICES=` vazio no daemon para tirar
+    o BGE-m3 da placa, e o `llama-server` e processo FILHO do daemon, entao foi
+    junto. Confirmado em `/proc/<pid>/environ`.
+
+    | | |
+    |---|---|
+    | geracao do modelo local | 5,5 tokens/s |
+    | CPU do llama-server | 986% |
+    | GPU em uso | 656 MiB de 16311 |
+
+    E o comentario do proprio drop-in diz que a intencao era o contrario: llama
+    com offload total na placa, BGE fora.
+
+    **Nada falhava**, e por isso e checagem de doctor e nao erro: o modelo
+    respondia, so devagar. E a mesma classe das outras seis checagens daqui,
+    cada uma nascida de algo que passou despercebido.
+
+    Aviso e nao erro, de proposito: esconder a placa pode ser decisao
+    deliberada de quem so tem CPU disponivel, e um `doctor` que sai com codigo
+    1 por causa disso derrubaria cron alheio.
+    """
+    if not dispositivos.placa_existe_na_maquina():
+        return {"check": "gpu_visivel", "status": "ok",
+                "detail": "nenhuma placa NVIDIA nesta maquina; nada a esconder"}
+
+    # O que importa e o ambiente do DAEMON, e nao o deste processo. Rodando
+    # pela CLI, a primeira versao desta checagem dizia "visivel" enquanto o
+    # daemon estava cego, porque olhava a si mesma. Medido em 26/09/2026: o
+    # daemon tinha CUDA_VISIBLE_DEVICES vazia e o `doctor` da CLI reportava ok.
+    onde = "neste processo"
+    escondida = dispositivos.placa_escondida_por_ambiente()
+    for pid in dispositivos.pids_do_daemon():
+        no_daemon = dispositivos.placa_escondida_no_pid(pid)
+        if no_daemon is not None:
+            escondida, onde = no_daemon, f"no daemon (pid {pid})"
+            break
+
+    if not escondida:
+        return {"check": "gpu_visivel", "status": "ok",
+                "detail": f"a placa esta visivel {onde}"}
+
+    quem = "o encoder" if cfg.is_agent_mode else "o encoder e o llama-server"
+    return {
+        "check": "gpu_visivel", "status": "warn",
+        "detail": (f"ha placa nesta maquina, mas CUDA_VISIBLE_DEVICES esta vazia "
+                   f"{onde}: {quem} rodam em CPU, e todo processo filho herda isso"),
+        "fix": ('para por SO o encoder na CPU, use embed_device="cpu" no '
+                "config.json e remova o drop-in de systemd que esvazia "
+                "CUDA_VISIBLE_DEVICES"),
+    }
+
+
+def check_grafo_desatualizado(cfg) -> dict:
+    """Grafo construido antes de commits que a fonte recebeu depois.
+
+    Nascida de um caso medido em 26/09/2026. O grafo do `delegation-core`
+    tinha sido construido em 06/08 e a fonte recebera commits ate 24/09:
+
+    | | nos | arestas |
+    |---|---|---|
+    | grafo no vault, de 06/08 | 2.121 | 4.574 |
+    | codigo de hoje | 6.140 | 11.143 |
+
+    A base quase **triplicou**, e 122 artigos indexados no vault descreviam a
+    versao de agosto, respondendo buscas com estrutura que nao existe mais.
+
+    Nada falha nesse estado, que e por isso que e checagem de doctor: os
+    artigos estao la, legiveis, indexados e errados.
+
+    So repositorio git e checado. Pasta sem `.git` nao tem como dizer quando
+    mudou de forma confiavel, e mtime de arquivo muda por copia, por backup e
+    por editor sem nada ter mudado de verdade: acusar com base nisso daria
+    aviso falso, que e pior que nao avisar.
+
+    Aviso e nunca erro: grafo velho e comum e as vezes deliberado, como uma
+    base de referencia congelada de proposito.
+    """
+    reg = cfg.graphs_registry_path
+    if not reg.exists():
+        return {"check": "grafo_desatualizado", "status": "ok", "detail": "no graphs built"}
+    try:
+        registry = json.loads(reg.read_text(encoding="utf-8"))
+    except Exception as e:
+        return {"check": "grafo_desatualizado", "status": "warn",
+                "detail": f"graph registry unreadable: {e}"}
+
+    velhos = []
+    for nome, info in (registry or {}).items():
+        fonte = Path(str((info or {}).get("source_path") or ""))
+        construido = str((info or {}).get("built_at") or "")[:10]
+        if not construido or not (fonte / ".git").is_dir():
+            continue
+        try:
+            r = subprocess.run(
+                ["git", "-C", str(fonte), "log", "-1", "--format=%cd", "--date=short"],
+                capture_output=True, text=True, timeout=10, **sem_janela())
+            ultimo = r.stdout.strip()
+        except Exception:
+            continue
+        if ultimo and ultimo > construido:
+            notas = len((info or {}).get("vault_paths") or [])
+            velhos.append(f"{nome} (built {construido}, commits ate {ultimo}, {notas} notas)")
+
+    if not velhos:
+        return {"check": "grafo_desatualizado", "status": "ok",
+                "detail": f"{len(registry)} graph(s), nenhum atras da sua fonte"}
+    return {
+        "check": "grafo_desatualizado", "status": "warn",
+        "detail": f"{len(velhos)} grafo(s) atras da fonte: {velhos[:3]}",
+        "fix": "graph_build(force=true) para refazer; as notas do vault descrevem a versao antiga",
+    }
 
 
 def check_devices(cfg, tem_cuda=None) -> dict:
@@ -949,7 +1083,22 @@ def run_all(cfg) -> dict:
         check_index_location(cfg),
         check_local_fallback(cfg),
         check_index_writers(),
+        check_gpu_visivel(cfg),
+        check_grafo_desatualizado(cfg),
     ]
+    # Os sistemas do enriquecimento (busca hibrida, OCR, agenda, alertas,
+    # historico) degradam em silencio por desenho; o doctor e onde aparecem.
+    # Modulo proprio: some sem tocar nas checagens acima.
+    try:
+        from .doctor_enriquecimento import todas
+        checks.extend(todas(cfg))
+    except Exception as e:  # noqa: BLE001 - uma checagem quebrada nao pode derrubar o doctor
+        checks.append({"check": "enrichment_checks", "status": "warn", "detail": f"could not run: {e}"})
+    try:
+        from .doctor_paperclip import todas as _paperclip
+        checks.extend(_paperclip(cfg))
+    except Exception as e:  # noqa: BLE001
+        checks.append({"check": "paperclip_checks", "status": "warn", "detail": f"could not run: {e}"})
     counts = {s: sum(1 for c in checks if c["status"] == s)
               for s in ("ok", "warn", "error", "skip")}
     overall = "error" if counts["error"] else "warn" if counts["warn"] else "ok"

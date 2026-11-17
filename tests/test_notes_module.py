@@ -99,6 +99,9 @@ def test_o_modulo_de_indice_encolheu_de_verdade():
     vault_linhas = len((SRC / "vault.py").read_text(encoding="utf-8").split("\n"))
     notes_linhas = len((SRC / "notes.py").read_text(encoding="utf-8").split("\n"))
 
+    # 1800 ate 2026-10-27. Duas funcionalidades legitimas de 26 a 28/10 (notas dataless no health,
+    # aliases pelo indice local) o levaram a 1811. O teste existe para o arquivo nao voltar ao
+    # monolito de 2020 linhas, e 1900 ainda guarda essa fronteira com folga de 120.
     assert vault_linhas < 1900, f"vault.py voltou a crescer: {vault_linhas} linhas"
     assert notes_linhas > 300, f"notes.py encolheu demais: {notes_linhas} linhas"
 

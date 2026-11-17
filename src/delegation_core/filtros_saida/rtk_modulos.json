@@ -1,0 +1,858 @@
+{
+ "source": "rtk-ai/rtk src/cmds, develop branch downloaded 2026-09-30 (Apache 2.0)",
+ "modules": [
+  {
+   "module": "cloud/aws_cmd",
+   "path": "src/cmds/cloud/aws_cmd.rs",
+   "lines": 2792,
+   "code_lines": 1530,
+   "description": "AWS CLI output compression.",
+   "commands": [
+    "aws"
+   ],
+   "delegation_core_route": "auto",
+   "status": "not_ported"
+  },
+  {
+   "module": "cloud/container",
+   "path": "src/cmds/cloud/container.rs",
+   "lines": 1066,
+   "code_lines": 856,
+   "description": "Filters Docker and kubectl output into compact summaries.",
+   "commands": [
+    "docker",
+    "kubectl"
+   ],
+   "delegation_core_route": "auto",
+   "status": "not_ported"
+  },
+  {
+   "module": "cloud/curl_cmd",
+   "path": "src/cmds/cloud/curl_cmd.rs",
+   "lines": 318,
+   "code_lines": 165,
+   "description": "Runs curl and condenses long output for human consumption.",
+   "commands": [
+    "curl"
+   ],
+   "delegation_core_route": "auto",
+   "status": "not_ported"
+  },
+  {
+   "module": "cloud/psql_cmd",
+   "path": "src/cmds/cloud/psql_cmd.rs",
+   "lines": 363,
+   "code_lines": 184,
+   "description": "PostgreSQL client (psql) output compression.",
+   "commands": [
+    "psql"
+   ],
+   "delegation_core_route": "auto",
+   "status": "not_ported"
+  },
+  {
+   "module": "cloud/wget_cmd",
+   "path": "src/cmds/cloud/wget_cmd.rs",
+   "lines": 386,
+   "code_lines": 267,
+   "description": "Runs wget and condenses download progress output.",
+   "commands": [
+    "wget"
+   ],
+   "delegation_core_route": "log",
+   "status": "not_ported"
+  },
+  {
+   "module": "dotnet/binlog",
+   "path": "src/cmds/dotnet/binlog.rs",
+   "lines": 1673,
+   "code_lines": 1144,
+   "description": "Reads MSBuild binary log files and extracts errors and test results.",
+   "commands": [
+    "dotnet"
+   ],
+   "delegation_core_route": "log",
+   "status": "not_ported"
+  },
+  {
+   "module": "dotnet/dotnet_cmd",
+   "path": "src/cmds/dotnet/dotnet_cmd.rs",
+   "lines": 3341,
+   "code_lines": 1479,
+   "description": "Filters dotnet CLI output — build, test, and format results.",
+   "commands": [
+    "dotnet"
+   ],
+   "delegation_core_route": "log",
+   "status": "not_ported"
+  },
+  {
+   "module": "dotnet/dotnet_format_report",
+   "path": "src/cmds/dotnet/dotnet_format_report.rs",
+   "lines": 135,
+   "code_lines": 93,
+   "description": "Parses dotnet format JSON reports into compact summaries.",
+   "commands": [
+    "dotnet"
+   ],
+   "delegation_core_route": "auto",
+   "status": "not_ported"
+  },
+  {
+   "module": "dotnet/dotnet_trx",
+   "path": "src/cmds/dotnet/dotnet_trx.rs",
+   "lines": 603,
+   "code_lines": 384,
+   "description": "Parses .trx test result files (Visual Studio XML format) into compact summaries.",
+   "commands": [
+    "dotnet"
+   ],
+   "delegation_core_route": "log",
+   "status": "not_ported"
+  },
+  {
+   "module": "git/diff_cmd",
+   "path": "src/cmds/git/diff_cmd.rs",
+   "lines": 7437,
+   "code_lines": 681,
+   "description": "Compares two files and shows only the changed lines.",
+   "commands": [
+    "diff"
+   ],
+   "delegation_core_route": "diff",
+   "status": "not_ported"
+  },
+  {
+   "module": "git/gh_cmd",
+   "path": "src/cmds/git/gh_cmd.rs",
+   "lines": 1782,
+   "code_lines": 1073,
+   "description": "GitHub CLI (gh) command output compression.",
+   "commands": [
+    "gh"
+   ],
+   "delegation_core_route": "auto",
+   "status": "partial",
+   "python_module": "delegation_core.filtros_saida.modulos.git.gh",
+   "ported_subcommands": [
+    "pr list",
+    "pr view",
+    "pr checks",
+    "pr status",
+    "pr create",
+    "pr merge",
+    "pr diff",
+    "pr comment",
+    "pr edit"
+   ]
+  },
+  {
+   "module": "git/git_cmd",
+   "path": "src/cmds/git/git_cmd.rs",
+   "lines": 6846,
+   "code_lines": 1972,
+   "description": "Filters git output — log, status, diff, and more — keeping just the essential info.",
+   "commands": [
+    "git"
+   ],
+   "delegation_core_route": "auto",
+   "status": "partial",
+   "python_module": "delegation_core.filtros_saida.modulos.git.git",
+   "ported_subcommands": [
+    "status",
+    "add",
+    "fetch",
+    "diff",
+    "log",
+    "show"
+   ]
+  },
+  {
+   "module": "git/glab_cmd",
+   "path": "src/cmds/git/glab_cmd.rs",
+   "lines": 1614,
+   "code_lines": 1011,
+   "description": "GitLab CLI (glab) command output compression.",
+   "commands": [
+    "glab"
+   ],
+   "delegation_core_route": "auto",
+   "status": "not_ported"
+  },
+  {
+   "module": "git/gt_cmd",
+   "path": "src/cmds/git/gt_cmd.rs",
+   "lines": 790,
+   "code_lines": 400,
+   "description": "Filters Graphite (gt) CLI output for stacking workflows.",
+   "commands": [
+    "gt"
+   ],
+   "delegation_core_route": "auto",
+   "status": "not_ported"
+  },
+  {
+   "module": "go/go_cmd",
+   "path": "src/cmds/go/go_cmd.rs",
+   "lines": 1135,
+   "code_lines": 746,
+   "description": "Filters Go command output — test results, build errors, vet warnings.",
+   "commands": [
+    "go"
+   ],
+   "delegation_core_route": "log",
+   "status": "not_ported"
+  },
+  {
+   "module": "go/golangci_cmd",
+   "path": "src/cmds/go/golangci_cmd.rs",
+   "lines": 997,
+   "code_lines": 466,
+   "description": "Filters golangci-lint output, grouping issues by rule.",
+   "commands": [
+    "golangci-lint"
+   ],
+   "delegation_core_route": "log",
+   "status": "not_ported"
+  },
+  {
+   "module": "js/bun_cmd",
+   "path": "src/cmds/js/bun_cmd.rs",
+   "lines": 478,
+   "code_lines": 249,
+   "description": "Filters bun output — install logs, package lists, and pm commands.",
+   "commands": [
+    "bun"
+   ],
+   "delegation_core_route": "log",
+   "status": "not_ported"
+  },
+  {
+   "module": "js/deno_cmd",
+   "path": "src/cmds/js/deno_cmd.rs",
+   "lines": 226,
+   "code_lines": 102,
+   "description": "Filters deno output — lint, check, and task command output.",
+   "commands": [
+    "deno"
+   ],
+   "delegation_core_route": "log",
+   "status": "not_ported"
+  },
+  {
+   "module": "js/lint_cmd",
+   "path": "src/cmds/js/lint_cmd.rs",
+   "lines": 767,
+   "code_lines": 540,
+   "description": "Filters ESLint and Biome linter output, grouping violations by rule.",
+   "commands": [
+    "eslint",
+    "biome"
+   ],
+   "delegation_core_route": "log",
+   "status": "not_ported"
+  },
+  {
+   "module": "js/next_cmd",
+   "path": "src/cmds/js/next_cmd.rs",
+   "lines": 222,
+   "code_lines": 178,
+   "description": "Filters Next.js build output down to route metrics and bundle sizes.",
+   "commands": [
+    "next"
+   ],
+   "delegation_core_route": "log",
+   "status": "not_ported"
+  },
+  {
+   "module": "js/npm_cmd",
+   "path": "src/cmds/js/npm_cmd.rs",
+   "lines": 306,
+   "code_lines": 210,
+   "description": "Filters npm output and auto-injects the \"run\" subcommand when appropriate.",
+   "commands": [
+    "npm",
+    "npx"
+   ],
+   "delegation_core_route": "log",
+   "status": "not_ported"
+  },
+  {
+   "module": "js/playwright_cmd",
+   "path": "src/cmds/js/playwright_cmd.rs",
+   "lines": 474,
+   "code_lines": 328,
+   "description": "Filters Playwright E2E test output to show only failures.",
+   "commands": [
+    "playwright"
+   ],
+   "delegation_core_route": "log",
+   "status": "not_ported"
+  },
+  {
+   "module": "js/pnpm_cmd",
+   "path": "src/cmds/js/pnpm_cmd.rs",
+   "lines": 707,
+   "code_lines": 563,
+   "description": "Filters pnpm output — dependency trees, install logs, outdated packages.",
+   "commands": [
+    "pnpm"
+   ],
+   "delegation_core_route": "log",
+   "status": "not_ported"
+  },
+  {
+   "module": "js/prettier_cmd",
+   "path": "src/cmds/js/prettier_cmd.rs",
+   "lines": 183,
+   "code_lines": 126,
+   "description": "Filters Prettier output to show only files that need formatting.",
+   "commands": [
+    "prettier"
+   ],
+   "delegation_core_route": "log",
+   "status": "not_ported"
+  },
+  {
+   "module": "js/prisma_cmd",
+   "path": "src/cmds/js/prisma_cmd.rs",
+   "lines": 511,
+   "code_lines": 445,
+   "description": "Filters Prisma CLI output by stripping ASCII art and verbose decoration.",
+   "commands": [
+    "prisma"
+   ],
+   "delegation_core_route": "log",
+   "status": "not_ported"
+  },
+  {
+   "module": "js/tsc_cmd",
+   "path": "src/cmds/js/tsc_cmd.rs",
+   "lines": 749,
+   "code_lines": 371,
+   "description": "Filters TypeScript compiler errors, grouping them by file and error code.",
+   "commands": [
+    "tsc"
+   ],
+   "delegation_core_route": "log",
+   "status": "not_ported"
+  },
+  {
+   "module": "js/vitest_cmd",
+   "path": "src/cmds/js/vitest_cmd.rs",
+   "lines": 611,
+   "code_lines": 412,
+   "description": "Filters Vitest test output to show only failures.",
+   "commands": [
+    "vitest"
+   ],
+   "delegation_core_route": "log",
+   "status": "not_ported"
+  },
+  {
+   "module": "jvm/gradlew_cmd",
+   "path": "src/cmds/jvm/gradlew_cmd.rs",
+   "lines": 1460,
+   "code_lines": 536,
+   "description": "Filters Gradle wrapper output: task progress, test results and build failures.",
+   "commands": [
+    "gradle",
+    "gradlew",
+    "./gradlew"
+   ],
+   "delegation_core_route": "log",
+   "status": "not_ported"
+  },
+  {
+   "module": "jvm/mvn_cmd",
+   "path": "src/cmds/jvm/mvn_cmd.rs",
+   "lines": 5530,
+   "code_lines": 1903,
+   "description": "Apache Maven filter — Surefire/Failsafe block collapse, compile error/warning",
+   "commands": [
+    "mvn",
+    "./mvnw"
+   ],
+   "delegation_core_route": "log",
+   "status": "not_ported"
+  },
+  {
+   "module": "php/artisan_cmd",
+   "path": "src/cmds/php/artisan_cmd.rs",
+   "lines": 51,
+   "code_lines": 30,
+   "description": "Laravel Artisan output cleanup helpers.",
+   "commands": [
+    "php artisan"
+   ],
+   "delegation_core_route": "log",
+   "status": "not_ported"
+  },
+  {
+   "module": "php/ecs_cmd",
+   "path": "src/cmds/php/ecs_cmd.rs",
+   "lines": 81,
+   "code_lines": 61,
+   "description": "EasyCodingStandard output filter.",
+   "commands": [
+    "ecs"
+   ],
+   "delegation_core_route": "log",
+   "status": "not_ported"
+  },
+  {
+   "module": "php/paratest_cmd",
+   "path": "src/cmds/php/paratest_cmd.rs",
+   "lines": 108,
+   "code_lines": 32,
+   "description": "ParaTest runner filter.",
+   "commands": [
+    "paratest"
+   ],
+   "delegation_core_route": "log",
+   "status": "not_ported"
+  },
+  {
+   "module": "php/pest_cmd",
+   "path": "src/cmds/php/pest_cmd.rs",
+   "lines": 45,
+   "code_lines": 32,
+   "description": "Pest test runner filter.",
+   "commands": [
+    "pest"
+   ],
+   "delegation_core_route": "log",
+   "status": "not_ported"
+  },
+  {
+   "module": "php/php_cmd",
+   "path": "src/cmds/php/php_cmd.rs",
+   "lines": 114,
+   "code_lines": 96,
+   "description": "PHP command filter: syntax-check summaries and generic cleanup.",
+   "commands": [
+    "php"
+   ],
+   "delegation_core_route": "log",
+   "status": "not_ported"
+  },
+  {
+   "module": "php/phpstan_cmd",
+   "path": "src/cmds/php/phpstan_cmd.rs",
+   "lines": 581,
+   "code_lines": 270,
+   "description": "PHPStan static analysis filter.",
+   "commands": [
+    "phpstan"
+   ],
+   "delegation_core_route": "log",
+   "status": "not_ported"
+  },
+  {
+   "module": "php/phpt_cmd",
+   "path": "src/cmds/php/phpt_cmd.rs",
+   "lines": 886,
+   "code_lines": 397,
+   "description": "Filters `php run-tests.php` output to a compact summary with failure diffs.",
+   "commands": [
+    "php run-tests.php"
+   ],
+   "delegation_core_route": "log",
+   "status": "not_ported"
+  },
+  {
+   "module": "php/phpunit_cmd",
+   "path": "src/cmds/php/phpunit_cmd.rs",
+   "lines": 400,
+   "code_lines": 205,
+   "description": "PHPUnit output filter.",
+   "commands": [
+    "phpunit"
+   ],
+   "delegation_core_route": "log",
+   "status": "not_ported"
+  },
+  {
+   "module": "php/pint_cmd",
+   "path": "src/cmds/php/pint_cmd.rs",
+   "lines": 224,
+   "code_lines": 137,
+   "description": "Laravel Pint (PHP-CS-Fixer wrapper) output filter.",
+   "commands": [
+    "pint"
+   ],
+   "delegation_core_route": "log",
+   "status": "not_ported"
+  },
+  {
+   "module": "php/test_output",
+   "path": "src/cmds/php/test_output.rs",
+   "lines": 84,
+   "code_lines": 63,
+   "description": "Shared compact output filtering for PHP test runners.",
+   "commands": [],
+   "delegation_core_route": "log",
+   "status": "not_ported"
+  },
+  {
+   "module": "php/utils",
+   "path": "src/cmds/php/utils.rs",
+   "lines": 61,
+   "code_lines": 61,
+   "description": "Shared helpers for the PHP filters.",
+   "commands": [],
+   "delegation_core_route": null,
+   "status": "not_ported"
+  },
+  {
+   "module": "python/mypy_cmd",
+   "path": "src/cmds/python/mypy_cmd.rs",
+   "lines": 372,
+   "code_lines": 223,
+   "description": "Filters mypy type-checking output, grouping errors by file.",
+   "commands": [
+    "mypy"
+   ],
+   "delegation_core_route": "log",
+   "status": "ported",
+   "python_module": "delegation_core.filtros_saida.modulos.python.mypy"
+  },
+  {
+   "module": "python/pip_cmd",
+   "path": "src/cmds/python/pip_cmd.rs",
+   "lines": 293,
+   "code_lines": 239,
+   "description": "Filters pip and uv package manager output.",
+   "commands": [
+    "pip",
+    "pip3"
+   ],
+   "delegation_core_route": "log",
+   "status": "not_ported"
+  },
+  {
+   "module": "python/pytest_cmd",
+   "path": "src/cmds/python/pytest_cmd.rs",
+   "lines": 604,
+   "code_lines": 353,
+   "description": "Filters pytest output to show only failures and the summary line.",
+   "commands": [
+    "pytest"
+   ],
+   "delegation_core_route": "log",
+   "status": "ported",
+   "python_module": "delegation_core.filtros_saida.modulos.python.pytest"
+  },
+  {
+   "module": "python/ruff_cmd",
+   "path": "src/cmds/python/ruff_cmd.rs",
+   "lines": 542,
+   "code_lines": 375,
+   "description": "Filters Ruff linter and formatter output.",
+   "commands": [
+    "ruff"
+   ],
+   "delegation_core_route": "log",
+   "status": "ported",
+   "python_module": "delegation_core.filtros_saida.modulos.python.ruff"
+  },
+  {
+   "module": "python/sqlfluff_cmd",
+   "path": "src/cmds/python/sqlfluff_cmd.rs",
+   "lines": 975,
+   "code_lines": 416,
+   "description": "Filters SQLFluff SQL linter output.",
+   "commands": [
+    "sqlfluff"
+   ],
+   "delegation_core_route": "log",
+   "status": "not_ported"
+  },
+  {
+   "module": "python/uv_cmd",
+   "path": "src/cmds/python/uv_cmd.rs",
+   "lines": 574,
+   "code_lines": 352,
+   "description": "Filters `uv run` output while preserving uv-managed environment semantics.",
+   "commands": [
+    "uv"
+   ],
+   "delegation_core_route": "log",
+   "status": "not_ported"
+  },
+  {
+   "module": "ruby/rake_cmd",
+   "path": "src/cmds/ruby/rake_cmd.rs",
+   "lines": 533,
+   "code_lines": 261,
+   "description": "Minitest output filter for `rake test` and `rails test`.",
+   "commands": [
+    "rake",
+    "rails"
+   ],
+   "delegation_core_route": "log",
+   "status": "not_ported"
+  },
+  {
+   "module": "ruby/rspec_cmd",
+   "path": "src/cmds/ruby/rspec_cmd.rs",
+   "lines": 1024,
+   "code_lines": 434,
+   "description": "RSpec test runner filter.",
+   "commands": [
+    "rspec"
+   ],
+   "delegation_core_route": "log",
+   "status": "not_ported"
+  },
+  {
+   "module": "ruby/rubocop_cmd",
+   "path": "src/cmds/ruby/rubocop_cmd.rs",
+   "lines": 638,
+   "code_lines": 331,
+   "description": "RuboCop linter filter.",
+   "commands": [
+    "rubocop"
+   ],
+   "delegation_core_route": "log",
+   "status": "not_ported"
+  },
+  {
+   "module": "rust/cargo_cmd",
+   "path": "src/cmds/rust/cargo_cmd.rs",
+   "lines": 2899,
+   "code_lines": 971,
+   "description": "Filters cargo output — build errors, test results, clippy warnings.",
+   "commands": [
+    "cargo"
+   ],
+   "delegation_core_route": "log",
+   "status": "not_ported"
+  },
+  {
+   "module": "rust/runner",
+   "path": "src/cmds/rust/runner.rs",
+   "lines": 52,
+   "code_lines": 52,
+   "description": "Argv and explicit-shell wrappers over the shared err/test command runners in core.",
+   "commands": [],
+   "delegation_core_route": null,
+   "status": "not_ported"
+  },
+  {
+   "module": "scala/sbt_cmd",
+   "path": "src/cmds/scala/sbt_cmd.rs",
+   "lines": 845,
+   "code_lines": 524,
+   "description": "Filters sbt (Scala build tool) output: compile errors and test results.",
+   "commands": [
+    "sbt"
+   ],
+   "delegation_core_route": "log",
+   "status": "not_ported"
+  },
+  {
+   "module": "system/ast_grep_cmd",
+   "path": "src/cmds/system/ast_grep_cmd.rs",
+   "lines": 587,
+   "code_lines": 312,
+   "description": "Filters `ast-grep run` plain-mode output by grouping matches by file and",
+   "commands": [
+    "ast-grep",
+    "sg"
+   ],
+   "delegation_core_route": "search",
+   "status": "not_ported"
+  },
+  {
+   "module": "system/constants",
+   "path": "src/cmds/system/constants.rs",
+   "lines": 27,
+   "code_lines": 27,
+   "description": "Shared constants for the system command filters.",
+   "commands": [],
+   "delegation_core_route": null,
+   "status": "not_ported"
+  },
+  {
+   "module": "system/ctest_cmd",
+   "path": "src/cmds/system/ctest_cmd.rs",
+   "lines": 1850,
+   "code_lines": 821,
+   "description": "Compact CTest output while preserving failing-test details.",
+   "commands": [
+    "ctest"
+   ],
+   "delegation_core_route": "log",
+   "status": "not_ported"
+  },
+  {
+   "module": "system/deps",
+   "path": "src/cmds/system/deps.rs",
+   "lines": 324,
+   "code_lines": 290,
+   "description": "Summarizes project dependencies from lock files and manifests.",
+   "commands": [],
+   "delegation_core_route": "text",
+   "status": "not_ported"
+  },
+  {
+   "module": "system/env_cmd",
+   "path": "src/cmds/system/env_cmd.rs",
+   "lines": 236,
+   "code_lines": 180,
+   "description": "Filters environment variables, compacting noise.",
+   "commands": [
+    "env",
+    "printenv"
+   ],
+   "delegation_core_route": "text",
+   "status": "not_ported"
+  },
+  {
+   "module": "system/find_cmd",
+   "path": "src/cmds/system/find_cmd.rs",
+   "lines": 1463,
+   "code_lines": 745,
+   "description": "Filters find results by grouping files by directory.",
+   "commands": [
+    "find",
+    "fd"
+   ],
+   "delegation_core_route": "text",
+   "status": "ported",
+   "python_module": "delegation_core.filtros_saida.modulos.system.find"
+  },
+  {
+   "module": "system/format_cmd",
+   "path": "src/cmds/system/format_cmd.rs",
+   "lines": 380,
+   "code_lines": 287,
+   "description": "Runs code formatters (Prettier, Ruff) and shows only files that changed.",
+   "commands": [],
+   "delegation_core_route": "log",
+   "status": "not_ported"
+  },
+  {
+   "module": "system/json_cmd",
+   "path": "src/cmds/system/json_cmd.rs",
+   "lines": 436,
+   "code_lines": 299,
+   "description": "Inspects JSON structure without showing values, saving tokens on large payloads.",
+   "commands": [
+    "jq"
+   ],
+   "delegation_core_route": "auto",
+   "status": "not_ported"
+  },
+  {
+   "module": "system/local_llm",
+   "path": "src/cmds/system/local_llm.rs",
+   "lines": 320,
+   "code_lines": 278,
+   "description": "Summarizes source files using heuristic analysis — no external model needed.",
+   "commands": [],
+   "delegation_core_route": null,
+   "status": "not_ported"
+  },
+  {
+   "module": "system/log_cmd",
+   "path": "src/cmds/system/log_cmd.rs",
+   "lines": 286,
+   "code_lines": 237,
+   "description": "Deduplicates repeated log lines and shows counts instead.",
+   "commands": [
+    "journalctl",
+    "tail"
+   ],
+   "delegation_core_route": "log",
+   "status": "not_ported"
+  },
+  {
+   "module": "system/ls",
+   "path": "src/cmds/system/ls.rs",
+   "lines": 879,
+   "code_lines": 379,
+   "description": "Filters directory listings into a compact tree format.",
+   "commands": [
+    "ls"
+   ],
+   "delegation_core_route": "text",
+   "status": "ported",
+   "python_module": "delegation_core.filtros_saida.modulos.system.ls"
+  },
+  {
+   "module": "system/pipe_cmd",
+   "path": "src/cmds/system/pipe_cmd.rs",
+   "lines": 682,
+   "code_lines": 290,
+   "description": "Filters the output of shell pipelines passed through rtk.",
+   "commands": [],
+   "delegation_core_route": null,
+   "status": "not_ported"
+  },
+  {
+   "module": "system/read",
+   "path": "src/cmds/system/read.rs",
+   "lines": 752,
+   "code_lines": 341,
+   "description": "Reads source files with optional language-aware filtering to strip boilerplate.",
+   "commands": [
+    "cat",
+    "head"
+   ],
+   "delegation_core_route": "auto",
+   "status": "not_ported"
+  },
+  {
+   "module": "system/search",
+   "path": "src/cmds/system/search.rs",
+   "lines": 2357,
+   "code_lines": 1118,
+   "description": "Shared search-output filter for `rtk grep` and `rtk rg`.",
+   "commands": [
+    "grep",
+    "rg",
+    "ag"
+   ],
+   "delegation_core_route": "search",
+   "status": "ported",
+   "python_module": "delegation_core.filtros_saida.modulos.system.search"
+  },
+  {
+   "module": "system/summary",
+   "path": "src/cmds/system/summary.rs",
+   "lines": 319,
+   "code_lines": 319,
+   "description": "Runs a command and produces a heuristic summary of its output.",
+   "commands": [],
+   "delegation_core_route": null,
+   "status": "not_ported"
+  },
+  {
+   "module": "system/tree",
+   "path": "src/cmds/system/tree.rs",
+   "lines": 167,
+   "code_lines": 93,
+   "description": "tree command - proxy to native tree with token-optimized output",
+   "commands": [
+    "tree"
+   ],
+   "delegation_core_route": "text",
+   "status": "not_ported"
+  },
+  {
+   "module": "system/wc_cmd",
+   "path": "src/cmds/system/wc_cmd.rs",
+   "lines": 386,
+   "code_lines": 281,
+   "description": "Compacts wc (word/line/byte count) output.",
+   "commands": [
+    "wc"
+   ],
+   "delegation_core_route": "text",
+   "status": "ported",
+   "python_module": "delegation_core.filtros_saida.modulos.system.wc"
+  }
+ ]
+}

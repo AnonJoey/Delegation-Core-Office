@@ -15,6 +15,18 @@ protocol an AI agent should follow when this MCP server is connected.
 - **Vault**: an Obsidian-compatible markdown vault, semantically searchable via BGE
   embeddings over a single SQLite file (exact search in numpy). Drop files into `_inbox/` and they get classified, synthesized into
   clean notes, wikilinked, and filed - or write/read/search notes directly.
+- **Unified Cores Suite** (`src/delegation_core/cores/`): consolidated software modules exposing
+  unified capabilities directly via FastMCP and Python API:
+  - **Agent Harness & Skills** (`cores/agent_harness/`): SQLite FTS5 index of agent skills built on each machine (not shipped),
+    heuristic anti-slop prompt sanitizer, AST inspector, and browser/workspace tools.
+  - **Multimodal Media Ingestion** (`cores/multimodal/`): native multi-format document conversion
+    (`MarkItDown` for PDF/DOCX/XLSX/PPTX/HTML/CSV), Tesseract OCR layer, Whisper STT, Audiblez TTS, and Mermaid diagram generator.
+  - **DAG Orchestration & Task Queue** (`cores/orchestration/`): declarative YAML and async DAG engine (`DAGEngine` / `DAGRunner`),
+    priority-ordered multi-agent task queue (Multica/Fleetbase), autonomous PR validation (`AutonomousCIRunner`), and LangWatch-compatible LLM telemetry.
+  - **Local Platform & Agent Guard** (`cores/platform/`): reversible CCR token pruner (`TokenPruningEngine`),
+    atomic concurrency locks with TTL and iteration budgets (Paperclip/Hermes), in-memory code graph with Cypher support, and live Btrfs hardware monitoring.
+  - **Homelab Gateway & Self-Hosted Services** (`cores/self_hosted/`): centralized routing gateway and registry
+    for 29 homelab services across 14 domains (identity, BaaS, storage, git, LLM chat, knowledge, etc.) with local token authentication.
 - **Code graph** (opt-in, `[graph]` extra): build a knowledge graph of a codebase - AST
   extraction across ~30 languages via tree-sitter, community detection, god-node/blast-radius
   analysis. Produces `graph.json`, an interactive `graph.html`, Mermaid architecture diagrams

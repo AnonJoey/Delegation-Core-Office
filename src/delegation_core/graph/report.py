@@ -54,14 +54,14 @@ def _learning_section(lines: list, learning: dict | None, top_n: int = 10) -> No
         return
     lines += ["", "## Work-memory lessons"]
     if preferred:
-        lines += ["", "**Preferred sources** — corroborated by past sessions; start here."]
+        lines += ["", "**Preferred sources** - corroborated by past sessions; start here."]
         for nid, e in preferred[:top_n]:
             label = e.get("label") or nid
-            stale = " _(code changed — re-verify)_" if e.get("stale") else ""
+            stale = " _(code changed - re-verify)_" if e.get("stale") else ""
             lines.append(f"- `{label}` ({e.get('uses', 0)}× useful, "
                          f"score={e.get('score', 0)}){stale}")
     if dead_ends:
-        lines += ["", "**Known dead ends** — questions that led nowhere; don't re-derive."]
+        lines += ["", "**Known dead ends** - questions that led nowhere; don't re-derive."]
         for d in dead_ends:
             nodes = ", ".join(f"`{n}`" for n in d.get("nodes", []))
             lines.append(f"- \"{d.get('question', '')}\""
@@ -217,7 +217,7 @@ def generate(
             conf = h.get("confidence", "INFERRED")
             cscore = h.get("confidence_score")
             conf_tag = f"{conf} {cscore:.2f}" if cscore is not None else conf
-            lines.append(f"- **{h.get('label', h.get('id', ''))}** — {node_labels} [{conf_tag}]")
+            lines.append(f"- **{h.get('label', h.get('id', ''))}** - {node_labels} [{conf_tag}]")
 
     lines += ["", f"## Communities ({len(communities)} total, {thin_count_summary} thin omitted)"]
     for cid, nodes in communities.items():
@@ -273,7 +273,7 @@ def generate(
             lines.append(f"- **{len(isolated)} isolated node(s):** {', '.join(f'`{l}`' for l in isolated_labels)}{suffix}")
             lines.append("  These have ≤1 connection - possible missing edges or undocumented components.")
         if thin_communities:
-            lines.append(f"- **{len(thin_communities)} thin communities (<{min_community_size} nodes) omitted from report** — run `graphify query` to explore isolated nodes.")
+            lines.append(f"- **{len(thin_communities)} thin communities (<{min_community_size} nodes) omitted from report** - run `graphify query` to explore isolated nodes.")
         if amb_pct > 20:
             lines.append(f"- **High ambiguity: {amb_pct}% of edges are AMBIGUOUS.** Review the Ambiguous Edges section above.")
 

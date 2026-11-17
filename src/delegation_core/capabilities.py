@@ -10,8 +10,12 @@ sat unused for months while the fallback produced plausible output.
   - ``detect(extra_excludes=...)`` was never wired to ``graph_build``, so the
     only way to keep a repository's tests out of a graph was to build everything
     and prune 1071 articles by hand.
-  - ``remap_communities_to_previous()`` still has no caller, while graphbridge
-    works around the exact instability it was written to fix.
+  - ``remap_communities_to_previous()`` still has no caller. A justificativa
+    escrita aqui envelheceu junto com o codigo e foi corrigida em 26/09/2026,
+    que e exatamente o risco que este modulo existe para conter.
+  - ``graph_diff()`` saiu desta lista em 26/09/2026 porque ganhou chamador: o
+    build passou a guardar o grafo anterior e a reportar o que mudou. Quem
+    pegou a lista desatualizada foi o teste deste registro, e nao uma pessoa.
 
 Prose does not prevent this. The hand-written guide for a comparable project was
 wrong on four of four numeric constants when checked against its own source, and
@@ -124,20 +128,36 @@ GRAPH_CAPABILITIES: dict[str, dict] = {
 #: cada nome daqui e falha em quem ganhou um.
 KNOWN_UNWIRED: dict[str, str] = {
     "graph.cluster.remap_communities_to_previous":
-        "Keeps community IDs stable across rebuilds. Still has no caller; "
-        "graphbridge instead deletes and re-files every vault article on each "
-        "rebuild. Wiring it changes rebuild behaviour, so it needs its own test.",
+        "Keeps community IDs stable across rebuilds, e a justificativa antiga "
+        "desta entrada ficou VELHA em 25/09/2026: graphbridge nao apaga mais "
+        "todo artigo a cada rebuild, ele pula artigo de corpo intocado. "
+        "Medido em 26/09 sobre este repo: o nome do artigo vem do HUB da "
+        "comunidade e nao do id (344 artigos, zero chamados Community_N), e o "
+        "corpo cita hub, contagem, coesao e membros, sem id em lugar nenhum. "
+        "Numa mudanca de uma funcao, 85 artigos mudaram e os 85 descrevem "
+        "composicao realmente nova. Estabilizar id nao recupera churn nenhum, "
+        "porque nada na saida usa id. Segue sem fio, agora por medicao.",
     "graph.cluster.community_member_sigs":
         "Membership fingerprints that let a later pass tell which communities "
-        "actually changed. Unused for the same reason as remap_communities_to_previous.",
-    "graph.analyze.graph_diff":
-        "Structural diff between two builds. Never surfaced; would answer "
-        "'what changed in this codebase since the last graph'.",
+        "actually changed. Sem fio pela mesma medicao acima: a decisao de "
+        "reescrever artigo ja e tomada por hash do corpo em arquivamento.py, "
+        "que responde a mesma pergunta sem precisar de fingerprint de "
+        "comunidade.",
     "graph.validate.assert_valid":
-        "Post-extraction validation. Never called by the build pipeline.",
+        "Post-extraction validation, e NAO deve ser ligada como esta. Medido em "
+        "26/09/2026 sobre a extracao real deste repo: 1.196 erros, todos do "
+        "mesmo tipo, aresta cujo alvo nao e no do grafo. E as relacoes sao "
+        "imports (798), imports_from (325) e depends_on (13): dependencia para "
+        "modulo EXTERNO, que por desenho nao vira no. O grafo final tem zero "
+        "arestas penduradas, entao o pipeline resolve isso adiante. Ligar "
+        "assert_valid quebraria todo build, porque ela valida um invariante que "
+        "este estagio deliberadamente nao mantem.",
     "graph.detect.detect_incremental":
-        "Detect only files changed since the last run. graph_build always does "
-        "a full detect; this is what an incremental rebuild would use.",
+        "Detect only files changed since the last run. Recusada por medicao em "
+        "25/09/2026: extracao com cache frio custa 2,40s e com cache quente "
+        "2,31s, porque este caminho e AST puro sem LLM. Nao ha o que economizar "
+        "pulando deteccao. O custo do build estava em outro lugar, e foi "
+        "resolvido pelo arquivamento.py.",
 }
 
 
