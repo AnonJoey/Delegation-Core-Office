@@ -171,6 +171,7 @@ class Agenda:
                 e["ultimo_status"] = "ok"
                 e["falhas_seguidas"] = 0
                 e.pop("ultimo_erro", None)
+                e.pop("ultimo_detalhe", None)
                 e["ultimo_resultado"] = _resumo(resultado)
             else:
                 e["ultimo_status"] = "erro"
