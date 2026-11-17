@@ -4,7 +4,7 @@
 
 O AGENT_GUIDE dizia: "Images are not supported". Nesta maquina ha 81 capturas
 de tela em ~/Pictures/Screenshots, varias de erro vindo de outra maquina (o
-Jordan manda print do que acontece la). Nenhuma era buscavel. O fototriagem
+o usuario manda print do que acontece la). Nenhuma era buscavel. O fototriagem
 lida com metadado de foto (EXIF, data do sidecar do Takeout); aqui o mesmo
 tipo de leitura vira nota.
 

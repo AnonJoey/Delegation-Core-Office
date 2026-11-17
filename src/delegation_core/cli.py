@@ -97,7 +97,18 @@ def cmd_run(args):
     from .embeddings import prefer_offline
     prefer_offline(cfg.bge_model)
     # Suppress FastMCP update check on startup
-    os.environ.setdefault("FASTMCP_DISABLE_UPDATE_CHECK", "1")
+    # A variavel antiga (FASTMCP_DISABLE_UPDATE_CHECK) nao e lida pelo fastmcp 3.x:
+    # a opcao e `check_for_updates`. Medido em 16/11/2026: o daemon fazia
+    # GET https://pypi.org/pypi/fastmcp/json na partida, num servidor que se
+    # declara local. A atribuicao direta cobre o caso de o fastmcp ja ter sido
+    # importado, quando a variavel de ambiente chega tarde.
+    os.environ.setdefault("FASTMCP_CHECK_FOR_UPDATES", "off")
+    try:
+        import fastmcp
+        if "FASTMCP_CHECK_FOR_UPDATES" not in os.environ or os.environ["FASTMCP_CHECK_FOR_UPDATES"] == "off":
+            fastmcp.settings.check_for_updates = "off"
+    except Exception:  # noqa: BLE001 - versao do fastmcp sem a opcao: nada a desligar
+        pass
 
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     logging.basicConfig(
@@ -1992,6 +2003,8 @@ def main():
         prog="delegation-core",
         description="Local MCP delegation server: llama.cpp + BGE + SQLite vector index + Obsidian vault",
     )
+    from . import __version__
+    parser.add_argument("--version", action="version", version=f"delegation-core {__version__}")
     sub = parser.add_subparsers(dest="command", metavar="command")
 
     sub.add_parser("setup",    help="Interactive setup wizard (run once per machine)")

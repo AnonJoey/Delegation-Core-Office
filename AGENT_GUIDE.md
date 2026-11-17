@@ -440,6 +440,36 @@ on this machine (no history yet); fall back to a conservative wait in that case.
 
 ---
 
+## Other tools
+
+These are served by the daemon and were missing from this guide until the
+2026-11-16 audit (20 of 55). `capabilities()` remains the authority on the list.
+
+| Tool | Use it when |
+|------|-------------|
+| `vault_find_notes(query, limit)` | You know part of a title or path and want a literal match, with no embeddings and no threshold. |
+| `vault_note_links(path)` | You need the inbound and outbound wikilinks of one note. |
+| `ingest_forget(source_path)` | An ingested folder was moved or deleted, or should stop answering searches. The original files are never touched. |
+| `local_task_submit(prompt, system, task, run_after, note)` | Work should run on the local model later. Returns a task id immediately. |
+| `local_task_status(task_id)` | Checking one queued local task and reading its result once finished. |
+| `local_task_list(status, limit)` | Listing local tasks, newest first, with who submitted each. |
+| `local_task_cancel(task_id)` | Dropping a local task that has not started. |
+| `graph_list(name)` | Listing the code graphs already built: source path, counts, last build. |
+| `graph_report(name, offset)` | Reading the `GRAPH_REPORT.md` of a built graph. |
+| `graph_affected(name, query, depth)` | Asking what else changes if a file or symbol changes. Needs `graph_build` first. |
+| `graph_hook_install(path, name)` | Rebuilding a repo's graph after every commit (background, code only, no vault writes). |
+| `graph_hook_status(path)` | Checking whether that post-commit hook is installed. |
+| `graph_hook_uninstall(path)` | Removing that post-commit hook. |
+| `extract_source_maps(source_path, out_dir)` | Graphing an npm bundle: rebuilds the original sources from `.js.map` files into an empty `out_dir`, which you then graph. |
+| `window_list()` | Seeing which MCP servers are registered as windows and which are mounted. |
+| `window_open(name)` | Mounting a registered MCP server into the client configuration. |
+| `window_close(name)` | Unmounting one to free the context its tool schemas occupy. Needs a client reconnect. `delegation-core` itself cannot be closed. |
+| `workspace_list()` | Listing saved workspaces (named sets of MCP servers) and the active one. |
+| `workspace_save(name)` | Saving the currently mounted set as a workspace. |
+| `workspace_apply(name)` | Making the mounted servers match a saved workspace. |
+
+---
+
 ## Delegation rules
 
 Apply these without exception when delegation-core is online.

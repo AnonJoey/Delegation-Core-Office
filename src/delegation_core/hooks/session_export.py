@@ -68,13 +68,18 @@ CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
 def _detached_popen_kwargs() -> dict:
     """Platform-appropriate kwargs to fully detach a background process.
 
-    POSIX: ``start_new_session`` (setsid). Windows: the child is detached,
-    has its own process group, and is launched with no visible console window.
+    POSIX: ``start_new_session`` (setsid). Windows: own process group and a
+    hidden console.
     """
     if platform.system() == "Windows":
-        return {
-            "creationflags": DETACHED_PROCESS | CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP
-        }
+        # CREATE_NO_WINDOW sem DETACHED_PROCESS. Juntos, o Windows ignora o
+        # CREATE_NO_WINDOW (documentacao do CreateProcess) e o filho fica SEM
+        # console; como o filho e um lancador (o python.exe do venv ou o .exe do
+        # console-script) que cria o interpretador de verdade, esse neto e um
+        # programa de console sem console para herdar e ganha um novo, visivel.
+        # Um console oculto e herdado pelo neto. O filho sobrevive ao pai do
+        # mesmo jeito: no Windows isso nao depende de DETACHED_PROCESS.
+        return {"creationflags": CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP}
     return {"start_new_session": True}
 
 

@@ -24,6 +24,7 @@ import subprocess
 import threading
 import time
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import httpx
 import requests
@@ -224,6 +225,22 @@ class DelegationEngine:
             return True
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, self._start_locked)
+
+    def pode_subir(self) -> bool:
+        """True quando `_start` teria o que lancar: o binario existe e, fora do MLX,
+        o arquivo do modelo tambem. As mesmas duas condicoes que `_start` confere,
+        sem lancar nada: o heartbeat usa isto para separar "modelo dormindo, sobe
+        no primeiro uso" de "nao ha modelo para subir"."""
+        if not (self.cfg.llama_binary or "").strip():
+            return False
+        try:
+            if not Path(self.cfg.llama_binary).expanduser().is_file():
+                return False
+            if getattr(self.cfg, "motor_e_mlx", False):
+                return bool((self.cfg.llama_model or "").strip())
+            return bool((self.cfg.llama_model or "").strip()) and Path(self.cfg.llama_model).expanduser().is_file()
+        except OSError:
+            return False
 
     async def check_health(self, force: bool = False) -> bool:
         if self.cfg.is_agent_mode and not force:

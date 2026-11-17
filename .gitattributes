@@ -1,0 +1,7 @@
+# Os .bat vao para o repositorio JA em CRLF e sem conversao: com LF o cmd.exe erra
+# rotulos e blocos, e assim o arquivo chega igual por clone, por ZIP e em qualquer
+# configuracao de autocrlf.
+*.bat -text
+*.cmd -text
+*.sh text eol=lf
+*.command text eol=lf

@@ -970,17 +970,13 @@ class _Handler(BaseHTTPRequestHandler):
         if not rel_path:
             self._send_json({"error": "missing path parameter"}, status=400)
             return
-        vault_root = _cfg.vault.resolve()
-        target = (vault_root / rel_path).resolve()
-        # NOT str(target).startswith(str(vault_root)) — a plain string prefix
-        # check is bypassable whenever a sibling directory's name happens to
-        # start with the vault root's own name (vault at .../vault, and e.g.
-        # .../vault-secrets exists: "../vault-secrets/x" resolves outside the
-        # vault but the string still starts with ".../vault"). relative_to()
-        # only succeeds for a genuine path-component match.
-        try:
-            target.relative_to(vault_root)
-        except ValueError:
+        # resolve_in_vault e o unico lugar da contencao (relative_to, nunca
+        # prefixo de string) e devolve None tambem para o que nem chega a ser
+        # caminho. Esta rota repetia a checagem com o resolve() fora do try:
+        # medido em 16/11/2026, `path=a%00b` devolvia 500 com a mensagem do lstat.
+        from .notes import resolve_in_vault
+        target = resolve_in_vault(_cfg.vault, rel_path)
+        if target is None:
             self._send_json({"error": "path escapes vault root"}, status=400)
             return
         if not target.exists():

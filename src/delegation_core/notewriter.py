@@ -32,6 +32,17 @@ from .vault import (
 logger = logging.getLogger("notewriter")
 
 
+def sem_nul(texto: str) -> str:
+    """O texto como vai para o arquivo da nota: sem NUL (U+0000).
+
+    O indice ja trocava o NUL por espaco (`texto_indexavel`), o arquivo nao:
+    medido em 16/11/2026, `write_note` com um NUL no conteudo gravava o byte no
+    `.md`, e um arquivo com NUL e tratado como binario por git, grep e diff.
+    Vira espaco, como no indice, para o arquivo e o indice dizerem o mesmo texto.
+    """
+    return texto.replace("\x00", " ") if isinstance(texto, str) else texto
+
+
 def post_write_links(vault, note_path: Path, rel_path: str, folder: str, stem: str) -> None:
     """Inject forward wikilinks + backlinks after a vault write.
 
@@ -82,7 +93,7 @@ def create_note(vault, folder: str, title: str, content: str,
     # compose_note rather than concatenation: callers routinely include their own
     # frontmatter block, which stacked a second one under the generated block and
     # silently turned every key they wrote into body text.
-    full = compose_note(title, content, today, ai_generated=ai_generated)
+    full = sem_nul(compose_note(title, content, today, ai_generated=ai_generated))
     try:
         dest.write_text(full, encoding="utf-8")
     except OSError as e:
@@ -127,6 +138,7 @@ def save_note(vault, rel_path: str, content: str) -> dict:
     if dest.suffix != ".md":
         return {"error": "Only .md notes can be saved"}
 
+    content = sem_nul(content)
     try:
         dest.write_text(content, encoding="utf-8")
     except OSError as e:

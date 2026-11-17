@@ -47,6 +47,10 @@ import subprocess
 from datetime import datetime
 from pathlib import Path
 
+# subprocess so expoe estas constantes no Windows; os valores sao os da API do Win32.
+CREATE_NEW_PROCESS_GROUP = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
+CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
+
 CONFIG_PATH = Path.home() / ".delegation_core" / "config.json"
 STATE_PATH = Path.home() / ".delegation_core" / "last_brief.json"
 _VENV_DIR = Path.home() / ".delegation_core" / "venv"
@@ -67,13 +71,18 @@ def _detached_popen_kwargs() -> dict:
 
     POSIX: ``start_new_session`` (setsid) so the child survives the parent's
     exit. Windows: ``start_new_session`` is silently ignored by subprocess
-    on that platform, so use DETACHED_PROCESS + CREATE_NEW_PROCESS_GROUP
-    instead, which achieve the equivalent (no console, own process group).
+    on that platform, so use CREATE_NO_WINDOW + CREATE_NEW_PROCESS_GROUP
+    instead (hidden console, own process group).
     """
     if platform.system() == "Windows":
-        return {
-            "creationflags": subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
-        }
+        # CREATE_NO_WINDOW sem DETACHED_PROCESS. Juntos, o Windows ignora o
+        # CREATE_NO_WINDOW (documentacao do CreateProcess) e o filho fica SEM
+        # console; como o filho e um lancador (o python.exe do venv ou o .exe do
+        # console-script) que cria o interpretador de verdade, esse neto e um
+        # programa de console sem console para herdar e ganha um novo, visivel.
+        # Um console oculto e herdado pelo neto. O filho sobrevive ao pai do
+        # mesmo jeito: no Windows isso nao depende de DETACHED_PROCESS.
+        return {"creationflags": CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP}
     return {"start_new_session": True}
 
 

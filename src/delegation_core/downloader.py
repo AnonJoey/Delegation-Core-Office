@@ -3,6 +3,7 @@ downloader.py — Downloads GGUF models and the llama.cpp binary.
 All downloads show a live progress bar via rich.
 """
 
+import hashlib
 import os
 import platform
 import shutil
@@ -253,8 +254,16 @@ def find_llama_binary(llama_dir: Path) -> Path | None:
 
 # ── internals ─────────────────────────────────────────────────────────────────
 
+#: SHA-256 que a API do GitHub declarou para cada ativo, por URL. Preenchido por
+#: `_get_release_asset`. Ate 16/11/2026 o `llama-server` baixado era um
+#: executavel instalado so com a contagem de bytes conferida.
+_DIGESTS: dict[str, str] = {}
+
+
 def _download_file(url: str, dest: Path, label: str) -> bool:
     dest.parent.mkdir(parents=True, exist_ok=True)
+    esperado = _DIGESTS.get(url)
+    resumo = hashlib.sha256()
     try:
         with requests.get(url, stream=True, timeout=60) as r:
             r.raise_for_status()
@@ -273,6 +282,7 @@ def _download_file(url: str, dest: Path, label: str) -> bool:
                 with open(dest, "wb") as f:
                     for chunk in r.iter_content(chunk_size=65536):
                         f.write(chunk)
+                        resumo.update(chunk)
                         written += len(chunk)
                         progress.advance(task, len(chunk))
         # A server/proxy that closes the connection cleanly but early won't
@@ -282,6 +292,11 @@ def _download_file(url: str, dest: Path, label: str) -> bool:
         # model/binary.
         if total and written != total:
             console.print(f"  [red]Download incomplete:[/red] got {written} of {total} bytes.")
+            dest.unlink(missing_ok=True)
+            return False
+        if esperado and resumo.hexdigest() != esperado:
+            console.print("  [red]Download rejected:[/red] the file does not match the SHA-256 "
+                          f"the release declares (expected {esperado[:12]}..., got {resumo.hexdigest()[:12]}...).")
             dest.unlink(missing_ok=True)
             return False
         return True
@@ -315,7 +330,15 @@ def _get_release_asset(system: str, machine: str) -> tuple[str, str] | None:
             timeout=15,
         )
         r.raise_for_status()
-        assets = {a["name"]: a["browser_download_url"] for a in r.json().get("assets", [])}
+        publicados = r.json().get("assets", [])
+        assets = {a["name"]: a["browser_download_url"] for a in publicados}
+        # O GitHub publica o SHA-256 de cada ativo no campo `digest`. Guardado
+        # por URL para o download conferir; ativo sem digest segue sem conferencia.
+        _DIGESTS.clear()
+        for a in publicados:
+            digest = str(a.get("digest") or "")
+            if digest.startswith("sha256:"):
+                _DIGESTS[a["browser_download_url"]] = digest.split(":", 1)[1].lower()
     except Exception as e:
         console.print(f"  [yellow]GitHub API unavailable:[/yellow] {e}")
         return None

@@ -13,7 +13,7 @@ def _cfg(tmp_path, **kw):
     return Config(vault_path=str(tmp_path / "vault"), **kw)
 
 
-# -- onde mora o indice SQLite (achado do Saad, 26/10/2026) --------------------
+# -- onde mora o indice SQLite (achado de um colega, 26/10/2026) --------------------
 
 def test_sqlite_com_index_path_fica_ao_lado_dele_e_nao_no_vault(tmp_path):
     cfg = _cfg(tmp_path, index_path=str(tmp_path / "estado" / "indice"))

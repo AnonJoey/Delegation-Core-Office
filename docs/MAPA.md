@@ -134,7 +134,7 @@ processo. A CLI que escreve no índice entrega o trabalho ao daemon
 
 **Fora do pacote**
 - `dashboard/`: a casca Tauri e a interface.
-- `skills/`: skills da Anthropic distribuídas junto.
+- `skills/`: skills distribuídas junto, só as de licença aberta (Apache 2.0 ou MIT) e a do próprio delegation-core. As de documento da Anthropic (docx, pdf, pptx, xlsx) saíram em 16/11/2026: a licença delas proíbe copiar e distribuir.
 
 ## Qual índice está em uso
 

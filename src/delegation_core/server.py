@@ -306,7 +306,7 @@ def _default_scope() -> str:
     articles, which was the point, and every ingested file with them, which was
     not: on a vault with 10,103 generated articles of 10,565 notes and a career
     project ingested the day before, the default answered "who is the
-    Anthropic contact Jordan met at Dreamforce" with three unrelated meeting
+    Anthropic contact the user met at Dreamforce" with three unrelated meeting
     transcripts while the documents that answer it sat in the index. On 12
     questions with known answers: 'notes' 5, 'all' 8, 'notes+external' 9.
     """
@@ -668,8 +668,17 @@ async def heartbeat(force: bool = False) -> str:
         llama_state = "online" if llama_ok else "on-demand (local for big/bulk tasks)"
     else:
         llama_ok = await _engine.check_health()
-        status, llama_state = ("healthy" if llama_ok else "degraded",
-                               "online" if llama_ok else "offline")
+        # O modelo sobe na primeira chamada que precisa dele (ensure_running) e
+        # sai sozinho depois de local_idle_shutdown_sec. Medido em 16/11/2026: um
+        # daemon recem-iniciado em modo local dizia "degraded" ate o primeiro
+        # compress, e o guia manda o agente parar o trabalho ao ver "degraded".
+        # So e degradado quando nao ha o que subir.
+        if llama_ok:
+            status, llama_state = "healthy", "online"
+        elif _engine.pode_subir():
+            status, llama_state = "healthy", "on-demand (starts on first use)"
+        else:
+            status, llama_state = "degraded", "offline"
     stats, health, processes = await asyncio.to_thread(
         lambda: (_vault.get_stats(), _vault.get_health_summary(force=force),
                  _tracker.summary()))
@@ -1652,6 +1661,13 @@ def run_server(cfg: Config):
                 loop.create_task(_engine.aclose())
             else:
                 asyncio.run(_engine.aclose())
+        except Exception:
+            pass
+        # Indice SQLite: o WAL entra no arquivo principal antes de o processo sair.
+        try:
+            checkpoint = getattr(getattr(_vault, "_client", None), "checkpoint", None)
+            if checkpoint:
+                checkpoint()
         except Exception:
             pass
         _cleanup_own_session_file()

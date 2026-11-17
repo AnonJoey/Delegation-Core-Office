@@ -72,10 +72,14 @@ def _is_windows() -> bool:
 
 def _detached_popen_kwargs() -> dict:
     if _is_windows():
-        # Do not create a visible console for the short-lived export worker.
-        # A normal child outlives its parent on Windows; CREATE_NO_WINDOW keeps
-        # that child headless while its own process group isolates Ctrl+C.
-        return {"creationflags": DETACHED_PROCESS | CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP}
+        # CREATE_NO_WINDOW sem DETACHED_PROCESS. Juntos, o Windows ignora o
+        # CREATE_NO_WINDOW (documentacao do CreateProcess) e o filho fica SEM
+        # console; como o filho e um lancador (o python.exe do venv ou o .exe do
+        # console-script) que cria o interpretador de verdade, esse neto e um
+        # programa de console sem console para herdar e ganha um novo, visivel.
+        # Um console oculto e herdado pelo neto. O filho sobrevive ao pai do
+        # mesmo jeito: no Windows isso nao depende de DETACHED_PROCESS.
+        return {"creationflags": CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP}
     return {"start_new_session": True}
 
 

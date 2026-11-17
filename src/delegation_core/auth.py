@@ -71,7 +71,11 @@ class LocalTokenAuth(AuthProvider):
         # characters matched through timing. Cheap to do right, so do it right.
         if not self._token or not token:
             return None
-        if not hmac.compare_digest(token, self._token):
+        # Em bytes: compare_digest levanta TypeError para str com caractere nao
+        # ASCII, e o cabecalho e entrada de quem chama. Medido em 16/11/2026:
+        # `Authorization: Bearer cafe` com acento devolvia 500 em vez de 401.
+        if not hmac.compare_digest(token.encode("utf-8", "surrogatepass"),
+                                   self._token.encode("utf-8", "surrogatepass")):
             logger.warning("Rejected an MCP request carrying an invalid bearer token")
             return None
         return AccessToken(token=token, client_id=LOCAL_CLIENT_ID, scopes=[])

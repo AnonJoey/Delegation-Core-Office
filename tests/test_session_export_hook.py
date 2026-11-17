@@ -82,7 +82,8 @@ def test_parses_codex_response_items(hook, tmp_path):
 def test_reindex_worker_is_hidden_on_windows(hook, monkeypatch):
     monkeypatch.setattr(hook.platform, "system", lambda: "Windows")
     flags = hook._detached_popen_kwargs().get("creationflags", 0)
-    assert flags & hook.DETACHED_PROCESS
+    # DETACHED_PROCESS anula o CREATE_NO_WINDOW: os dois juntos era o defeito.
+    assert not flags & hook.DETACHED_PROCESS
     assert flags & hook.CREATE_NO_WINDOW
     assert flags & hook.CREATE_NEW_PROCESS_GROUP
 
