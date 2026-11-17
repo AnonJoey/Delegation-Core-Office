@@ -1,7 +1,4 @@
-"""
-token_reducer.py — Motor unificado de redução de tokens e compressão de contexto.
-Fusão de Headroom (CCR AST Pruning com Guarda reversível) + RTK (Stage Filter) + Humanizer.
-"""
+"""Pattern-based pruning of a text for fewer tokens, with the original kept for recall_output."""
 
 from __future__ import annotations
 
@@ -16,7 +13,7 @@ class TokenPruningEngine:
     """Motor unificado de compressão de contexto, integrando CCR do Headroom e filtros RTK."""
 
     def __init__(self):
-        self.engine_name = "Headroom CCR + RTK Context Compressor"
+        self.engine_name = "regex pruning with recoverable original"
         self._guarda = Guarda()
 
     def prune_context(self, raw_text: str, store_ccr: bool = True) -> Dict[str, Any]:

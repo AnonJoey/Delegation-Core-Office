@@ -41,10 +41,10 @@ LEITURA = frozenset({
     # Ler cartoes grava so a impressao digital DESTE leitor; nao muda o que
     # outro cliente ve nem toca vault ou indice.
     "status_cards",
-    # Nucleos unificados (cores/): so devolvem informacao ou transformam o texto
-    # recebido, sem tocar disco, rede nem processo.
-    "dag_status", "telemetry_summary", "cores_unified_status", "cores_skills_search",
-    "cores_sanitize_prompt", "cores_prune_context", "cores_selfhosted_catalog",
+    # Nucleos (cores/) que so devolvem informacao ou transformam o texto recebido,
+    # sem gravar nada.
+    "dag_status", "cores_unified_status", "cores_skills_search",
+    "cores_sanitize_prompt", "cores_selfhosted_catalog",
 })
 
 ESCRITA = frozenset({
@@ -56,13 +56,11 @@ ESCRITA = frozenset({
     "run_maintenance_bg", "schedule_run", "status_card_delete", "status_card_save", "vault_note_restore", "vault_reindex_bg", "vault_rename_note",
     "vault_correct_note", "vault_forget_note", "vault_update_note", "window_close", "window_open", "workspace_apply", "workspace_save", "write_note",
     "handoff_create", "handoff_pickup", "handoff_cancel", "vault_forget_sweep", "vault_note_feedback",
-    # Nucleos unificados que agem: executam comando de shell (dag_run), leem
-    # caminho arbitrario do disco (convert_to_markdown, cores_multimodal_ingest),
-    # rodam sessao de agente
-    # (cores_platform_session) ou chamam servicos locais como o Vaultwarden
-    # (cores_selfhosted_route). Cliente de leitura nao faz nenhuma dessas.
-    "dag_run", "convert_to_markdown", "cores_multimodal_ingest",
-    "cores_platform_session", "cores_selfhosted_route",
+    # Nucleos que agem: executam comando de shell (dag_run), leem caminho
+    # arbitrario do disco (convert_to_markdown, cores_multimodal_ingest) ou gravam o
+    # original para o recall_output (cores_prune_context, como o compress_output).
+    # Cliente de leitura nao faz nenhuma dessas.
+    "dag_run", "convert_to_markdown", "cores_multimodal_ingest", "cores_prune_context",
 })
 
 ESCOPOS_VALIDOS = ("read", "write")

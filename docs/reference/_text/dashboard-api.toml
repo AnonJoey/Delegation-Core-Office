@@ -62,7 +62,7 @@ description = "Facts extracted from notes. Query: `q`, `divergent=1` for only th
 description = "What the Vigia tab shows: open alerts, the schedule, search-recall statistics and tool usage of the last 7 days."
 
 ["GET /api/cores/status"]
-description = "Consolidated status of the cores (the same as `cores_unified_status`)."
+description = "What the bundled cores have on this machine (the same as `cores_unified_status`)."
 
 ["GET /api/cores/skills"]
 description = "Search the local skills catalog. Query: `q`, `limit` (at most 100)."
@@ -70,11 +70,8 @@ description = "Search the local skills catalog. Query: `q`, `limit` (at most 100
 ["GET /api/cores/skill"]
 description = "One skill from the catalog. Query: `id`."
 
-["GET /api/cores/orchestration/telemetry"]
-description = "Spans recorded by the cores orchestrator."
-
 ["GET /api/cores/hardware"]
-description = "Host name, disk use of the home folder and system load."
+description = "Host name, disk use of the home folder and system load (`null` on Windows, which has no load average)."
 
 ["POST /api/vault/note/create"]
 description = "Create a note through the same code path as `write_note`. Body: `folder`, `title`, `content`."
@@ -122,10 +119,5 @@ description = "Audit and clean a text of filler phrases and obvious comments (`c
 description = "Prune a text for fewer tokens (`cores_prune_context`). Body: `text`."
 
 ["POST /api/cores/multimodal/convert"]
-description = "Convert a file to Markdown, OCR or transcription (`cores_multimodal_ingest`). Body: `file_path` (a path on this machine)."
+description = "Convert a document on this machine to Markdown (`cores_multimodal_ingest`); a file it cannot read is an error with the reason. Body: `file_path`."
 
-["POST /api/cores/multimodal/diagram"]
-description = "Generate a Mermaid diagram from a description. Body: `prompt`."
-
-["POST /api/cores/orchestration/run"]
-description = "Run a demonstration DAG through the orchestrator: the steps only return a label (`executed_<name>`) and record telemetry; nothing outside the daemon runs. Body: `title`, `steps` (`name`, `deps`, `in_tokens`, `out_tokens`); without steps, a four-step example."

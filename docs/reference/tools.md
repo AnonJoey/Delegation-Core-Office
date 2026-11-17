@@ -3,7 +3,7 @@
 
 # MCP tools
 
-The daemon registers **130 tools**. A tool tied to a config key is hidden from
+The daemon registers **127 tools**. A tool tied to a config key is hidden from
 clients while that key is off (see [feature flags](feature-flags.md)); `capabilities()` lists
 the hidden ones and why. A client whose token has the `read` scope can only call tools marked
 *read*.
@@ -21,11 +21,9 @@ the hidden ones and why. A client whose token has the `read` scope can only call
 | [`config_history`](#config_history) | read |  |
 | [`convert_to_markdown`](#convert_to_markdown) | write |  |
 | [`cores_multimodal_ingest`](#cores_multimodal_ingest) | write |  |
-| [`cores_platform_session`](#cores_platform_session) | write |  |
-| [`cores_prune_context`](#cores_prune_context) | read |  |
+| [`cores_prune_context`](#cores_prune_context) | write |  |
 | [`cores_sanitize_prompt`](#cores_sanitize_prompt) | read |  |
 | [`cores_selfhosted_catalog`](#cores_selfhosted_catalog) | read |  |
-| [`cores_selfhosted_route`](#cores_selfhosted_route) | write |  |
 | [`cores_skills_search`](#cores_skills_search) | read |  |
 | [`cores_unified_status`](#cores_unified_status) | read |  |
 | [`dag_run`](#dag_run) | write |  |
@@ -107,7 +105,6 @@ the hidden ones and why. A client whose token has the `read` scope can only call
 | [`status_card_save`](#status_card_save) | write |  |
 | [`status_cards`](#status_cards) | read |  |
 | [`task_status`](#task_status) | read |  |
-| [`telemetry_summary`](#telemetry_summary) | read |  |
 | [`tool_policy`](#tool_policy) | read |  |
 | [`usage_report`](#usage_report) | read | `livro_enabled` |
 | [`vault_correct_note`](#vault_correct_note) | write |  |
@@ -303,7 +300,12 @@ Uses pure-Python local extractors.
 
 ## cores_multimodal_ingest
 
-Pipeline multimodal unificado: OCR (OCRmyPDF), Markdown (MarkItDown), Transcricao (Whisper) ou Texto.
+Convert a document on this machine to Markdown.
+
+Reads PDF (text layer), Word, Excel, PowerPoint, HTML, CSV and plain-text formats through
+delegation_core.markitdown. A file it cannot read returns an error with the reason. This tool
+does no OCR and no audio transcription: a scanned PDF yields only the text it already carries.
+To make images searchable by their text, ingest them with ingest_folder (needs tesseract).
 
 **Access:** write
 
@@ -311,22 +313,15 @@ Pipeline multimodal unificado: OCR (OCRmyPDF), Markdown (MarkItDown), Transcrica
 |---|---|---|---|
 | `file_path` | string | yes |  |
 
-## cores_platform_session
-
-Executa sessao de agente local com travamento atomico, orcamento de iteracoes, poda de AST e grafo em memoria.
-
-**Access:** write
-
-| Parameter | Type | Required | Default |
-|---|---|---|---|
-| `session_id` | string | yes |  |
-| `prompt` | string | yes |  |
-
 ## cores_prune_context
 
-Poda de contexto de tokens via AST + compressao de logs de terminal (Headroom + RTK).
+Shrink a text for fewer tokens with pattern rules, keeping the original recoverable.
 
-**Access:** read
+Collapses repeated spaces and blank lines and drops obvious code comments (`//` and `#`),
+leaving URLs and Markdown headings intact. When something was cut, the original is stored
+and `ccr_hash` recovers it with recall_output.
+
+**Access:** write
 
 | Parameter | Type | Required | Default |
 |---|---|---|---|
@@ -334,7 +329,10 @@ Poda de contexto de tokens via AST + compressao de logs de terminal (Headroom + 
 
 ## cores_sanitize_prompt
 
-Auditoria e purificacao de slop sintético, cliches de IA e comentarios obvios de codigo (anti-slop engine).
+Find filler phrases typical of generated text and obvious code comments, and return a cleaned copy.
+
+Pattern based (no model): `audit` lists what matched and a score, `purified` is the text
+without it, `is_clean` is true when nothing matched.
 
 **Access:** read
 
@@ -344,7 +342,10 @@ Auditoria e purificacao de slop sintético, cliches de IA e comentarios obvios d
 
 ## cores_selfhosted_catalog
 
-Catalogo unificado dos 29 servicos self-hosted do ecossistema, filtrado por dominio opcional.
+A static catalog of self-hosted services: name, domain, default port and role of each.
+
+Reference data only: nothing here checks whether a service is installed or running.
+`domain` filters by one domain.
 
 **Access:** read
 
@@ -352,22 +353,14 @@ Catalogo unificado dos 29 servicos self-hosted do ecossistema, filtrado por domi
 |---|---|---|---|
 | `domain` | string | no | `""` |
 
-## cores_selfhosted_route
-
-Roteador e gateway unificado de chamadas para servicos locais self-hosted (Supabase, Vaultwarden, Immich, Gitea, etc.).
-
-**Access:** write
-
-| Parameter | Type | Required | Default |
-|---|---|---|---|
-| `service` | string | yes |  |
-| `action` | string | yes |  |
-| `user_token` | string | no | `"local-admin"` |
-
 ## cores_skills_search
 
-Busca FTS5 no catalogo de skills/regras de agentes desta maquina (agent-harness-core).
-O catalogo nao vem no pacote: e construido pelo ingester em ~/.delegation_core/skills.db.
+Full-text search (SQLite FTS5) in this machine's catalog of agent skills and rules.
+
+The catalog is not shipped: build it with
+`python -m delegation_core.cores.agent_harness.skills.ingester <folder>`, which writes
+`~/.delegation_core/skills.db` (or `DELEGATION_CORE_SKILLS_DB`). Without it the search
+returns no results.
 
 **Access:** read
 
@@ -378,7 +371,10 @@ O catalogo nao vem no pacote: e construido pelo ingester em ~/.delegation_core/s
 
 ## cores_unified_status
 
-Status consolidado dos nucleos de software unificados (skills, multimodal, orchestrator, platform).
+What the bundled cores have on this machine.
+
+Number of skills in the local catalog and their sources, the document-conversion capability,
+host metrics (disk use of the home folder, load) and the size of the self-hosted catalog.
 
 **Access:** read
 
@@ -1592,21 +1588,6 @@ Both are absent the first time a given task runs on this machine.
 | Parameter | Type | Required | Default |
 |---|---|---|---|
 | `job_id` | string | yes |  |
-
-## telemetry_summary
-
-Spans recorded by the cores orchestrator: DAG steps, agent sessions, token pruning.
-
-Counts, latency, tokens and error rate over the last `hours`. It does NOT count MCP tool
-calls: no tool writes here. For what each MCP tool was called, cost and returned, use
-usage_report. (Until 17/11/2026 this said "MCP tool calls" and an hour of tool use read
-as zero calls.)
-
-**Access:** read
-
-| Parameter | Type | Required | Default |
-|---|---|---|---|
-| `hours` | number | no | `24.0` |
 
 ## tool_policy
 

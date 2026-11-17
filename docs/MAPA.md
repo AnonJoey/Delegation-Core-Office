@@ -132,12 +132,13 @@ processo. A CLI que escreve no índice entrega o trabalho ao daemon
   delegation-core-office skill is installed under `~/.agents/skills/` without
   overwriting a user-owned skill.
 
-**Núcleos consolidados do ecossistema local (`cores/`)**
-- `cores/unified_facade.py`: `UnifiedCoresBridge`, fachada única de invocação e despacho FastMCP.
-- `cores/agent_harness/`: `SkillsRegistry` (catálogo SQLite FTS5 construído na máquina em `~/.delegation_core/skills.db`), `PromptSanitizer` (anti-slop e limpeza de clichês), `ReverseEngTool` (análise estática AST), `BrowserTool` e `WorkspaceTool`.
-- `cores/multimodal/`: `MultimodalPipeline` (roteamento por extensão), `MarkItDown` (conversor local multi-formato), `OCREngine` (Tesseract), `SpeechToTextEngine` (Whisper), `TextToSpeechEngine` (Audiblez) e `DiagramGenerator` (Mermaid).
-- `cores/orchestration/`: `DAGEngine` (execução assíncrona com SQLite WAL), `DAGRunner` (YAML), `AgentTaskQueue` (fila multiagente com prioridade), `AutonomousCIRunner` (Pullfrog) e `LLMTelemetryTracker` (LangWatch com persistência central).
-- `cores/platform/`: `UnifiedLocalPlatform` (sessão de agente local), `TokenPruningEngine` (poda de tokens com CCR reversível via `ccr.Guarda`), `AgentExecutionGuard` (travas atômicas com TTL e orçamento Hermes), `CodeGraphEngine` (grafo em memória Cypher), `HardwareSupervisor` (telemetria Corsair Btrfs NVMe), `VoiceboxEngine` e `CodeSweeperAndNet`.
+**Núcleos (`cores/`)**
+- `cores/unified_facade.py`: `UnifiedCoresBridge`, a fachada que as ferramentas `cores_*` chamam.
+- `cores/agent_harness/`: `SkillsRegistry` (catálogo SQLite FTS5 construído na máquina em `~/.delegation_core/skills.db`), `PromptSanitizer` (padrões de texto de enchimento e comentário óbvio) e `ReverseEngTool` (estrutura de um arquivo Python por AST).
+- `cores/multimodal/`: `MultimodalPipeline` e `MarkdownConverter`, conversão de documentos para Markdown pelo `delegation_core.markitdown`. Sem OCR, transcrição nem diagrama.
+- `cores/platform/`: `TokenPruningEngine` (poda por padrões, com o original guardado para o `recall_output`) e `HardwareSupervisor` (disco da pasta pessoal e carga).
+- `cores/self_hosted/`: `HomelabServiceGateway`, um catálogo fixo de 29 serviços. Não contata nenhum.
+- Removidos para a v0.17.0 (17/11/2026) por devolverem resultado inventado como sucesso: OCR, transcrição, síntese de voz e diagrama do multimodal; sessão de agente, voz, grafo de brinquedo, limpador e travas da plataforma; roteamento do self-hosted; o pacote `cores/orchestration` inteiro (fila, "CI runner" e telemetria de demonstração); navegador e workspace do agent harness.
 
 **Fora do pacote**
 - `dashboard/`: a casca Tauri e a interface.

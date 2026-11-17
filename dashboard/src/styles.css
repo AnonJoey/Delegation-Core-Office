@@ -2223,106 +2223,6 @@ body {
   color: var(--fg-main);
 }
 
-/* Orchestrator Studio & DAG Flow */
-.orchestrator-studio {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  padding: 20px;
-  height: 100%;
-  overflow-y: auto;
-}
-.dag-visualizer-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  padding: 16px;
-}
-.dag-canvas-container {
-  padding: 20px 10px;
-  background: rgba(0, 0, 0, 0.25);
-  border-radius: var(--radius-sm);
-  overflow-x: auto;
-}
-.dag-nodes-flow {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  min-width: 600px;
-}
-.dag-node {
-  flex: 1;
-  background: var(--bg-panel);
-  border: 1px solid var(--border-muted);
-  border-radius: var(--radius-sm);
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  transition: all 0.2s;
-}
-.dag-node.completed {
-  border-color: rgba(158, 206, 106, 0.5);
-  background: rgba(158, 206, 106, 0.08);
-}
-.dag-node.running {
-  border-color: var(--accent-cyan);
-  background: rgba(125, 207, 255, 0.12);
-  box-shadow: 0 0 12px rgba(125, 207, 255, 0.2);
-}
-.dag-node .node-title {
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--fg-heading);
-}
-.dag-node .node-detail {
-  font-size: 11px;
-  color: var(--fg-muted);
-  font-family: 'JetBrains Mono', monospace;
-}
-.dag-node-connector {
-  color: var(--fg-dim);
-  font-size: 16px;
-  user-select: none;
-}
-.spans-table-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  padding: 16px;
-}
-.table-responsive {
-  overflow-x: auto;
-}
-.telemetry-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 12px;
-}
-.telemetry-table th {
-  text-align: left;
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--border-muted);
-  color: var(--fg-dim);
-  font-weight: 600;
-  font-size: 11px;
-  text-transform: uppercase;
-}
-.telemetry-table td {
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--border-subtle);
-  color: var(--fg-main);
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 11.5px;
-}
-.duration-bar {
-  display: inline-block;
-  height: 6px;
-  background: var(--accent-cyan);
-  border-radius: 3px;
-  min-width: 4px;
-}
-
 /* Multimodal Media Studio */
 .multimodal-studio {
   padding: 20px;
@@ -2360,18 +2260,7 @@ body {
   max-height: 480px;
   overflow-y: auto;
 }
-.diagram-code-pane {
-  background: rgba(0, 0, 0, 0.35);
-  border: 1px solid var(--border-muted);
-  border-radius: var(--radius-sm);
-  padding: 12px;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 12px;
-  max-height: 400px;
-  overflow: auto;
-}
-
-/* Homelab Platform Telemetry Studio */
+/* Host metrics */
 .telemetry-studio {
   padding: 20px;
   height: 100%;
@@ -2442,14 +2331,6 @@ body {
   color: var(--fg-dim);
   text-transform: uppercase;
   margin-top: 2px;
-}
-.guard-stat-row {
-  display: flex;
-  justify-content: space-between;
-  font-size: 12.5px;
-  color: var(--fg-main);
-  padding: 10px 0;
-  border-bottom: 1px solid var(--border-subtle);
 }
 .pruner-playground {
   display: flex;

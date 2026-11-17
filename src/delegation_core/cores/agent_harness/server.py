@@ -3,17 +3,13 @@ import sys
 from typing import Dict, Any
 from .skills.registry import SkillsRegistry
 from .sanitizer.engine import PromptSanitizer
-from .tools.browser import BrowserTool
 from .tools.reverse_eng import ReverseEngTool
-from .tools.workspace import WorkspaceTool
 
 class AgentHarnessServer:
     def __init__(self, db_path: str = None):
         self.skills = SkillsRegistry(db_path)
         self.sanitizer = PromptSanitizer()
-        self.browser = BrowserTool()
         self.rea = ReverseEngTool()
-        self.workspace = WorkspaceTool()
 
     def handle_rpc(self, method: str, params: Dict[str, Any]) -> Dict[str, Any]:
         if method == "skills.search":
@@ -33,9 +29,6 @@ class AgentHarnessServer:
             text = params.get("text", "")
             return {"cleaned": self.sanitizer.purify(text)}
             
-        elif method == "tools.browser_navigate":
-            url = params.get("url", "")
-            return self.browser.navigate_and_extract(url)
             
         elif method == "tools.inspect_code":
             path = params.get("file_path", "")
@@ -46,7 +39,7 @@ class AgentHarnessServer:
                 "server": "agent-harness-core",
                 "version": "1.0.0",
                 "skills_indexed": self.skills.get_stats(),
-                "mcp_tools": ["skills.search", "sanitizer.purify", "tools.browser_navigate", "tools.inspect_code"]
+                "mcp_tools": ["skills.search", "skills.get", "sanitizer.audit", "sanitizer.purify", "tools.inspect_code"]
             }
             
         else:

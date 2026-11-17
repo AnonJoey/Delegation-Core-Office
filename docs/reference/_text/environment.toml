@@ -8,7 +8,7 @@ description = "Worker processes for output compression, so it never holds the da
 description = "Memory cap, in MB, for the background graph rebuild started by the git post-commit hook (Linux and macOS). Unset: no cap. The rebuild always runs at lower priority."
 
 [DELEGATION_CORE_HOME]
-description = "Folder for the DAG run history, the cores telemetry database and the agent locks. Default `~/.delegation_core`. The rest of the program's state always lives in `~/.delegation_core`."
+description = "Folder of the DAG run history (`dag_executions.db`) kept by `dag_run`. Default `~/.delegation_core`. The rest of the program's state always lives in `~/.delegation_core`."
 
 [DELEGATION_CORE_SKILLS_DB]
 description = "Path of the skills catalog. Default `~/.delegation_core/skills.db`."

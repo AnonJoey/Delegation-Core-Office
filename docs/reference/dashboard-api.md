@@ -3,7 +3,7 @@
 
 # Dashboard HTTP API
 
-The dashboard talks to the daemon through **43 routes**. Every route needs the
+The dashboard talks to the daemon through **40 routes**. Every route needs the
 `Authorization: Bearer <token>` header (the same token the MCP clients use); only the
 static page itself is served without it.
 
@@ -13,16 +13,13 @@ static page itself is served without it.
 | GET | `/api/clients` | `` | MCP clients currently connected to the daemon. |
 | GET | `/api/config` | `_handle_config_get` | The configuration with secrets redacted, and the GGUF models found in `~/.delegation_core/models`. |
 | POST | `/api/config/update` | `_handle_config_update` | Change and save a fixed set of settings: `engine_mode`, `budget_mode`, `llama_model`, `llama_binary`, `bge_model`, `search_threshold`, `merge_threshold`, `max_tokens`, `synthesis_enabled`, `synthesis_lang`, `web_search_enabled`, `llama_ctx`, `llama_device`, `embed_device`, `llama_parallel`, `llama_ngl`. Any other key in the body is ignored. Returns the configuration with secrets redacted; some keys only take effect after a daemon restart. |
-| GET | `/api/cores/hardware` | `` | Host name, disk use of the home folder and system load. |
-| POST | `/api/cores/multimodal/convert` | `_handle_cores_multimodal_convert` | Convert a file to Markdown, OCR or transcription (`cores_multimodal_ingest`). Body: `file_path` (a path on this machine). |
-| POST | `/api/cores/multimodal/diagram` | `_handle_cores_multimodal_diagram` | Generate a Mermaid diagram from a description. Body: `prompt`. |
-| POST | `/api/cores/orchestration/run` | `_handle_cores_orchestration_run` | Run a demonstration DAG through the orchestrator: the steps only return a label (`executed_<name>`) and record telemetry; nothing outside the daemon runs. Body: `title`, `steps` (`name`, `deps`, `in_tokens`, `out_tokens`); without steps, a four-step example. |
-| GET | `/api/cores/orchestration/telemetry` | `` | Spans recorded by the cores orchestrator. |
+| GET | `/api/cores/hardware` | `` | Host name, disk use of the home folder and system load (`null` on Windows, which has no load average). |
+| POST | `/api/cores/multimodal/convert` | `_handle_cores_multimodal_convert` | Convert a document on this machine to Markdown (`cores_multimodal_ingest`); a file it cannot read is an error with the reason. Body: `file_path`. |
 | POST | `/api/cores/prune` | `_handle_cores_prune` | Prune a text for fewer tokens (`cores_prune_context`). Body: `text`. |
 | POST | `/api/cores/sanitize` | `_handle_cores_sanitize` | Audit and clean a text of filler phrases and obvious comments (`cores_sanitize_prompt`). Body: `text`. |
 | GET | `/api/cores/skill` | `_handle_cores_skill_by_id` | One skill from the catalog. Query: `id`. |
 | GET | `/api/cores/skills` | `_handle_cores_skills` | Search the local skills catalog. Query: `q`, `limit` (at most 100). |
-| GET | `/api/cores/status` | `` | Consolidated status of the cores (the same as `cores_unified_status`). |
+| GET | `/api/cores/status` | `` | What the bundled cores have on this machine (the same as `cores_unified_status`). |
 | POST | `/api/dream` | `` | Apply or dismiss a dream finding, with the same tools as `dream_apply` and `dream_dismiss`. Body: `old`, `new`, `action` (`apply` or `dismiss`). |
 | GET | `/api/facts` | `` | Facts extracted from notes. Query: `q`, `divergent=1` for only the groups where notes disagree. |
 | GET | `/api/graphs` | `` | Built code graphs. |
