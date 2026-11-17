@@ -23,5 +23,5 @@ def notas_do_vault(cfg) -> list[str]:
             dirnames[:] = [d for d in dirnames if not d.startswith(".")]
             for a in arquivos:
                 if a.endswith(".md"):
-                    saida.append(str((Path(dirpath) / a).relative_to(raiz)))
+                    saida.append((Path(dirpath) / a).relative_to(raiz).as_posix())
     return saida

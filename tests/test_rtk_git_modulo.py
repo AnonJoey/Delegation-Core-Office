@@ -7,6 +7,7 @@ binario do RTK esta em `scripts/paridade_rtk_git.py`.
 
 import os
 import subprocess
+import sys
 
 import pytest
 
@@ -296,7 +297,10 @@ class Repo(os.PathLike):
 def repo(tmp_path):
     casa = tmp_path / "casa"
     casa.mkdir()
-    (casa / "gitconfig").write_text("[user]\n\tname = T\n\temail = t@x.y\n[init]\n\tdefaultBranch = main\n")
+    # autocrlf = input: no Windows o write_text grava CRLF, e o blob no repositorio precisa ser LF
+    # para o `git show` sair igual nos tres sistemas (CI de 17/11/2026).
+    (casa / "gitconfig").write_text("[user]\n\tname = T\n\temail = t@x.y\n[init]\n\tdefaultBranch = main\n"
+                                    "[core]\n\tautocrlf = input\n")
     r = tmp_path / "repo"
     r.mkdir()
     env = {"PATH": os.environ["PATH"], "HOME": str(casa), "GIT_CONFIG_NOSYSTEM": "1", "LC_ALL": "C",
@@ -342,7 +346,11 @@ def test_status_mostra_o_rebase_em_andamento(repo):
     repo.git("checkout", "-q", "-b", "x")
     (repo / "f1.txt").write_text("x\n")
     repo.git("commit", "-qam", "x", dia=9)
-    subprocess.run(["git", "-c", "sequence.editor=sed -i 1s/pick/edit/", "rebase", "-q", "-i", "main~1"],
+    # Editor de sequencia em Python: `sed -i` sem extensao falha no sed BSD do macOS, e no
+    # Windows nao ha sed. O caminho do interpretador vai entre aspas por causa de espacos.
+    python = sys.executable.replace("\\", "/")
+    editor = f'"{python}" -c "import sys; p = sys.argv[1]; s = open(p).read(); open(p, \'w\').write(s.replace(\'pick\', \'edit\', 1))"'
+    subprocess.run(["git", "-c", f"sequence.editor={editor}", "rebase", "-q", "-i", "main~1"],
                    cwd=repo, env=repo.env, capture_output=True)
     o, _, _ = rodar(repo, "status")
     assert o.startswith("rebase in progress\n* ")

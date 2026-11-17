@@ -79,7 +79,7 @@ def mortas(cfg, caminho: str) -> list[str]:
         return []
     rel = caminho
     try:
-        rel = str(arq.relative_to(Path(cfg.vault)))
+        rel = arq.relative_to(Path(cfg.vault)).as_posix()
     except ValueError:
         pass
     saida = [] if historica(rel, texto[:600]) else [r.caminho for r in verificar(extrair(texto, casa=_casa(cfg))) if not r.existe]

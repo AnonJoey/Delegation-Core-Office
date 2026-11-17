@@ -22,6 +22,7 @@ executavel falso que imprime a saida gravada (`scripts/paridade_rtk_modulos.py`)
 
 from __future__ import annotations
 
+import os
 import importlib
 import inspect
 import shlex
@@ -123,7 +124,14 @@ def argumentos_do_shell(comando: str) -> list[str] | None:
     resto = achado.group(2)
     if not resto:
         return []
-    p = subprocess.run(["/bin/sh", "-c", "printf '%s\\0' " + resto], capture_output=True)
+    import shutil
+    # Sem `sh` (Windows sem o Git Bash no PATH) nao ha quem expanda: o comando segue sem
+    # filtro, como qualquer comando que nenhum modulo roda. Medido na CI de 17/11/2026:
+    # com "/bin/sh" fixo, todo comando simples dava FileNotFoundError no Windows.
+    sh = shutil.which("sh") or ("/bin/sh" if os.path.exists("/bin/sh") else None)
+    if sh is None:
+        return None
+    p = subprocess.run([sh, "-c", "printf '%s\\0' " + resto], capture_output=True)
     if p.returncode != 0:
         return None
     return p.stdout.decode("utf-8", "replace").split("\0")[:-1]

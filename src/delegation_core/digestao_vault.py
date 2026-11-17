@@ -171,7 +171,7 @@ def _gravar(vault, titulo: str, corpo: str, data: str | None) -> dict:
         dest.write_text(texto, encoding="utf-8")
     except OSError as e:
         return {"error": f"Write failed: {e}"}
-    rel = str(dest.relative_to(cfg.vault))
+    rel = dest.relative_to(cfg.vault).as_posix()
     if vault.index_note(texto, {"title": titulo, "path": rel, "folder": pasta.name}):
         vault.stamp_indexed([rel])
     return {"status": "ok", "path": rel}

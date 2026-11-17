@@ -30,7 +30,7 @@ def decisoes_recentes(vault: Path, dias: int = 7, limite: int = 10, pasta: str =
     corte = time.time() - dias * 86400
     notas = [p for p in base.rglob("*.md") if p.stat().st_mtime >= corte]
     notas.sort(key=lambda p: p.stat().st_mtime, reverse=True)
-    return [str(p.relative_to(vault)) for p in notas[:limite]]
+    return [p.relative_to(vault).as_posix() for p in notas[:limite]]
 
 
 def brief(config_dir: Path, vault: Path, processos: dict | None) -> str:

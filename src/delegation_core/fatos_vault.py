@@ -50,7 +50,7 @@ def notas_vivas(cfg) -> list[tuple[str, str, str]]:
         if not base.is_dir():
             continue
         for p in base.rglob("*.md"):
-            rel = str(p.relative_to(raiz))
+            rel = p.relative_to(raiz).as_posix()
             if any(x.startswith((".", "_")) for x in Path(rel).parts):
                 continue
             try:

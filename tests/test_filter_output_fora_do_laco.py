@@ -43,7 +43,9 @@ def test_o_trabalho_lento_nao_para_o_laco(monkeypatch):
     monkeypatch.setattr(execucao, "exibir", lento)
     resposta, atraso = asyncio.run(_com_relogio(_fn(server.filter_output)("ps aux", "linha\n" * 10, 0)))
     assert json.loads(resposta)["filter"] == "ps"
-    assert atraso < 0.1, f"o laco ficou {atraso * 1000:.0f} ms parado"
+    # O trabalho lento dura 300 ms: travado, o laco para pelo menos isso. 200 ms separa a trava
+    # do runner lento (o macOS da CI de 17/11/2026 deu 112 ms sem trava nenhuma).
+    assert atraso < 0.2, f"o laco ficou {atraso * 1000:.0f} ms parado"
 
 
 def test_chamadas_simultaneas_andam_juntas(monkeypatch):

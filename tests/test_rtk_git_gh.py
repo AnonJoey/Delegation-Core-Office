@@ -5,6 +5,7 @@ A paridade byte a byte com o binario do RTK esta em `scripts/paridade_rtk_gh.py`
 
 import json
 import stat
+import sys
 
 import pytest
 
@@ -146,6 +147,8 @@ def test_por_linhas_normaliza_como_o_run_streaming():
 
 @pytest.fixture
 def falso(tmp_path):
+    if sys.platform == "win32":
+        pytest.skip("o gh falso e um script sh; o Windows nao o executa")
     bindir = tmp_path / "bin"
     bindir.mkdir()
     env = {"PATH": f"{bindir}:/usr/bin:/bin", "HOME": str(tmp_path)}

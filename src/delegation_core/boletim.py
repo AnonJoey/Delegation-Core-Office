@@ -77,7 +77,7 @@ def coletar(cfg, config_dir: Path, desde: float, tracker=None) -> dict:
     for p in (raiz / "Reference").glob("*Sonho de *.md") if (raiz / "Reference").is_dir() else []:
         try:
             if p.stat().st_mtime >= desde:
-                sonhos.append(str(p.relative_to(raiz)))
+                sonhos.append(p.relative_to(raiz).as_posix())
         except OSError:
             continue
     fatos["sonhos"] = sorted(sonhos)

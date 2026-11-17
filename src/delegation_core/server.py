@@ -606,7 +606,7 @@ def read_note(note_name: str) -> str:
     except OSError as e:
         return json.dumps(erros.falha(f"Could not read note: {e}"))
     try:
-        sonho_vault.abriu(_vault.cfg, str(matches[0].relative_to(_vault.cfg.vault)))
+        sonho_vault.abriu(_vault.cfg, matches[0].relative_to(_vault.cfg.vault).as_posix())
         envelhecimento_vault.registrar_leituras(_vault.cfg, [matches[0].relative_to(_vault.cfg.vault).as_posix()])
     except ValueError:
         pass
@@ -1172,7 +1172,7 @@ def _caminho_da_nota(note: str) -> str | None:
     if note.endswith(".md") and "/" in note:
         return note
     m = _vault.find_notes_by_stem(note)
-    return str(m[0].relative_to(_vault.cfg.vault)) if m else None
+    return m[0].relative_to(_vault.cfg.vault).as_posix() if m else None
 
 
 @mcp.tool()
@@ -1276,7 +1276,7 @@ def vault_update_note(note_name: str, append_content: str, expected_hash: str = 
             return json.dumps(conflito)
         # Grava no arquivo resolvido, e nao pelo nome: update_note escolhe a
         # primeira nota cujo nome CONTEM o texto, que pode ser outra.
-        rel = str(alvo.relative_to(_vault.cfg.vault))
+        rel = alvo.relative_to(_vault.cfg.vault).as_posix()
         stamp = datetime.now().strftime("%Y-%m-%d %H:%M")
         novo = alvo.read_text(encoding="utf-8") + f"\n\n---\n*Updated {stamp}*\n\n{append_content}"
         r = _notewriter.save_note(_vault, rel, novo)
@@ -2147,7 +2147,7 @@ async def vault_note_code(note: str) -> str:
     matches = _vault.find_notes_by_stem(note)
     if not matches:
         return json.dumps(erros.nao_encontrado(f"Note not found: {note}"))
-    rel = str(matches[0].relative_to(_vault.cfg.vault))
+    rel = matches[0].relative_to(_vault.cfg.vault).as_posix()
     return json.dumps(await asyncio.to_thread(codigo_vault.da_nota, _vault.cfg, rel), ensure_ascii=False)
 
 
@@ -2384,7 +2384,7 @@ async def vault_dead_refs(note: str = "", folder: str = "", limit: int = 30) -> 
         matches = _vault.find_notes_by_stem(note)
         if not matches:
             return json.dumps(erros.nao_encontrado(f"Note not found: {note}"))
-        rel = str(matches[0].relative_to(cfg.vault))
+        rel = matches[0].relative_to(cfg.vault).as_posix()
         return json.dumps(await asyncio.to_thread(referencias_vault.da_nota, cfg, rel), ensure_ascii=False)
     if folder and not (cfg.vault / folder).is_dir():
         return json.dumps(erros.nao_encontrado(f"Folder not found: {folder}"))

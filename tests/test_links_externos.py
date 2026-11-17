@@ -63,10 +63,11 @@ def test_diretorio_inexistente_nao_levanta():
 def test_o_til_e_expandido(monkeypatch, tmp_path):
     """O usuario escreve `~/.claude/...` no config, nao o caminho absoluto."""
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))   # o expanduser do Windows le este
     d = tmp_path / "mem"
     d.mkdir()
-    (d / "user_quem_e_o_jordan.md").write_text("x", encoding="utf-8")
-    assert "user_quem_e_o_jordan" in external_link_targets(["~/mem"])
+    (d / "user_quem_e_o_usuario.md").write_text("x", encoding="utf-8")
+    assert "user_quem_e_o_usuario" in external_link_targets(["~/mem"])
 
 
 def test_a_nota_do_vault_vence_o_homonimo_externo(tmp_path, memorias):

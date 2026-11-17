@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import json
+import sys
 import stat
 from types import SimpleNamespace
+
+import pytest
 
 from delegation_core import config, revisoes_config
 
@@ -39,6 +42,7 @@ def test_historico_mascara_e_reverte():
     assert config.Config.load().default_search_scope == "all", "reverter tambem se desfaz"
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="o Windows nao tem bits de permissao POSIX")
 def test_permissao_e_limite(monkeypatch):
     monkeypatch.setattr(config, "REVISOES_MANTER", 3)
     for i in range(6):

@@ -96,7 +96,7 @@ def visivel(fm: dict, escopo: dict) -> bool:
 
 def _snippet(cfg, p: Path, fm: dict, corpo: str, limite: int = 0, score=None) -> dict:
     texto = corpo.strip()
-    s = {"handle": {"providerKey": PROVEDOR, "providerRecordId": str(p.relative_to(cfg.vault))},
+    s = {"handle": {"providerKey": PROVEDOR, "providerRecordId": p.relative_to(cfg.vault).as_posix()},
          "text": texto[:limite] if limite else texto,
          "metadata": fm.get("paperclip_metadata") or {}}
     if fm.get("paperclip_summary"):
@@ -130,7 +130,7 @@ def _gravar(vault, escopo: dict, texto: str, *, resumo: str = "", metadados=None
     tmp = p.with_name(p.name + ".tmp")
     tmp.write_text(conteudo, encoding="utf-8")
     tmp.replace(p)
-    rel = str(p.relative_to(cfg.vault))
+    rel = p.relative_to(cfg.vault).as_posix()
     if vault.index_note(conteudo, {"title": fm["title"], "path": rel, "folder": rel.split("/")[0]}):
         vault.stamp_indexed([rel])
     return rel
@@ -194,7 +194,7 @@ def query(vault, scope, query_text: str, top_k: int = 5, intent: str = "answer",
     escopo = _validar(scope)
     cfg = vault.cfg
     pasta = pasta_da_empresa(cfg, escopo)
-    prefixo = str(pasta.relative_to(cfg.vault)) + "/"
+    prefixo = pasta.relative_to(cfg.vault).as_posix() + "/"
     limite_texto = {"agent_preamble": 400, "browse": 0, "answer": 1200}.get(intent, 1200)
     caminhos = [c for c in (buscar or (lambda q, n: []))(query_text, max(top_k * 6, 30)) if c.startswith(prefixo)]
     snippets = []

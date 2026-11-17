@@ -50,7 +50,7 @@ def test_prefixo_comum():
 
 @pytest.mark.skipif(not shutil.which("wc"), reason="precisa do wc")
 def test_wc_de_verdade(tmp_path):
-    (tmp_path / "a.txt").write_text("um dois\ntres\n")
+    (tmp_path / "a.txt").write_bytes(b"um dois\ntres\n")   # bytes: no Windows o write_text poria CRLF
     env = {"PATH": os.environ["PATH"], "HOME": str(tmp_path)}
 
     def rodar(*args, entrada=None):
@@ -63,7 +63,9 @@ def test_wc_de_verdade(tmp_path):
     assert rodar("-l", "a.txt") == ("2\n", "", 0)
     assert rodar("-l", entrada=b"x\ny\nz\n") == ("3\n", "", 0)         # sem arquivo, le a entrada herdada
     o, e, c = rodar("nao-existe")
-    assert c == 1 and e == "wc: nao-existe: No such file or directory\n"
+    # A mensagem vem do wc de verdade: o GNU diz "wc: X: No such...", o BSD do macOS diz
+    # "wc: X: open: No such...". O modulo repassa a do sistema, sem reescrever.
+    assert c == 1 and e.startswith("wc: nao-existe: ") and e.endswith("No such file or directory\n")
 
 
 # ── ls ───────────────────────────────────────────────────────────────────────
@@ -156,7 +158,8 @@ def test_ls_de_verdade(tmp_path):
     assert ls.rodar(["-A", "-l"], amb) == 0
     assert amb.saida_gravada()[0].decode() == "755  node_modules/\n755  src/\n644  a.txt  2.0K\n"
     amb = Ambiente.em_memoria(str(tmp_path), env={"PATH": os.environ["PATH"], "HOME": str(tmp_path)})
-    assert ls.rodar(["nao-existe"], amb) == 2 and amb.saida_gravada()[0] == b""
+    # Codigo de saida do ls de verdade: 2 no GNU, 1 no BSD do macOS.
+    assert ls.rodar(["nao-existe"], amb) in (1, 2) and amb.saida_gravada()[0] == b""
 
 
 def test_shell_entrega_wc_e_ls_ao_modulo():

@@ -167,7 +167,7 @@ def test_pacote_nao_importa_o_nucleo():
     """Independente de verdade: nenhum modulo do pacote importa config, vault, server..."""
     proibidos = []
     for arq in PACOTE.glob("*.py"):
-        for no in ast.walk(ast.parse(arq.read_text())):
+        for no in ast.walk(ast.parse(arq.read_text(encoding="utf-8"))):
             # `texto_bytes` e uma folha de biblioteca padrao (espaco, linha, letra e tamanho como o Rust os ve),
             # compartilhada pelos portes do ai-memory; nao e o nucleo (config, vault, server...).
             if isinstance(no, ast.ImportFrom) and no.level >= 2 and no.module != "texto_bytes":

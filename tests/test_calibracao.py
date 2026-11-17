@@ -8,6 +8,7 @@ motivou o modulo, e falharia contra o codigo anterior.
 from __future__ import annotations
 
 import json
+import sys
 
 import pytest
 
@@ -69,6 +70,7 @@ def test_limpar_sem_arquivo_nao_levanta():
     calibracao.limpar()
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="o Windows nao tem bits de permissao POSIX")
 def test_o_arquivo_fica_com_permissao_restrita():
     """Mesmo tratamento do config: fica no mesmo diretorio, mesma regra."""
     import stat

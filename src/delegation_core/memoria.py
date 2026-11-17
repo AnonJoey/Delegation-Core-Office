@@ -58,7 +58,7 @@ def resolver_unica(vault, nota: str) -> tuple[Path | None, dict | None]:
     if len(achadas) > 1:
         return None, erros.entrada_invalida(
             f"'{nota}' matches {len(achadas)} notes; pass the vault-relative path",
-            candidates=[str(a.relative_to(raiz)) for a in achadas[:10]])
+            candidates=[a.relative_to(raiz).as_posix() for a in achadas[:10]])
     return achadas[0], None
 
 
@@ -67,7 +67,7 @@ def info_hash(vault, nota: str) -> dict:
     if erro:
         return erro
     st = p.stat()
-    return {"path": str(p.relative_to(vault.cfg.vault)), "hash": hash_texto(p.read_bytes()),
+    return {"path": p.relative_to(vault.cfg.vault).as_posix(), "hash": hash_texto(p.read_bytes()),
             "bytes": st.st_size, "modified": datetime.fromtimestamp(st.st_mtime).isoformat(timespec="seconds")}
 
 
@@ -99,7 +99,7 @@ def esquecer(vault, nota: str, motivo: str = "", autor: str = "") -> dict:
     if erro:
         return erro
     raiz = Path(vault.cfg.vault)
-    rel = str(p.relative_to(raiz))
+    rel = p.relative_to(raiz).as_posix()
     dados = p.read_bytes()
     _guardar_versao(vault.cfg, rel, dados, "antes de esquecer")
     lixeira = raiz / ".lixeira"
@@ -112,7 +112,7 @@ def esquecer(vault, nota: str, motivo: str = "", autor: str = "") -> dict:
     from .busca_hibrida import esquecer_caminho
     esquecer_caminho(vault.cfg, rel)
     registro = {"when": datetime.now().isoformat(timespec="seconds"), "path": rel,
-                "trash": str(destino.relative_to(raiz)), "hash": hash_texto(dados),
+                "trash": destino.relative_to(raiz).as_posix(), "hash": hash_texto(dados),
                 "by": autor, "reason": motivo}
     with (lixeira / "registro.jsonl").open("a", encoding="utf-8") as fh:
         fh.write(json.dumps(registro, ensure_ascii=False) + "\n")
@@ -137,7 +137,7 @@ def corrigir(vault, nota: str, trecho_antigo: str, trecho_novo: str, motivo: str
     if n != 1:
         return erros.entrada_invalida(
             f"old_text must appear exactly once in the note; it appears {n} times")
-    rel = str(p.relative_to(vault.cfg.vault))
+    rel = p.relative_to(vault.cfg.vault).as_posix()
     _guardar_versao(vault.cfg, rel, texto.encode("utf-8"), "antes de corrigir")
     quando = datetime.now().strftime("%Y-%m-%d %H:%M")
     linha = f"\n\n> Correcao {quando}" + (f" ({autor})" if autor else "") + (f": {motivo}" if motivo else "") + "\n"
@@ -179,7 +179,7 @@ class Propostas:
             return erros.entrada_invalida("old_text must appear exactly once in the note")
         item = {
             "id": "prop_" + uuid.uuid4().hex[:8],
-            "path": str(p.relative_to(vault.cfg.vault)),
+            "path": p.relative_to(vault.cfg.vault).as_posix(),
             "kind": "replace" if trecho_antigo else "append",
             "old_text": trecho_antigo, "new_text": texto_novo, "reason": motivo,
             "by": autor, "base_hash": hash_texto(atual), "status": "pending",

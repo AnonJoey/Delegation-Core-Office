@@ -32,7 +32,7 @@ def ingest_all(src_modules_dir: str, db_path: str = None) -> int:
                 if basename in ["README.md", "CONTRIBUTING.md", "LICENSE.md", "CHANGELOG.md"]:
                     continue
                     
-                rel_path = os.path.relpath(f, repo_path)
+                rel_path = os.path.relpath(f, repo_path).replace(os.sep, "/")
                 title = os.path.splitext(basename)[0].replace("-", " ").replace("_", " ").title()
                 
                 try:

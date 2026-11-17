@@ -30,7 +30,7 @@ def notas_recentes(cfg, desde: float, filtro: str = "", limite: int = 40) -> dic
                 if not a.endswith(".md"):
                     continue
                 p = Path(dirpath) / a
-                rel = str(p.relative_to(raiz))
+                rel = p.relative_to(raiz).as_posix()
                 if filtro and filtro.lower() not in rel.lower():
                     continue
                 st = p.stat()

@@ -73,7 +73,7 @@ def _notas(raiz: Path, caminhos) -> list[str]:
         p = resolve_in_vault(Path(raiz), c)
         if p is None or not p.is_file():
             raise ErroDePergunta(f"evidence must be an existing vault note: {c}")
-        saida.append(str(p.relative_to(Path(raiz).resolve())))
+        saida.append(p.relative_to(Path(raiz).resolve()).as_posix())
     return sorted(set(saida))
 
 

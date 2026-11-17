@@ -119,11 +119,20 @@ def _trabalho(conteudo: str, contexto: str, tipo: str, bias: float, guardar: boo
     return roteador.comprimir(conteudo, contexto, tipo, bias, guardar, kompress=False)
 
 
+def _metodo_de_inicio() -> str:
+    """`forkserver` onde existe (Linux e macOS); `spawn` no Windows, que so tem esse.
+
+    Os dois partem de um processo limpo, entao o `_trabalho` acima ja recebe o `config_dir` do
+    pai por argumento e nao depende de herdar estado. Medido na CI de 17/11/2026: com
+    `forkserver` fixo, o Windows dava `cannot find context for 'forkserver'`."""
+    return "forkserver" if "forkserver" in multiprocessing.get_all_start_methods() else "spawn"
+
+
 def _pool(n: int) -> ProcessPoolExecutor:
     global _POOL
     with _TRAVA:
         if _POOL is None:
-            _POOL = ProcessPoolExecutor(max_workers=n, mp_context=multiprocessing.get_context("forkserver"))
+            _POOL = ProcessPoolExecutor(max_workers=n, mp_context=multiprocessing.get_context(_metodo_de_inicio()))
         return _POOL
 
 

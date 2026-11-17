@@ -61,7 +61,7 @@ def _notas(cfg):
             rel = p.relative_to(raiz)
             if any(x.startswith((".", "_")) for x in rel.parts):
                 continue
-            yield str(rel), p
+            yield rel.as_posix(), p
 
 
 def _formatar(r: dict) -> dict:

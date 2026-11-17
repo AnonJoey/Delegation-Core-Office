@@ -111,7 +111,7 @@ def test_pacote_so_importa_a_biblioteca_padrao_e_texto_bytes():
     from pathlib import Path
 
     arq = Path(__file__).resolve().parents[1] / "src" / "delegation_core" / "ranqueamento" / "autoridade.py"
-    for no in ast.walk(ast.parse(arq.read_text())):
+    for no in ast.walk(ast.parse(arq.read_text(encoding="utf-8"))):
         if isinstance(no, ast.ImportFrom):
             assert not (no.module or "").startswith("delegation_core")
             assert no.level < 2 or no.module == "texto_bytes"
