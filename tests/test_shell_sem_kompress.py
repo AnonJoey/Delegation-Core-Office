@@ -25,7 +25,7 @@ def test_shell_de_comando_anotado_nao_chama_o_kompress(tmp_path, monkeypatch, ca
     chamadas = _espiao(monkeypatch)
     arquivo = tmp_path / "prosa.txt"
     arquivo.write_text(_PROSA, encoding="utf-8")
-    rc = cli.cmd_run(argparse.Namespace(comando=f"cat {arquivo}"))
+    rc = cli.cmd_run(argparse.Namespace(comando=f"cat {arquivo.as_posix()}"))   # o sh leria a barra invertida do Windows como escape
     assert rc == 0
     assert capsys.readouterr().out.strip()
     assert chamadas == [], "o shell carregou o Kompress: 1,5 GB e de 3 a 7 s por comando"

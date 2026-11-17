@@ -201,7 +201,9 @@ def _compactar_nota(vault, rel: str) -> dict:
     cfg = vault.cfg
     p = Path(cfg.vault) / rel
     antigo = p.read_bytes()
-    novo = texto_compactado(antigo.decode("utf-8", errors="replace"))
+    # CRLF vira LF antes de separar o frontmatter: nota do Windows perdia titulo e data na
+    # versao compactada (CI de 17/11/2026). Os bytes originais seguem para o historico.
+    novo = texto_compactado(antigo.decode("utf-8", errors="replace").replace("\r\n", "\n"))
     if len(novo.encode("utf-8")) >= len(antigo):
         return {"path": rel, "skipped": "compaction would not make the note smaller"}
     memoria._guardar_versao(cfg, rel, antigo, "antes de compactar (envelhecimento)")

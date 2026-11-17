@@ -51,7 +51,7 @@ ACME_A1 = {"companyId": "acme", "agentId": "a1"}
 
 
 def todos(v):
-    return lambda q, n: sorted(str(p.relative_to(v.cfg.vault)) for p in Path(v.cfg.vault).rglob("*.md"))
+    return lambda q, n: sorted(p.relative_to(v.cfg.vault).as_posix() for p in Path(v.cfg.vault).rglob("*.md"))
 
 
 def test_escopo_obrigatorio(vault):
