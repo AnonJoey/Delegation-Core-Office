@@ -326,9 +326,10 @@ def pagina_painel() -> str:
               "| Method | Path | Handler | What it does |\n|---|---|---|---|\n"]
     classe = next(c for _, c in inspect.getmembers(dashboard_api, inspect.isclass)
                   if hasattr(c, "_route_get"))
+    textos = _textos("dashboard-api")
     for caminho, metodo, alvo in rotas:
-        doc = ""
-        if alvo and hasattr(classe, alvo):
+        doc = textos.get(f"{metodo} {caminho}", {}).get("description", "").strip()
+        if not doc and alvo and hasattr(classe, alvo):
             doc = (inspect.getdoc(getattr(classe, alvo)) or "").split("\n\n")[0]
         linhas.append(f"| {metodo} | `{caminho}` | `{alvo}` | {_celula(doc) or SEM_TEXTO} |\n")
     return "".join(linhas)

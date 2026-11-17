@@ -1,0 +1,26 @@
+# English descriptions of the default scheduled tasks (vigia.TAREFAS_PADRAO), rendered into
+# docs/reference/schedule.md. Each one was written from the action it runs (vigia.Vigia.acoes).
+
+[historico-horario]
+description = "Saves into the note history the notes that changed since the last run (needs `historico_enabled`)."
+
+[alertas]
+description = "Evaluates the alert rules, opens and closes alerts, sends desktop notifications, and writes the attention list the session-start hook shows."
+
+[reindex-noturno]
+description = "Reindexes the notes whose content changed, through the job queue, which refuses a second reindex running at the same time."
+
+[podar-historico]
+description = "Keeps the newest `manter_por_nota` versions of each note in the history and deletes stored content no version uses any more."
+
+[sonho-noturno]
+description = "Runs the dream pass over notes from the last `dias` days and writes a summary note in the vault (needs `sonho_enabled` and the local model)."
+
+[boletim-diario]
+description = "Writes a bulletin note in Sessions covering the last `horas` hours: notes changed, open alerts and alert events, failing tasks, stalled processes, dream findings, and questions asked more than once that search never answered well. Writes nothing when there is nothing to report."
+
+[digestao-noturna]
+description = "Summarizes up to `maximo` raw transcripts that have no curated session note (needs `digestao_enabled` and the local model)."
+
+[fatos-noturno]
+description = "Extracts facts from up to `maximo` notes still waiting for extraction (needs `fatos_enabled` and the local model)."

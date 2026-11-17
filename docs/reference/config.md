@@ -131,115 +131,115 @@ reports it. Paths may start with `~`.
 
 **Type:** `str` · **Default:** `""`
 
-(not documented yet)
+Folder of the Markdown vault the daemon serves. Required: with it empty the program reports that it is not configured. `~` is expanded.
 
 ## vault_folders
 
 **Type:** `list` · **Default:** `["decisions", "research", "tools", "fixes", "reference", "sessions"]`
 
-(not documented yet)
+Folders inside the vault that hold notes. Names are matched case-insensitively, and the real folder name is what the program uses as a path. The wizard writes the vault's own folder names here.
 
 ## motor_local
 
 **Type:** `str` · **Default:** `"llamacpp"`
 
-(not documented yet)
+Which server runs the local model: `llamacpp` (llama-server with a GGUF file) or `mlx` (mlx_lm.server on Apple Silicon). With `mlx`, `llama_binary` points at mlx_lm.server and `llama_model` is the MLX model folder or its Hugging Face repository id.
 
 ## llama_binary
 
 **Type:** `str` · **Default:** `""`
 
-(not documented yet)
+Path to the local model server binary (llama-server, or mlx_lm.server when `motor_local` is `mlx`). Required unless `engine_mode` is `agent`.
 
 ## llama_model
 
 **Type:** `str` · **Default:** `""`
 
-(not documented yet)
+The local model: a GGUF file for llama.cpp, or an MLX folder or repository id. Required unless `engine_mode` is `agent`.
 
 ## llama_port
 
 **Type:** `int` · **Default:** `8181`
 
-(not documented yet)
+Loopback port the local model server listens on.
 
 ## llama_ctx
 
 **Type:** `int` · **Default:** `4096`
 
-(not documented yet)
+Context window, in tokens, given to the local model server. With `llama_parallel` above 1 it is split between the slots.
 
 ## llama_ngl
 
 **Type:** `int` · **Default:** `999`
 
-(not documented yet)
+Model layers offloaded to the GPU. `999` offloads all of them; llama.cpp keeps what does not fit in system memory.
 
 ## llama_parallel
 
 **Type:** `int` · **Default:** `1`
 
-(not documented yet)
+Requests the local model server answers at the same time (`--parallel`). `1` does not pass the flag. The context (`llama_ctx`) is divided among the slots.
 
 ## llama_device
 
 **Type:** `str` · **Default:** `"auto"`
 
-(not documented yet)
+Where the local model runs, independent of where the embedding model runs (`embed_device`). `auto`: llama.cpp decides from `llama_ngl` and free VRAM. `gpu`: the same, and the model process never inherits a hidden GPU. `cpu`: no layers on the GPU, and the GPU is hidden from the model process only.
 
 ## llama_enable_thinking
 
 **Type:** `bool` · **Default:** `false`
 
-(not documented yet)
+Lets a reasoning model spend its token budget on a private thinking channel. Off by default: a budget that runs out while the model is still thinking comes back as an empty answer with HTTP 200 and no error.
 
 ## bge_model
 
 **Type:** `str` · **Default:** `"BAAI/bge-base-en-v1.5"`
 
-(not documented yet)
+Embedding model for search. `BAAI/bge-base-en-v1.5` (English, smaller) or `BAAI/bge-m3` (multilingual, recommended by the wizard for Portuguese or mixed-language notes). Each model has its own collection in the index, so switching keeps the other model's index.
 
 ## search_threshold
 
 **Type:** `float` · **Default:** `0.55`
 
-(not documented yet)
+Minimum similarity for a search result to be returned. When the key is absent from config.json, the measured value for `bge_model` is used instead of the default shown here: 0.55 for bge-base, 0.45 for bge-m3, 0.50 for any other model.
 
 ## merge_threshold
 
 **Type:** `float` · **Default:** `0.88`
 
-(not documented yet)
+Similarity at or above which two notes count as the same topic: a new note is merged into the existing one, and related notes get a wikilink.
 
 ## max_tokens
 
 **Type:** `int` · **Default:** `2048`
 
-(not documented yet)
+Ceiling on tokens the local model may generate for one task.
 
 ## synthesis_enabled
 
 **Type:** `bool` · **Default:** `true`
 
-(not documented yet)
+Lets the local model synthesize notes (titles, summaries, structure) during maintenance and ingestion. Off, those paths use the extractive fallback.
 
 ## synthesis_lang
 
 **Type:** `str` · **Default:** `"en"`
 
-(not documented yet)
+Language of the synthesis prompts: `en` or `pt`.
 
 ## budget_mode
 
 **Type:** `str` · **Default:** `"normal"`
 
-(not documented yet)
+How generation is capped. `normal`: only `max_tokens`. `cpu`: strict caps so a CPU-only machine stays within the MCP client timeout. `auto`: caps derived from the measured tokens per second and `mcp_timeout_sec`.
 
 ## historico_enabled
 
 **Type:** `bool` · **Default:** `true`
 
-(not documented yet)
+Keeps every version of each note, by content, in `<vault>/.historico`: captured hourly and around relink, maintenance, rename and restore. Enables `vault_note_history`, `vault_note_diff` and `vault_note_restore`.
 
 Tools behind this key: [`vault_note_diff`](tools.md#vault_note_diff), [`vault_note_history`](tools.md#vault_note_history), [`vault_note_restore`](tools.md#vault_note_restore).
 
@@ -247,49 +247,49 @@ Tools behind this key: [`vault_note_diff`](tools.md#vault_note_diff), [`vault_no
 
 **Type:** `bool` · **Default:** `true`
 
-(not documented yet)
+Hybrid search in `search_vault`: lexical (BM25) and dense results fused by reciprocal rank and reordered by a cross-encoder. Without the reordering model available, search stays dense, because fusion alone made paraphrased questions worse.
 
 ## busca_reordenar
 
 **Type:** `bool` · **Default:** `true`
 
-(not documented yet)
+Reorders hybrid-search candidates with the cross-encoder. Off, fused results are returned in fusion order.
 
 ## busca_reordenador_modelo
 
 **Type:** `str` · **Default:** `""`
 
-(not documented yet)
+Cross-encoder used to reorder results. Empty: `BAAI/bge-reranker-v2-m3`. The model is never downloaded during a search: if it is not in the local cache, search stays dense and `delegation-core doctor` says so.
 
 ## busca_reordenador_dispositivo
 
 **Type:** `str` · **Default:** `"auto"`
 
-(not documented yet)
+Where the cross-encoder runs. `auto` uses the GPU when 1.5 GB is free at load time and otherwise turns reordering off (on CPU it cost about 5.8 s per query). `cuda` or `cpu` force one.
 
 ## busca_profundidade_rerank
 
 **Type:** `int` · **Default:** `20`
 
-(not documented yet)
+How many fused candidates the cross-encoder reorders.
 
 ## busca_caracteres_rerank
 
 **Type:** `int` · **Default:** `2000`
 
-(not documented yet)
+Characters of each candidate the cross-encoder reads.
 
 ## busca_razao_lexico_dominante
 
 **Type:** `float` · **Default:** `1.5`
 
-(not documented yet)
+When the best lexical match scores at least this many times the second (BM25), it goes to the top regardless of reordering: an exact match, such as a copied phrase or an identifier, that reordering used to bury. `0` turns it off.
 
 ## agenda_enabled
 
 **Type:** `bool` · **Default:** `true`
 
-(not documented yet)
+Runs the scheduled tasks and the alert rules inside the daemon. Off, neither runs and their tools are hidden.
 
 Tools behind this key: [`alerts`](tools.md#alerts), [`alerts_check`](tools.md#alerts_check), [`schedule_list`](tools.md#schedule_list), [`schedule_run`](tools.md#schedule_run).
 
@@ -297,31 +297,31 @@ Tools behind this key: [`alerts`](tools.md#alerts), [`alerts_check`](tools.md#al
 
 **Type:** `list | None` · **Default:** `null`
 
-(not documented yet)
+Replaces the default schedule (see [scheduled tasks](schedule.md)). Each entry has `nome`, `cron`, `acao`, optional `argumentos` and `ligada` (default `true`). `null` uses the defaults; an empty list runs no task.
 
 ## alertas_desktop
 
 **Type:** `bool` · **Default:** `true`
 
-(not documented yet)
+Also shows alerts as desktop notifications, through `notify-send` when it exists. Alerts are always logged.
 
 ## alerta_indice_atrasado
 
 **Type:** `int` · **Default:** `100`
 
-(not documented yet)
+Notes changed but not reindexed above which the `indice_atrasado` alert can open.
 
 ## alerta_processo_parado_dias
 
 **Type:** `int` · **Default:** `14`
 
-(not documented yet)
+Days without an update after which an active tracked process counts as stalled, for the `processo_parado` alert and the daily bulletin.
 
 ## recordacao_enabled
 
 **Type:** `bool` · **Default:** `true`
 
-(not documented yet)
+Logs what every `search_vault` returned and for which question, so the dream pass and `recall_stats` know what the vault is used for.
 
 Tools behind this key: [`recall_stats`](tools.md#recall_stats).
 
@@ -329,19 +329,19 @@ Tools behind this key: [`recall_stats`](tools.md#recall_stats).
 
 **Type:** `str` · **Default:** `""`
 
-(not documented yet)
+Database of the search log. Empty: `~/.delegation_core/recordacao.sqlite3`.
 
 ## achados_path
 
 **Type:** `str` · **Default:** `""`
 
-(not documented yet)
+Database of dream findings (pairs where a newer note updates or contradicts an older one). Empty: `~/.delegation_core/achados.sqlite3`.
 
 ## referencias_enabled
 
 **Type:** `bool` · **Default:** `true`
 
-(not documented yet)
+Detects paths cited in notes that no longer exist on this machine. Enables `vault_dead_refs` and the `dead_refs` marks in `search_vault`. Only POSIX paths are recognized.
 
 Tools behind this key: [`vault_dead_refs`](tools.md#vault_dead_refs).
 
@@ -349,13 +349,13 @@ Tools behind this key: [`vault_dead_refs`](tools.md#vault_dead_refs).
 
 **Type:** `str` · **Default:** `""`
 
-(not documented yet)
+Home folder used to expand `~/` in cited paths and to decide what is a local path. Empty: the daemon's own home.
 
 ## fatos_enabled
 
 **Type:** `bool` · **Default:** `true`
 
-(not documented yet)
+Extracts durable facts (which port, path, model or version something uses) from notes with the local model. Enables `vault_facts`.
 
 Tools behind this key: [`vault_facts`](tools.md#vault_facts).
 
@@ -363,25 +363,25 @@ Tools behind this key: [`vault_facts`](tools.md#vault_facts).
 
 **Type:** `str` · **Default:** `""`
 
-(not documented yet)
+Database of extracted facts. Empty: `~/.delegation_core/fatos.sqlite3`.
 
 ## fatos_pastas
 
 **Type:** `list[str] | None` · **Default:** `null`
 
-(not documented yet)
+Folders whose notes are mined for facts. `null`: Decisions, Fixes, Infrastructure, Procedures, Projects and Tools.
 
 ## fatos_na_escrita
 
 **Type:** `bool` · **Default:** `true`
 
-(not documented yet)
+Queues fact extraction for a note right after it is written, when the note is in one of `fatos_pastas`; otherwise facts wait for the nightly `fatos-noturno` task. In `agent` mode the write never starts the local model (see `local_em_modo_agent`).
 
 ## codigo_enabled
 
 **Type:** `bool` · **Default:** `true`
 
-(not documented yet)
+Links notes to the code they cite (functions, classes, files) in built code graphs. Enables `vault_note_code`, `graph_notes` and `graph_changed_notes`.
 
 Tools behind this key: [`graph_changed_notes`](tools.md#graph_changed_notes), [`graph_notes`](tools.md#graph_notes), [`vault_note_code`](tools.md#vault_note_code).
 
@@ -389,19 +389,19 @@ Tools behind this key: [`graph_changed_notes`](tools.md#graph_changed_notes), [`
 
 **Type:** `str` · **Default:** `""`
 
-(not documented yet)
+Database of note-to-code links. Empty: `~/.delegation_core/codigo.sqlite3`.
 
 ## codigo_pastas
 
 **Type:** `list[str] | None` · **Default:** `null`
 
-(not documented yet)
+Folders whose notes are linked to code. `null`: Decisions, Fixes, Infrastructure, Procedures, Projects and Tools.
 
 ## sonho_enabled
 
 **Type:** `bool` · **Default:** `true`
 
-(not documented yet)
+The dream pass: the local model compares recent notes with older ones and records the pairs where the newer note updates or contradicts the older. Enables the `dream_*` tools; the nightly run is the `sonho-noturno` task.
 
 Tools behind this key: [`dream_apply`](tools.md#dream_apply), [`dream_dismiss`](tools.md#dream_dismiss), [`dream_findings`](tools.md#dream_findings), [`dream_run`](tools.md#dream_run).
 
@@ -409,7 +409,7 @@ Tools behind this key: [`dream_apply`](tools.md#dream_apply), [`dream_dismiss`](
 
 **Type:** `bool` · **Default:** `true`
 
-(not documented yet)
+Summarizes raw session transcripts that have no curated session note, with the local model. Enables `digest_transcripts`; the nightly run is the `digestao-noturna` task.
 
 Tools behind this key: [`digest_transcripts`](tools.md#digest_transcripts).
 
@@ -417,7 +417,7 @@ Tools behind this key: [`digest_transcripts`](tools.md#digest_transcripts).
 
 **Type:** `bool` · **Default:** `false`
 
-(not documented yet)
+Memory aging: notes in `envelhecimento_pastas` that nobody reads cool down and are compacted into a summary plus their durable facts; a note with `expires_at:` in its frontmatter goes to `.lixeira/` once expired, anywhere in the vault. Nothing is deleted: the full text is kept in the note history and `vault_note_restore` brings it back. Enables `vault_forget_sweep` and `vault_note_feedback`.
 
 Tools behind this key: [`vault_forget_sweep`](tools.md#vault_forget_sweep), [`vault_note_feedback`](tools.md#vault_note_feedback).
 
@@ -425,37 +425,37 @@ Tools behind this key: [`vault_forget_sweep`](tools.md#vault_forget_sweep), [`va
 
 **Type:** `list[str] | None` · **Default:** `null`
 
-(not documented yet)
+Folders whose notes can cool down. `null`: only Sessions.
 
 ## envelhecimento_meia_vida_dias
 
 **Type:** `float` · **Default:** `35.0`
 
-(not documented yet)
+Half-life, in days, of a note's retention when nobody reads it. Every read holds the note up for a few more weeks.
 
 ## envelhecimento_limiar_frio
 
 **Type:** `float` · **Default:** `0.2`
 
-(not documented yet)
+Retention below which a note counts as cold. With the defaults, a note never read falls below it in about 80 days.
 
 ## envelhecimento_compactar
 
 **Type:** `bool` · **Default:** `true`
 
-(not documented yet)
+A cold note is compacted (rewritten as summary plus durable facts, marked `compacted: true`). Off, a cold note is moved to `.lixeira/` instead.
 
 ## envelhecimento_path
 
 **Type:** `str` · **Default:** `""`
 
-(not documented yet)
+Database of note reads used by aging. Empty: `~/.delegation_core/acessos.sqlite3`.
 
 ## passagem_enabled
 
 **Type:** `bool` · **Default:** `false`
 
-(not documented yet)
+Handoffs between agents: a typed snapshot of where work stopped, picked up atomically so only one session gets it. Enables the `handoff_*` tools and the handoff parts of the session hooks.
 
 Tools behind this key: [`handoff_cancel`](tools.md#handoff_cancel), [`handoff_create`](tools.md#handoff_create), [`handoff_list`](tools.md#handoff_list), [`handoff_pickup`](tools.md#handoff_pickup).
 
@@ -463,37 +463,37 @@ Tools behind this key: [`handoff_cancel`](tools.md#handoff_cancel), [`handoff_cr
 
 **Type:** `str` · **Default:** `""`
 
-(not documented yet)
+Database of handoffs. Empty: `~/.delegation_core/passagens.sqlite3`.
 
 ## resumo_niveis_enabled
 
 **Type:** `bool` · **Default:** `false`
 
-(not documented yet)
+The session-start brief shows changed notes as layered excerpts (deepest first for pinned notes) instead of a list of paths.
 
 ## resumo_niveis_orcamento
 
 **Type:** `int` · **Default:** `6000`
 
-(not documented yet)
+Size, in bytes, of the layered session-start brief.
 
 ## autoridade_enabled
 
 **Type:** `bool` · **Default:** `false`
 
-(not documented yet)
+Authority in search: canonical notes (decisions, rules, `canonical` tag, pinned) move up and historical or session notes move down. When on, search reads four times more candidates.
 
 ## autoridade_forca
 
 **Type:** `float` · **Default:** `1.0`
 
-(not documented yet)
+Strength of the authority factor: `1.0` is the full effect, `0.5` half, `0` none.
 
 ## livro_enabled
 
 **Type:** `bool` · **Default:** `true`
 
-(not documented yet)
+Records every tool call (duration, characters in and out, error, size of the notes the answer points to). Enables `usage_report`.
 
 Tools behind this key: [`usage_report`](tools.md#usage_report).
 
@@ -501,277 +501,277 @@ Tools behind this key: [`usage_report`](tools.md#usage_report).
 
 **Type:** `str` · **Default:** `""`
 
-(not documented yet)
+Database of the tool-call log. Empty: `~/.delegation_core/livro.sqlite3`.
 
 ## redigir_segredos
 
 **Type:** `bool` · **Default:** `true`
 
-(not documented yet)
+Covers API keys, tokens, private keys and the server token before a note is written and in every line the `logs` tool returns.
 
 ## client_tokens
 
 **Type:** `dict` · **Default:** `{}`
 
-(not documented yet)
+Additional tokens, one per client: `{name: {"token": ..., "scope": "read" | "write"}}`. A `read` token can only call tools that do not write. Manage with `delegation-core token create`, `list` and `revoke`.
 
 ## tool_policies
 
 **Type:** `dict` · **Default:** `{}`
 
-(not documented yet)
+Per-client tool policies: `{client | "*": {tool | "read" | "write" | "destructive": action}}`, where the action is `allow`, `block`, `require_approval` or `rate_limit:N/S`. Empty changes nothing. Manage with `delegation-core policy` and `delegation-core approvals`.
 
 ## approval_ttl_hours
 
 **Type:** `float` · **Default:** `24.0`
 
-(not documented yet)
+Hours a pending approval request stays valid.
 
 ## update_channel
 
 **Type:** `str` · **Default:** `"branch"`
 
-(not documented yet)
+What `delegation-core update` installs: `branch` pulls the current branch of the source checkout; `stable` checks out the newest `v*` tag (detached HEAD).
 
 ## paperclip_memory_folder
 
 **Type:** `str` · **Default:** `"Reference"`
 
-(not documented yet)
+Vault folder that holds Paperclip memory records, under `<folder>/paperclip/<company>/`.
 
 ## kompress_enabled
 
 **Type:** `bool` · **Default:** `true`
 
-(not documented yet)
+Compresses prose with the Kompress model (ModernBERT), in `compress_output` and in the API proxy. The model is never downloaded during a call: `delegation-core kompress setup` downloads it.
 
 ## kompress_device
 
 **Type:** `str` · **Default:** `"cpu"`
 
-(not documented yet)
+Where the Kompress model runs. `cpu` by default, because the GPU is shared with the embedding model and the local model.
 
 ## proxy_enabled
 
 **Type:** `bool` · **Default:** `false`
 
-(not documented yet)
+Starts the API proxy inside the daemon. An agent pointed at `http://127.0.0.1:<proxy_port>` (for example through `ANTHROPIC_BASE_URL`) has its large tool results compressed before they reach the model.
 
 ## proxy_port
 
 **Type:** `int` · **Default:** `8789`
 
-(not documented yet)
+Loopback port of the API proxy.
 
 ## proxy_min_chars
 
 **Type:** `int` · **Default:** `2000`
 
-(not documented yet)
+Tool results at or above this size pass through the compressors.
 
 ## proxy_cross_turn_dedup
 
 **Type:** `bool` · **Default:** `false`
 
-(not documented yet)
+A tool-result passage identical to one in an earlier result of the same request becomes a short pointer to it. Changes the bytes sent, so it is off by default.
 
 ## proxy_read_lifecycle
 
 **Type:** `bool` · **Default:** `false`
 
-(not documented yet)
+A file read whose file was edited afterwards becomes a marker with the key to recover the original (`recall_output`). Changes earlier turns, so it is off by default.
 
 ## proxy_read_superseded
 
 **Type:** `bool` · **Default:** `false`
 
-(not documented yet)
+Like `proxy_read_lifecycle`, for a read that was later repeated in full.
 
 ## proxy_upstream_anthropic
 
 **Type:** `str` · **Default:** `"https://api.anthropic.com"`
 
-(not documented yet)
+Where the proxy forwards Anthropic API requests.
 
 ## proxy_upstream_openai
 
 **Type:** `str` · **Default:** `"https://api.openai.com"`
 
-(not documented yet)
+Where the proxy forwards OpenAI API requests.
 
 ## ingest_chunk_size
 
 **Type:** `int` · **Default:** `3072`
 
-(not documented yet)
+Size, in characters, of the pieces an ingested external file is split into.
 
 ## ingest_chunk_overlap
 
 **Type:** `int` · **Default:** `200`
 
-(not documented yet)
+Characters shared between consecutive pieces of an ingested file.
 
 ## vault_chunk_size
 
 **Type:** `int` · **Default:** `3072`
 
-(not documented yet)
+Size, in characters, of the pieces a vault note is split into for indexing. Every piece is embedded separately, so a long note is searchable in full; keep it under the token ceiling of `embed_max_seq_length`.
 
 ## vault_chunk_overlap
 
 **Type:** `int` · **Default:** `200`
 
-(not documented yet)
+Characters shared between consecutive pieces of a vault note, so a sentence cut at a boundary is still found.
 
 ## embed_max_seq_length
 
 **Type:** `int` · **Default:** `2048`
 
-(not documented yet)
+Token ceiling the embedding model is run with. Set explicitly because attention memory grows with the square of the sequence: bge-m3's own limit (8192) can exhaust a 16 GB GPU during a reindex. `0` keeps the model's own default.
 
 ## embed_batch_size
 
 **Type:** `int` · **Default:** `8`
 
-(not documented yet)
+Pieces embedded per batch. Lower it if a reindex runs out of GPU memory.
 
 ## embed_load_timeout_sec
 
 **Type:** `float` · **Default:** `600.0`
 
-(not documented yet)
+Seconds allowed for loading the embedding model. Past it, searches answer with the reason (also shown by `heartbeat`) instead of hanging, and loading continues in the background. `0` removes the limit.
 
 ## embed_device
 
 **Type:** `str` · **Default:** `"auto"`
 
-(not documented yet)
+Where the embedding model runs: `auto` (the accelerator available), `cpu`, `cuda` or `mps`. Use `cpu` when the embedding model and the local model do not fit on the same GPU.
 
 ## external_link_dirs
 
 **Type:** `list[str]` · **Default:** `[]`
 
-(not documented yet)
+Folders outside the vault whose `.md` files are valid targets of a `[[wikilink]]`, so links to them do not count as broken (for example the memory files of an assistant kept elsewhere).
 
 ## embed_backend
 
 **Type:** `str` · **Default:** `"auto"`
 
-(not documented yet)
+What computes the embeddings: `torch` (sentence-transformers), `llamacpp` (a llama-server started with `--embeddings`) or `auto`. `auto` uses llama.cpp only when its binary and GGUF file are present, so an update never leaves an existing index without an embedder. The wizard writes `llamacpp` on Apple Silicon.
 
 ## embed_llama_binary
 
 **Type:** `str` · **Default:** `""`
 
-(not documented yet)
+llama-server used for embeddings when `embed_backend` is `llamacpp`. Empty: the `llama-server` on the PATH. Separate from `llama_binary`, which on a Mac points at mlx_lm.server.
 
 ## embed_gguf
 
 **Type:** `str` · **Default:** `""`
 
-(not documented yet)
+GGUF file of the embedding model for the llama.cpp backend.
 
 ## embed_port
 
 **Type:** `int` · **Default:** `8182`
 
-(not documented yet)
+Loopback port of the llama-server that serves embeddings.
 
 ## default_search_scope
 
 **Type:** `str` · **Default:** `""`
 
-(not documented yet)
+Scope `search_vault` uses when the caller does not pass one: `notes`, `generated`, `external`, `notes+external` or `all`. Empty decides per vault: `notes+external` when generated code-graph articles are the majority of the vault, `all` otherwise.
 
 ## client_path_roots
 
 **Type:** `list` · **Default:** `[]`
 
-(not documented yet)
+Folders whose immediate subfolders name a client, so the `client` filter of `search_vault` also reaches ingested files. With `/Work/Acme` here, `/Work/Acme/Nortex/deck.pdf` belongs to client `nortex`. Empty by default: no client is guessed from a path.
 
 ## client_aliases
 
 **Type:** `dict` · **Default:** `{}`
 
-(not documented yet)
+Maps a client name to the canonical one, for names that normalization cannot merge because they are different strings, e.g. `{"campo-incorporadora": "campo"}`.
 
 ## subkind_weights
 
 **Type:** `dict` · **Default:** `{"curated": 1.0, "chat": 0.98, "transcript": 0.95, "generated": 1.0, "external": 1.0}`
 
-(not documented yet)
+Multiplier applied to the similarity of each kind of result (`curated`, `chat`, `transcript`, `generated`, `external`). Below 1.0 a kind ranks lower when similarities are close; by default raw transcripts and chats rank slightly below curated notes.
 
 ## split_min_chars
 
 **Type:** `int` · **Default:** `3000`
 
-(not documented yet)
+A file at or above this many characters is split into several notes when ingested (by headings when it has them, otherwise by paragraphs). A PDF with more than one page is always split.
 
 ## split_max_notes
 
 **Type:** `int` · **Default:** `10`
 
-(not documented yet)
+Maximum notes one split produces.
 
 ## tok_sec
 
 **Type:** `float` · **Default:** `0.0`
 
-(not documented yet)
+Legacy. The measured speed of the local model now lives in `~/.delegation_core/calibracao.json`; this key is read only while that file has never been written, so an older install keeps its calibration.
 
 ## mcp_timeout_sec
 
 **Type:** `int` · **Default:** `60`
 
-(not documented yet)
+Time budget, in seconds, that `budget_mode` `auto` keeps generation within (with a 0.70 safety factor).
 
 ## quality_threshold
 
 **Type:** `float` · **Default:** `0.5`
 
-(not documented yet)
+Synthesis quality score below which a note is marked for review and later re-synthesized by maintenance.
 
 ## heal_per_run
 
 **Type:** `int` · **Default:** `10`
 
-(not documented yet)
+Maximum number of low-quality notes one maintenance pass re-synthesizes.
 
 ## never_merge_folders
 
 **Type:** `list` · **Default:** `["sessions"]`
 
-(not documented yet)
+Folders whose notes are never merged into others or re-synthesized. Always combined with `sessions` and `meetings`, which are protected regardless.
 
 ## loop_watchdog_sec
 
 **Type:** `int` · **Default:** `300`
 
-(not documented yet)
+Seconds the daemon's event loop may stay stuck before the process writes every thread's stack to a file and exits, so the service manager starts a fresh one. `0` turns it off.
 
 ## index_path
 
 **Type:** `str` · **Default:** `""`
 
-(not documented yet)
+Where the search index lives. Empty: inside the vault (`.indice_sqlite`), or in `~/.delegation_core/indice_sqlite` when the vault is in a synced folder (OneDrive, iCloud), where a sync client can damage a database it copies mid-write. Automatic index recovery may fill this key by itself.
 
 ## index_backend
 
 **Type:** `str` · **Default:** `""`
 
-(not documented yet)
+Index storage: `sqlite` (the current one), `chroma` (the old ChromaDB index, needs the `[chroma]` extra) or empty, which picks by what exists on disk and never replaces an index that has data with an empty one. Switch with `delegation-core index-migrate`, not by editing this key.
 
 ## allow_local_index_fallback
 
 **Type:** `bool` · **Default:** `true`
 
-(not documented yet)
+When no daemon answers, index commands do the work in their own process. Turn this off on a machine where the daemon must be the only writer: the command then refuses instead. `--local` still forces it. A `no_auto_reindex` file in `~/.delegation_core` has the same effect without editing this key.
 
 ## web_search_enabled
 
 **Type:** `bool` · **Default:** `false`
 
-(not documented yet)
+Enables `search_web` (DuckDuckGo). Off by default because it reaches the public internet, outside the local-only design; needs the `[web]` extra (`pip install "delegation-core[web]"`).
 
 Tools behind this key: [`search_web`](tools.md#search_web).
 
@@ -779,76 +779,76 @@ Tools behind this key: [`search_web`](tools.md#search_web).
 
 **Type:** `str` · **Default:** `"local"`
 
-(not documented yet)
+Where text generation runs. `local`: the local model does everything. `agent`: no local model; interactive tools return the retrieved material for the calling assistant, and background maintenance uses an extractive fallback. `hybrid`: interactive work goes to the calling assistant, background work (synthesis, healing, ingestion) to the local model, and an interactive input of `hybrid_local_min_chars` or more returns a cost estimate and an offer to run it locally (`use_local=true`). Embeddings and search always run locally.
 
 ## hybrid_local_min_chars
 
 **Type:** `int` · **Default:** `8000`
 
-(not documented yet)
+In `hybrid` mode, interactive inputs at or above this size are not delegated: the tool returns a cost estimate and offers the local model.
 
 ## server_host
 
 **Type:** `str` · **Default:** `"127.0.0.1"`
 
-(not documented yet)
+Address the daemon listens on. Keep it on loopback: the token guards against other local processes, not against the network.
 
 ## server_port
 
 **Type:** `int` · **Default:** `8797`
 
-(not documented yet)
+Port of the daemon's MCP endpoint.
 
 ## server_path
 
 **Type:** `str` · **Default:** `"/mcp"`
 
-(not documented yet)
+Path of the MCP endpoint, e.g. `http://127.0.0.1:8797/mcp`.
 
 ## server_token
 
 **Type:** `str` · **Default:** `""`
 
-(not documented yet)
+Master bearer token every client presents. Generated on first start; empty means not generated yet, never unauthenticated. `delegation-core clients --show` prints it.
 
 ## dashboard_port
 
 **Type:** `int` · **Default:** `8788`
 
-(not documented yet)
+Loopback port of the dashboard's HTTP API, served by the daemon. `0` turns it off.
 
 ## local_idle_shutdown_sec
 
 **Type:** `int` · **Default:** `300`
 
-(not documented yet)
+In `agent` mode, seconds the local model may stay loaded with no queued task before it is unloaded. `0` never unloads. In `local` and `hybrid` modes it does not apply.
 
 ## local_em_modo_agent
 
 **Type:** `bool` · **Default:** `false`
 
-(not documented yet)
+In `agent` mode, background jobs that need the local model (fact extraction, transcript digestion, dream) postpone their work and report how much is pending, instead of starting the model. `true` authorizes them to start it; it unloads after `local_idle_shutdown_sec`.
 
 ## llama_queue_concurrency
 
 **Type:** `int` · **Default:** `1`
 
-(not documented yet)
+How many requests to the local model may be in flight at once, across every client of the daemon. Raise it only when the model server has matching parallel slots (`llama_parallel`).
 
 ## ingest_sources
 
 **Type:** `list[dict]` · **Default:** `[]`
 
-(not documented yet)
+Named folders and files to ingest, each with `name`, `path` (or `paths`), `recursive`, `enabled` and `exclude`. Empty: `ingest_folder` accepts any path. Once the list has entries, ingestion accepts only enabled sources declared here. `delegation-core ingest --configured` runs them.
 
 ## ingest_exclude_patterns
 
 **Type:** `list[str]` · **Default:** `[".git", "node_modules", "__pycache__", ".cache", ".mypy_cache", ".pytest_cache", ".ruff_cache", ".tox", ".venv", "venv", "dist", "build", "coverage", "htmlcov"]`
 
-(not documented yet)
+Patterns skipped by every ingestion: a directory name (`node_modules`), a file pattern (`*.log`) or a path relative to the source (`exports/private/*`).
 
 ## session_transcripts
 
 **Type:** `dict` · **Default:** `{"mode": "automatic"}`
 
-(not documented yet)
+Whether the end-of-session hook saves raw transcripts: `{"mode": "automatic"}` saves every session, `manual` only the next one after `delegation-core session capture-next`, `off` none.

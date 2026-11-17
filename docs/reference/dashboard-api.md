@@ -9,46 +9,46 @@ static page itself is served without it.
 
 | Method | Path | Handler | What it does |
 |---|---|---|---|
-| POST | `/api/ask` | `` | (not documented yet) |
-| GET | `/api/clients` | `` | (not documented yet) |
-| GET | `/api/config` | `_handle_config_get` | (not documented yet) |
-| POST | `/api/config/update` | `_handle_config_update` | (not documented yet) |
-| GET | `/api/cores/hardware` | `` | (not documented yet) |
-| POST | `/api/cores/multimodal/convert` | `_handle_cores_multimodal_convert` | (not documented yet) |
-| POST | `/api/cores/multimodal/diagram` | `_handle_cores_multimodal_diagram` | (not documented yet) |
-| POST | `/api/cores/orchestration/run` | `_handle_cores_orchestration_run` | (not documented yet) |
-| GET | `/api/cores/orchestration/telemetry` | `` | (not documented yet) |
-| POST | `/api/cores/prune` | `_handle_cores_prune` | (not documented yet) |
-| POST | `/api/cores/sanitize` | `_handle_cores_sanitize` | (not documented yet) |
-| GET | `/api/cores/skill` | `_handle_cores_skill_by_id` | (not documented yet) |
-| GET | `/api/cores/skills` | `_handle_cores_skills` | (not documented yet) |
-| GET | `/api/cores/status` | `` | (not documented yet) |
-| POST | `/api/dream` | `` | (not documented yet) |
-| GET | `/api/facts` | `` | (not documented yet) |
-| GET | `/api/graphs` | `` | (not documented yet) |
-| GET | `/api/graphs/affected` | `_handle_graphs_affected` | (not documented yet) |
-| GET | `/api/graphs/get` | `_handle_graphs_get` | (not documented yet) |
-| POST | `/api/llama/start` | `_handle_llama_start` | (not documented yet) |
-| POST | `/api/llama/stop` | `_handle_llama_stop` | (not documented yet) |
-| GET | `/api/mcp/windows` | `` | (not documented yet) |
-| GET | `/api/processes` | `_handle_processes_list` | (not documented yet) |
-| POST | `/api/processes/create` | `_handle_processes_create` | (not documented yet) |
-| GET | `/api/processes/get` | `_handle_processes_get` | (not documented yet) |
-| POST | `/api/processes/update` | `_handle_processes_update` | (not documented yet) |
-| GET | `/api/status` | `` | (not documented yet) |
-| POST | `/api/system/purge_orphans` | `_handle_purge_orphans` | (not documented yet) |
-| GET | `/api/vault/backlinks` | `_handle_vault_backlinks` | Which notes point at this one, and where this one points. |
-| GET | `/api/vault/find` | `_handle_vault_find` | Literal title/path lookup — deliberately not the semantic search. |
-| GET | `/api/vault/graph` | `` | (not documented yet) |
-| GET | `/api/vault/note` | `_handle_vault_note` | (not documented yet) |
-| POST | `/api/vault/note/create` | `_handle_note_create` | Create a note through the same code path the MCP write_note uses. |
-| GET | `/api/vault/note/diff` | `` | (not documented yet) |
-| GET | `/api/vault/note/history` | `` | (not documented yet) |
-| POST | `/api/vault/note/rename` | `_handle_note_rename` | Rename a note and repoint every wikilink aimed at it. |
-| POST | `/api/vault/note/restore` | `` | (not documented yet) |
-| POST | `/api/vault/note/save` | `_handle_note_save` | Overwrite an existing note's raw text and reindex it. |
-| GET | `/api/vault/notes` | `_handle_vault_notes` | (not documented yet) |
-| GET | `/api/vault/search` | `_handle_vault_search` | (not documented yet) |
-| GET | `/api/vault/tree` | `_handle_vault_tree` | Directory shape only — notes come from /api/vault/notes per directory. |
-| GET | `/api/vigia` | `` | (not documented yet) |
-| POST | `/api/vigia/run` | `` | (not documented yet) |
+| POST | `/api/ask` | `` | Answer a question from the vault with the local model (`ask_vault`). Body: `question`. |
+| GET | `/api/clients` | `` | MCP clients currently connected to the daemon. |
+| GET | `/api/config` | `_handle_config_get` | The configuration with secrets redacted, and the GGUF models found in `~/.delegation_core/models`. |
+| POST | `/api/config/update` | `_handle_config_update` | Change and save a fixed set of settings: `engine_mode`, `budget_mode`, `llama_model`, `llama_binary`, `bge_model`, `search_threshold`, `merge_threshold`, `max_tokens`, `synthesis_enabled`, `synthesis_lang`, `web_search_enabled`, `llama_ctx`, `llama_device`, `embed_device`, `llama_parallel`, `llama_ngl`. Any other key in the body is ignored. Returns the configuration with secrets redacted; some keys only take effect after a daemon restart. |
+| GET | `/api/cores/hardware` | `` | Host name, disk use of the home folder and system load. |
+| POST | `/api/cores/multimodal/convert` | `_handle_cores_multimodal_convert` | Convert a file to Markdown, OCR or transcription (`cores_multimodal_ingest`). Body: `file_path` (a path on this machine). |
+| POST | `/api/cores/multimodal/diagram` | `_handle_cores_multimodal_diagram` | Generate a Mermaid diagram from a description. Body: `prompt`. |
+| POST | `/api/cores/orchestration/run` | `_handle_cores_orchestration_run` | Run a demonstration DAG through the orchestrator: the steps only return a label (`executed_<name>`) and record telemetry; nothing outside the daemon runs. Body: `title`, `steps` (`name`, `deps`, `in_tokens`, `out_tokens`); without steps, a four-step example. |
+| GET | `/api/cores/orchestration/telemetry` | `` | Spans recorded by the cores orchestrator. |
+| POST | `/api/cores/prune` | `_handle_cores_prune` | Prune a text for fewer tokens (`cores_prune_context`). Body: `text`. |
+| POST | `/api/cores/sanitize` | `_handle_cores_sanitize` | Audit and clean a text of filler phrases and obvious comments (`cores_sanitize_prompt`). Body: `text`. |
+| GET | `/api/cores/skill` | `_handle_cores_skill_by_id` | One skill from the catalog. Query: `id`. |
+| GET | `/api/cores/skills` | `_handle_cores_skills` | Search the local skills catalog. Query: `q`, `limit` (at most 100). |
+| GET | `/api/cores/status` | `` | Consolidated status of the cores (the same as `cores_unified_status`). |
+| POST | `/api/dream` | `` | Apply or dismiss a dream finding, with the same tools as `dream_apply` and `dream_dismiss`. Body: `old`, `new`, `action` (`apply` or `dismiss`). |
+| GET | `/api/facts` | `` | Facts extracted from notes. Query: `q`, `divergent=1` for only the groups where notes disagree. |
+| GET | `/api/graphs` | `` | Built code graphs. |
+| GET | `/api/graphs/affected` | `_handle_graphs_affected` | What else is affected if a file or symbol changes. Query: `name`, `query`, `depth` (default 2). |
+| GET | `/api/graphs/get` | `_handle_graphs_get` | The report of one code graph. Query: `name`. |
+| POST | `/api/llama/start` | `_handle_llama_start` | Start the local model server in the background. |
+| POST | `/api/llama/stop` | `_handle_llama_stop` | Stop the local model server process. |
+| GET | `/api/mcp/windows` | `` | MCP servers registered as windows, which are mounted in the client configuration, and the active workspace. |
+| GET | `/api/processes` | `_handle_processes_list` | Tracked processes. Query: `status` (default `active`), `query`. |
+| POST | `/api/processes/create` | `_handle_processes_create` | Create a tracked process. Body: `name`, `description`, `steps` (list of strings). |
+| GET | `/api/processes/get` | `_handle_processes_get` | One tracked process with its steps, notes and history. Query: `id`. |
+| POST | `/api/processes/update` | `_handle_processes_update` | Update a tracked process. Body: `process_id`, `note`, `step_done`, `status`. |
+| GET | `/api/status` | `` | Vault, index, local model and feature checks, the same ones `delegation-core status` runs. |
+| POST | `/api/system/purge_orphans` | `_handle_purge_orphans` | Delete session files of MCP clients whose process no longer exists, and kill orphaned dashboard sidecar processes. |
+| GET | `/api/vault/backlinks` | `_handle_vault_backlinks` | Notes that link to this one and notes this one links to. Query: `path`. |
+| GET | `/api/vault/find` | `_handle_vault_find` | Literal title or path match, not semantic search. Query: `q`, `limit` (at most 100). |
+| GET | `/api/vault/graph` | `` | Nodes and links of the vault's wikilink graph, at most 1,500 nodes. Query: `generated=1` includes generated code-graph articles. |
+| GET | `/api/vault/note` | `_handle_vault_note` | Raw text of one note. Query: `path` (vault-relative). A path that leaves the vault is refused. |
+| POST | `/api/vault/note/create` | `_handle_note_create` | Create a note through the same code path as `write_note`. Body: `folder`, `title`, `content`. |
+| GET | `/api/vault/note/diff` | `` | Unified diff between two saved versions of a note. Query: `path`, `from` (default 2), `to` (default 1). |
+| GET | `/api/vault/note/history` | `` | Saved versions of a note, newest first. Query: `path`. |
+| POST | `/api/vault/note/rename` | `_handle_note_rename` | Rename a note and repoint every wikilink to it. Body: `path`, `new_title`. |
+| POST | `/api/vault/note/restore` | `` | Put a saved version of a note back and reindex it (counts as a read for memory aging). Body: `path`, `version` (1 = newest). |
+| POST | `/api/vault/note/save` | `_handle_note_save` | Overwrite a note's text and reindex it; the previous text is kept in the note history. Body: `path`, `content`. |
+| GET | `/api/vault/notes` | `_handle_vault_notes` | Notes in one directory, newest first. Query: `dir` (required), `offset`, `limit` (at most 500). |
+| GET | `/api/vault/search` | `_handle_vault_search` | Semantic search. Query: `q`, `limit` (default 5), `scope` (default `notes`). |
+| GET | `/api/vault/tree` | `_handle_vault_tree` | The vault's directories (no notes); list each directory's notes with `/api/vault/notes`. |
+| GET | `/api/vigia` | `` | What the Vigia tab shows: open alerts, the schedule, search-recall statistics and tool usage of the last 7 days. |
+| POST | `/api/vigia/run` | `` | Run one scheduled task now. Body: `name`. |

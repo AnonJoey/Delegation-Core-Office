@@ -294,6 +294,21 @@ def test_config_update_saves_new_settings(server):
     assert cfg.search_threshold == 0.65
 
 
+def test_config_update_nao_devolve_os_tokens(server):
+    """A resposta da escrita usava asdict(cfg): server_token e client_tokens saiam inteiros."""
+    port, cfg, _ = server
+    cfg.server_token = "segredo-mestre-" + "x" * 30
+    cfg.client_tokens = {"codex": {"token": "segredo-do-cliente-" + "y" * 30, "scope": "read"}}
+    conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+    conn.request("POST", "/api/config/update", body=json.dumps({"engine_mode": "agent"}),
+                 headers={**AUTH, "Content-Type": "application/json"})
+    res = conn.getresponse()
+    texto = res.read().decode()
+    conn.close()
+    assert res.status == 200
+    assert "segredo-mestre" not in texto and "segredo-do-cliente" not in texto
+
+
 def test_purge_orphans_endpoint(server, monkeypatch, tmp_path):
     import psutil
     from delegation_core import client_tracking

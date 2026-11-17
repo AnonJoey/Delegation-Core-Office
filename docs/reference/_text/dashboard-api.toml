@@ -1,0 +1,131 @@
+# English descriptions of the dashboard HTTP routes, keyed by "METHOD path", rendered into
+# docs/reference/dashboard-api.md. Each one was written from the route's code in dashboard_api.py.
+
+["GET /api/status"]
+description = "Vault, index, local model and feature checks, the same ones `delegation-core status` runs."
+
+["GET /api/clients"]
+description = "MCP clients currently connected to the daemon."
+
+["GET /api/mcp/windows"]
+description = "MCP servers registered as windows, which are mounted in the client configuration, and the active workspace."
+
+["GET /api/vault/tree"]
+description = "The vault's directories (no notes); list each directory's notes with `/api/vault/notes`."
+
+["GET /api/vault/notes"]
+description = "Notes in one directory, newest first. Query: `dir` (required), `offset`, `limit` (at most 500)."
+
+["GET /api/vault/note"]
+description = "Raw text of one note. Query: `path` (vault-relative). A path that leaves the vault is refused."
+
+["GET /api/vault/backlinks"]
+description = "Notes that link to this one and notes this one links to. Query: `path`."
+
+["GET /api/vault/find"]
+description = "Literal title or path match, not semantic search. Query: `q`, `limit` (at most 100)."
+
+["GET /api/vault/search"]
+description = "Semantic search. Query: `q`, `limit` (default 5), `scope` (default `notes`)."
+
+["GET /api/vault/graph"]
+description = "Nodes and links of the vault's wikilink graph, at most 1,500 nodes. Query: `generated=1` includes generated code-graph articles."
+
+["GET /api/vault/note/history"]
+description = "Saved versions of a note, newest first. Query: `path`."
+
+["GET /api/vault/note/diff"]
+description = "Unified diff between two saved versions of a note. Query: `path`, `from` (default 2), `to` (default 1)."
+
+["GET /api/graphs"]
+description = "Built code graphs."
+
+["GET /api/graphs/get"]
+description = "The report of one code graph. Query: `name`."
+
+["GET /api/graphs/affected"]
+description = "What else is affected if a file or symbol changes. Query: `name`, `query`, `depth` (default 2)."
+
+["GET /api/processes"]
+description = "Tracked processes. Query: `status` (default `active`), `query`."
+
+["GET /api/processes/get"]
+description = "One tracked process with its steps, notes and history. Query: `id`."
+
+["GET /api/config"]
+description = "The configuration with secrets redacted, and the GGUF models found in `~/.delegation_core/models`."
+
+["GET /api/facts"]
+description = "Facts extracted from notes. Query: `q`, `divergent=1` for only the groups where notes disagree."
+
+["GET /api/vigia"]
+description = "What the Vigia tab shows: open alerts, the schedule, search-recall statistics and tool usage of the last 7 days."
+
+["GET /api/cores/status"]
+description = "Consolidated status of the cores (the same as `cores_unified_status`)."
+
+["GET /api/cores/skills"]
+description = "Search the local skills catalog. Query: `q`, `limit` (at most 100)."
+
+["GET /api/cores/skill"]
+description = "One skill from the catalog. Query: `id`."
+
+["GET /api/cores/orchestration/telemetry"]
+description = "Spans recorded by the cores orchestrator."
+
+["GET /api/cores/hardware"]
+description = "Host name, disk use of the home folder and system load."
+
+["POST /api/vault/note/create"]
+description = "Create a note through the same code path as `write_note`. Body: `folder`, `title`, `content`."
+
+["POST /api/vault/note/save"]
+description = "Overwrite a note's text and reindex it; the previous text is kept in the note history. Body: `path`, `content`."
+
+["POST /api/vault/note/rename"]
+description = "Rename a note and repoint every wikilink to it. Body: `path`, `new_title`."
+
+["POST /api/vault/note/restore"]
+description = "Put a saved version of a note back and reindex it (counts as a read for memory aging). Body: `path`, `version` (1 = newest)."
+
+["POST /api/processes/create"]
+description = "Create a tracked process. Body: `name`, `description`, `steps` (list of strings)."
+
+["POST /api/processes/update"]
+description = "Update a tracked process. Body: `process_id`, `note`, `step_done`, `status`."
+
+["POST /api/config/update"]
+description = "Change and save a fixed set of settings: `engine_mode`, `budget_mode`, `llama_model`, `llama_binary`, `bge_model`, `search_threshold`, `merge_threshold`, `max_tokens`, `synthesis_enabled`, `synthesis_lang`, `web_search_enabled`, `llama_ctx`, `llama_device`, `embed_device`, `llama_parallel`, `llama_ngl`. Any other key in the body is ignored. Returns the configuration with secrets redacted; some keys only take effect after a daemon restart."
+
+["POST /api/llama/start"]
+description = "Start the local model server in the background."
+
+["POST /api/llama/stop"]
+description = "Stop the local model server process."
+
+["POST /api/system/purge_orphans"]
+description = "Delete session files of MCP clients whose process no longer exists, and kill orphaned dashboard sidecar processes."
+
+["POST /api/dream"]
+description = "Apply or dismiss a dream finding, with the same tools as `dream_apply` and `dream_dismiss`. Body: `old`, `new`, `action` (`apply` or `dismiss`)."
+
+["POST /api/ask"]
+description = "Answer a question from the vault with the local model (`ask_vault`). Body: `question`."
+
+["POST /api/vigia/run"]
+description = "Run one scheduled task now. Body: `name`."
+
+["POST /api/cores/sanitize"]
+description = "Audit and clean a text of filler phrases and obvious comments (`cores_sanitize_prompt`). Body: `text`."
+
+["POST /api/cores/prune"]
+description = "Prune a text for fewer tokens (`cores_prune_context`). Body: `text`."
+
+["POST /api/cores/multimodal/convert"]
+description = "Convert a file to Markdown, OCR or transcription (`cores_multimodal_ingest`). Body: `file_path` (a path on this machine)."
+
+["POST /api/cores/multimodal/diagram"]
+description = "Generate a Mermaid diagram from a description. Body: `prompt`."
+
+["POST /api/cores/orchestration/run"]
+description = "Run a demonstration DAG through the orchestrator: the steps only return a label (`executed_<name>`) and record telemetry; nothing outside the daemon runs. Body: `title`, `steps` (`name`, `deps`, `in_tokens`, `out_tokens`); without steps, a four-step example."

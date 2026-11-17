@@ -855,8 +855,9 @@ class _Handler(BaseHTTPRequestHandler):
                 pass
 
         _cfg.save()
-        from dataclasses import asdict
-        self._send_json({"ok": True, "config": asdict(_cfg)})
+        # A mesma config publica do GET: ate 17/11/2026 esta resposta era `asdict(_cfg)`, com o
+        # token mestre e os tokens de todos os clientes dentro.
+        self._send_json({"ok": True, "config": _config_publico(_cfg)})
 
     def _handle_purge_orphans(self) -> None:
         import os

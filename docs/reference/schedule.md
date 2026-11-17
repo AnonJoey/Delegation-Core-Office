@@ -10,11 +10,11 @@ defined but off. `schedule_list` shows next run, last result and consecutive fai
 
 | Task | Cron | Action | Arguments | What it does |
 |---|---|---|---|---|
-| `historico-horario` | `17 * * * *` | `historico` |  | (not documented yet) |
-| `alertas` | `*/10 * * * *` | `alertas` |  | (not documented yet) |
-| `reindex-noturno` | `7 4 * * *` | `reindex` |  | (not documented yet) |
-| `podar-historico` | `43 3 * * 0` | `podar_historico` | `{"manter_por_nota": 50}` | (not documented yet) |
-| `sonho-noturno` | `23 3 * * *` | `sonho` | `{"dias": 1}` | (not documented yet) |
-| `boletim-diario` | `13 7 * * *` | `boletim` | `{"horas": 24}` | (not documented yet) |
-| `digestao-noturna` | `37 2 * * *` | `digestao` | `{"maximo": 5}` | (not documented yet) |
-| `fatos-noturno` | `47 4 * * *` | `fatos` | `{"maximo": 40}` | (not documented yet) |
+| `historico-horario` | `17 * * * *` | `historico` |  | Saves into the note history the notes that changed since the last run (needs `historico_enabled`). |
+| `alertas` | `*/10 * * * *` | `alertas` |  | Evaluates the alert rules, opens and closes alerts, sends desktop notifications, and writes the attention list the session-start hook shows. |
+| `reindex-noturno` | `7 4 * * *` | `reindex` |  | Reindexes the notes whose content changed, through the job queue, which refuses a second reindex running at the same time. |
+| `podar-historico` | `43 3 * * 0` | `podar_historico` | `{"manter_por_nota": 50}` | Keeps the newest `manter_por_nota` versions of each note in the history and deletes stored content no version uses any more. |
+| `sonho-noturno` | `23 3 * * *` | `sonho` | `{"dias": 1}` | Runs the dream pass over notes from the last `dias` days and writes a summary note in the vault (needs `sonho_enabled` and the local model). |
+| `boletim-diario` | `13 7 * * *` | `boletim` | `{"horas": 24}` | Writes a bulletin note in Sessions covering the last `horas` hours: notes changed, open alerts and alert events, failing tasks, stalled processes, dream findings, and questions asked more than once that search never answered well. Writes nothing when there is nothing to report. |
+| `digestao-noturna` | `37 2 * * *` | `digestao` | `{"maximo": 5}` | Summarizes up to `maximo` raw transcripts that have no curated session note (needs `digestao_enabled` and the local model). |
+| `fatos-noturno` | `47 4 * * *` | `fatos` | `{"maximo": 40}` | Extracts facts from up to `maximo` notes still waiting for extraction (needs `fatos_enabled` and the local model). |
