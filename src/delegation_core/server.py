@@ -3094,8 +3094,12 @@ def dag_status(run_id: str) -> str:
 
 @mcp.tool()
 def telemetry_summary(hours: float = 24.0) -> str:
-    """
-    Get aggregated telemetry metrics for MCP tool calls, latency, tokens, and error rates (inspired by LangWatch).
+    """Spans recorded by the cores orchestrator: DAG steps, agent sessions, token pruning.
+
+    Counts, latency, tokens and error rate over the last `hours`. It does NOT count MCP tool
+    calls: no tool writes here. For what each MCP tool was called, cost and returned, use
+    usage_report. (Until 17/11/2026 this said "MCP tool calls" and an hour of tool use read
+    as zero calls.)
     """
     from .telemetria import get_telemetria
     t = get_telemetria()
@@ -3117,7 +3121,8 @@ def cores_unified_status() -> str:
 @mcp.tool()
 def cores_skills_search(query: str, limit: int = 5) -> str:
     """
-    Pesquisa semantica e FTS5 no banco unificado de 3.162 skills/regras de agentes (agent-harness-core).
+    Busca FTS5 no catalogo de skills/regras de agentes desta maquina (agent-harness-core).
+    O catalogo nao vem no pacote: e construido pelo ingester em ~/.delegation_core/skills.db.
     """
     from .cores import get_cores_bridge
     bridge = get_cores_bridge()

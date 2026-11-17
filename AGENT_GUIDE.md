@@ -1368,8 +1368,9 @@ Executa workflows declarativos assíncronos baseados em DAG (estilo Dagu) com co
 de timeouts, retentativas e persistência do histórico de execução em SQLite (`dag_executions.db`).
 
 ### `telemetry_summary(hours=24.0)`
-Métricas agregadas de observabilidade de LLM (estilo LangWatch), latência de spans, tokens de entrada/saída
-e taxas de erro com persistência em SQLite WAL.
+Spans gravados pelo orquestrador dos cores (passos de DAG, sessões de agente, poda de tokens):
+contagem, latência, tokens de entrada e saída e taxa de erro, em SQLite. Não conta chamadas
+de ferramenta MCP; para isso use `usage_report`.
 
 ## Quick reference
 

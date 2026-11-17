@@ -93,6 +93,9 @@ def test_executar_registra_sucesso_e_falha(agenda):
     e = agenda.estado("hist")
     assert e["falhas_seguidas"] == 0 and e["ultimo_resultado"] == {"lidas": 3} and e["execucoes"] == 3
     assert "ultimo_erro" not in e
+    # O traceback da falha antiga tambem sai: ficava ao lado do "ok" e parecia falha de agora
+    # (17/11/2026: o historico-horario mostrava "database disk image is malformed" de 04/11).
+    assert "ultimo_detalhe" not in e
 
 
 def test_executor_recebe_copia_dos_argumentos(tmp_path):
