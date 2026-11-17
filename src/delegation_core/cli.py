@@ -2079,9 +2079,12 @@ def cmd_process_get(args):
     console.print(json.dumps(proc, indent=2))
 
 
-def main():
-    from .stdio_nulo import garantir_stdio
-    garantir_stdio()
+def construir_parser():
+    """O parser inteiro da CLI, sem ler argv nem tocar no stdio.
+
+    Separado do `main` para que a referencia da CLI (`scripts/gerar_referencia.py`) leia os
+    subcomandos e opcoes do mesmo objeto que a CLI usa, sem copia que possa envelhecer.
+    Devolve tambem os subparsers cujo `print_help` o `main` chama."""
     parser = argparse.ArgumentParser(
         prog="delegation-core",
         description="Local MCP delegation server: llama.cpp + BGE + SQLite vector index + Obsidian vault",
@@ -2092,7 +2095,7 @@ def main():
 
     sub.add_parser("setup",    help="Interactive setup wizard (run once per machine)")
     p_tok = sub.add_parser("token", help="Per-client tokens: read-only or read-write")
-    p_tok.add_argument("acao", choices=["create", "list", "revoke"])
+    p_tok.add_argument("acao", choices=["create", "list", "revoke"], help="what to do with client tokens")
     p_tok.add_argument("name", nargs="?", default="")
     p_tok.add_argument("--write", action="store_true", help="allow tools that write (default: read-only)")
     p_tok.add_argument("--force", action="store_true", help="replace an existing token with the same name")
@@ -2381,6 +2384,17 @@ def main():
     for _registrar in _registradores_extras():
         extras.update(_registrar(sub))
 
+    return parser, {"note": p_note, "graph": p_graph, "graph_hook": p_graph_hook,
+                    "process": p_process, "session": p_session, "extras": extras}
+
+
+def main():
+    from .stdio_nulo import garantir_stdio
+    garantir_stdio()
+    parser, partes = construir_parser()
+    p_note, p_graph, p_graph_hook = partes["note"], partes["graph"], partes["graph_hook"]
+    p_process, p_session = partes["process"], partes["session"]
+    extras = partes["extras"]
     args = parser.parse_args()
 
     dispatch = {
