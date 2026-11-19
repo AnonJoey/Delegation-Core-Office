@@ -31,7 +31,7 @@ For recurring or shared document folders, declare them in `~/.delegation_core/co
 Run configured sources:
 
 ```bash
-delegation-core ingest-configured
+delegation-core ingest --configured
 ```
 
 Or ingest a single path via MCP (`ingest_folder` / `ingest_folder_bg`) or CLI. Re-runs are incremental: files whose `mtime` and size match both the registry and the index are skipped unless `force=True` is passed.
