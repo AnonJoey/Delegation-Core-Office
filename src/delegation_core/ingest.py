@@ -364,6 +364,57 @@ def _merge_patterns(*groups) -> list[str]:
     return merged
 
 
+_DEDUP_MIN_CHARS = 120
+
+
+def _fonte_pai_registrada(source: Path, registry: dict) -> str | None:
+    """Se `source` e um arquivo contido numa pasta ja registrada, devolve a pasta mais especifica.
+
+    Evita que ingerir um arquivo avulso (ex.: reingerir um PDF especifico com `--force`)
+    crie uma fonte separada de arquivo unico no registro e troque o `source_folder`
+    dos chunks no indice, o que fazia a pasta pai e o arquivo disputarem a posse.
+    """
+    if not source.is_file() or not isinstance(registry, dict):
+        return None
+    source_str = str(source)
+    if source_str in registry:
+        return None
+    melhor: tuple[int, str] | None = None
+    for chave in registry:
+        try:
+            pasta = Path(chave).expanduser().resolve()
+        except (OSError, ValueError):
+            continue
+        if pasta != source and pasta in source.parents:
+            profundidade = len(pasta.parts)
+            if melhor is None or profundidade > melhor[0]:
+                melhor = (profundidade, chave)
+    return melhor[1] if melhor is not None else None
+
+
+def deduplicar_blocos_repetidos(chunks: list[str], min_chars: int = _DEDUP_MIN_CHARS) -> tuple[list[str], int]:
+    """Remove chunks duplicados (tipicos de rewind em apps de transcricao), preservando a primeira ocorrencia.
+
+    A normalizacao colapsa espacos em branco e ignora maiusculas/minusculas.
+    Chunks mais curtos que `min_chars` sao preservados intactos para nao descartar
+    cabecalhos ou marcadores curtos que podem se repetir legitimamente.
+    """
+    if len(chunks) <= 1:
+        return list(chunks), 0
+    vistos: set[str] = set()
+    unicos: list[str] = []
+    descartados = 0
+    for chunk in chunks:
+        norm = " ".join(chunk.split()).casefold()
+        if len(norm) >= min_chars:
+            if norm in vistos:
+                descartados += 1
+                continue
+            vistos.add(norm)
+        unicos.append(chunk)
+    return unicos, descartados
+
+
 class IngestManager:
     """Index external files into the vault's search index without touching them on disk.
 
@@ -525,7 +576,8 @@ class IngestManager:
         overlap = self._cfg.ingest_chunk_overlap
 
         registry = _load_registry()
-        source_key = str(source)
+        fonte_pai = _fonte_pai_registrada(source, registry) if configured_match is None else None
+        source_key = fonte_pai or str(source)
         source_meta = registry.get(source_key, {})
         cached_files = source_meta.get("files", {})
         new_cached_files = {}
@@ -535,6 +587,7 @@ class IngestManager:
         # que a ingestao rodou. Por isso o indice e consultado uma vez por fonte.
         presentes = None if force else self._arquivos_no_indice(source_key)
         reingeridos_sem_linhas: list[str] = []
+        dedup_chunks = 0
 
         for f in candidates:
             f_str = str(f)
@@ -577,6 +630,8 @@ class IngestManager:
                     continue
 
                 chunks = chunk_text(content, max_chars=max_chars, overlap=overlap)
+                chunks, descartados_arquivo = deduplicar_blocos_repetidos(chunks)
+                dedup_chunks += descartados_arquivo
                 # Ingested files are the bulk of a real index (92.8% of rows on
                 # the deployment that asked for client scoping), so a filter that
                 # skipped them would reach a fourteenth of the corpus and read as
@@ -625,21 +680,29 @@ class IngestManager:
                 skipped_unreadable.append(f.name)
                 errors.append(f"{f.name}: {e}")
 
-        merged_files = dict(cached_files) if (not force and not source.is_file()) else {}
-        merged_files.update(new_cached_files)
-
-        source_entry = {
-            "last_indexed":           now,
-            "indexed_count":          len(indexed),
-            "skipped_unchanged_count": len(skipped_unchanged),
-            "skipped_empty_count":     len(skipped_empty),
-            "skipped_unreadable_count": len(skipped_unreadable),
-            "skipped_dataless_count":  len(skipped_dataless),
-            "error_count":            len(errors),
-            "recursive":              recursive,
-            "exclude":                patterns if patterns else None,
-            "files":                  merged_files,
-        }
+        if fonte_pai is not None:
+            merged_files = dict(cached_files)
+            merged_files.update(new_cached_files)
+            source_entry = dict(source_meta)
+            source_entry.update({
+                "last_indexed": now,
+                "files": merged_files,
+            })
+        else:
+            merged_files = dict(cached_files) if (not force and not source.is_file()) else {}
+            merged_files.update(new_cached_files)
+            source_entry = {
+                "last_indexed":           now,
+                "indexed_count":          len(indexed),
+                "skipped_unchanged_count": len(skipped_unchanged),
+                "skipped_empty_count":     len(skipped_empty),
+                "skipped_unreadable_count": len(skipped_unreadable),
+                "skipped_dataless_count":  len(skipped_dataless),
+                "error_count":            len(errors),
+                "recursive":              recursive,
+                "exclude":                patterns if patterns else None,
+                "files":                  merged_files,
+            }
         _update_source_entry(source_key, source_entry)
 
         total_skipped = len(skipped_empty) + len(skipped_unreadable) + len(skipped_dataless)
@@ -654,6 +717,10 @@ class IngestManager:
             "reindexed_missing_from_index": len(reingeridos_sem_linhas),
             "errors":             errors,
         }
+        if fonte_pai is not None:
+            result["reused_parent_source"] = fonte_pai
+        if dedup_chunks:
+            result["deduplicated_chunks"] = dedup_chunks
         if configured_match is not None:
             result["configured_source"] = configured_source.get("name") or source_key
         if excluded:
