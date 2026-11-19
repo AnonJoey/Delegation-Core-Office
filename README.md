@@ -1,198 +1,46 @@
 # Delegation-Core Office
 
-A local MCP delegation server: a markdown vault (semantic search via BGE + a SQLite vector index), an
-optional local LLM (llama.cpp) for summarization/synthesis, and a vendored code-graph
-pipeline - all usable either as an MCP server (Claude Desktop/Code) or directly from a
-terminal via the `delegation-core` CLI. It runs as one HTTP daemon that every client shares,
-so the model and the index are loaded once per machine rather than once per client.
+A local MCP server and CLI that gives AI coding agents shared access to an Obsidian-compatible Markdown vault, a SQLite vector/lexical search index (BGE embeddings + exact numpy search + FTS5), an optional local LLM (`llama.cpp`), and a vendored code-graph pipeline.
 
-The idea: push retrieval, classification, and compression work onto a local, zero-marginal-cost
-model instead of spending an LLM agent's tokens on it. See `AGENT_GUIDE.md` for the full
-protocol an AI agent should follow when this MCP server is connected.
+It runs as a single HTTP daemon (`127.0.0.1:8797` by default) shared by every client on the machine — Claude Code, Claude Desktop, Antigravity, Codex, Cursor, OpenCode, and Grok — so embeddings, the index, and any local model are loaded once per machine rather than once per client.
 
-## What it does
-
-- **Vault**: an Obsidian-compatible markdown vault, semantically searchable via BGE
-  embeddings over a single SQLite file (exact search in numpy). Drop files into `_inbox/` and they get classified, synthesized into
-  clean notes, wikilinked, and filed - or write/read/search notes directly.
-- **Cores** (`src/delegation_core/cores/`): small modules exposed as MCP tools:
-  - **Agent harness** (`cores/agent_harness/`): search of a local skills catalog (SQLite FTS5, built on
-    each machine, not shipped), a pattern-based prompt sanitizer and a Python code inspector.
-  - **Documents** (`cores/multimodal/`): conversion of PDF (text layer), DOCX, XLSX, PPTX, HTML and CSV
-    to Markdown. No OCR here; ingested images are OCR'd by the ingestion pipeline when Tesseract is installed.
-  - **Platform** (`cores/platform/`): pattern-based context pruning with a recoverable original, and
-    host metrics (disk use of the home folder, load).
-  - **Self-hosted catalog** (`cores/self_hosted/`): a static list of 29 self-hosted services (name,
-    domain, default port, role). It contacts nothing.
-- **Workflows**: `dag_run` runs declarative workflows of shell steps with dependencies, timeouts
-  and retries, and keeps their history.
-- **Code graph** (opt-in, `[graph]` extra): build a knowledge graph of a codebase - AST
-  extraction across ~30 languages via tree-sitter, community detection, god-node/blast-radius
-  analysis. Produces `graph.json`, an interactive `graph.html`, Mermaid architecture diagrams
-  (`callflow.html`), a human-readable `GRAPH_REPORT.md`, and per-community wiki articles filed
-  into the vault. Vendored and adapted from
-  [Graphify](https://github.com/Graphify-Labs/graphify) - see `THIRD_PARTY_LICENSES/`.
-- **Process tracking**: lightweight cross-session task tracking that survives restarts.
-- **Dashboard** (`dashboard/`): a native Tauri desktop app - a top status/clients bar, a
-  persistent vault-graph pane, a notes browser, and a cross-session task tracker. See
-  `dashboard/README.md`.
-
-## Install
-
-The platform installer is the easiest path: it detects Python, creates a venv, installs
-delegation-core, installs the native Tauri dashboard app (from a local build if present,
-otherwise the latest GitHub release, falling back to manual build instructions if neither
-is available), then launches the setup wizard automatically. Re-running it on an existing
-install upgrades in place - `config.json` is preserved and the prior install is backed up,
-the wizard is not re-run.
-
-To update an existing install from GitHub, run `delegation-core update`; see `docs/ATUALIZAR.md`.
+## Quick install
 
 ```bash
-./install.sh              # Linux / macOS
-install.bat                # Windows (or double-click)
+./install.sh          # Linux / macOS (or double-click install.command on macOS)
+install.bat           # Windows
 ```
 
-(macOS: `install.command` is a double-clickable Finder shim to `install.sh`.)
-
-To remove everything the installer created - venv, config, logs, hooks - run the matching
-uninstaller (`uninstall.sh` / `uninstall.bat` / `uninstall.command`). It never touches your
-vault or downloaded model weights.
-
-For a manual/dev install instead (no OS packages, no dashboard app):
+For manual/developer installs:
 
 ```bash
-pip install -e .                    # core (vault + MCP server)
-pip install -e ".[graph]"           # + code-graph pipeline (~27 tree-sitter language bindings)
-pip install -e ".[web]"             # + web search (DuckDuckGo)
-pip install -e ".[dev]"             # + pytest, for running tests/
+pip install -e .             # core (vault, SQLite index, MCP daemon, CLI)
+pip install -e ".[graph]"    # + tree-sitter code-graph pipeline
+pip install -e ".[web]"      # + opt-in DuckDuckGo web search
+pip install -e ".[dev]"      # + pytest
 ```
 
-Then run the interactive setup wizard once per machine:
+Then run the one-time setup wizard and register your MCP clients:
 
 ```bash
 delegation-core setup
+delegation-core clients
+delegation-core doctor
 ```
 
-This finds (or lets you create) an Obsidian vault, downloads/configures a local llama.cpp
-model (or lets you skip it - see "engine modes" below), and optionally registers
-delegation-core to start automatically (systemd/launchd/Task Scheduler).
+## Documentation
 
-### Configure recurring external ingestion
+- **[Getting Started](docs/getting-started.md)** — installation, setup wizard, connecting MCP clients, first search
+- **[Concepts](docs/concepts.md)** — vault, SQLite index and search scopes, engine modes (`agent` / `local` / `hybrid`), daemon, memory, filters, code graphs, cores
+- **[Guides](docs/guides.md)** — updating, migrating from ChromaDB, external folder ingestion, building code graphs, feature flags, troubleshooting
+- **[Operations and Security](docs/operations-and-security.md)** — data residency, tokens, files on disk, OS notes and known limitations
+- **[Development](docs/development.md)** — repository layout, running tests, regenerating reference docs, CI and releases
+- **[Generated Reference](docs/reference/README.md)** — auto-generated from code and verified by tests:
+  - [MCP tools](docs/reference/tools.md) | [Feature flags](docs/reference/feature-flags.md) | [Configuration keys](docs/reference/config.md)
+  - [CLI commands](docs/reference/cli.md) | [Dashboard HTTP API](docs/reference/dashboard-api.md) | [Environment variables](docs/reference/environment.md)
+  - [Scheduled tasks](docs/reference/schedule.md) | [Alert rules](docs/reference/alerts.md) | [Tool errors](docs/reference/errors.md)
+- **[Agent Protocol](AGENT_GUIDE.md)** — operational protocol copied to connected AI agents (`AGENT_GUIDE_CURTO.md` for concise clients)
 
-After the first setup, and **before the first ingestion**, configure any recurring,
-shared or broad external document source in `~/.delegation_core/config.json`. Do not
-pre-create this file before the initial installer/wizard: the wizard owns the initial
-machine configuration. The installer preserves it on upgrades.
+## License & third-party notices
 
-See [docs/INGEST_CONFIGURATION.md](docs/INGEST_CONFIGURATION.md) for the
-`ingest_sources` allow-list, exclusion patterns, safe edits during use, and the
-configured ingestion commands. It also documents the local session-transcript
-capture policy, the Claude Code/Codex SessionStart and SessionEnd hooks, and the
-globally installed Codex skill.
-
-## Using it as an MCP server
-
-delegation-core runs as a single HTTP daemon on `127.0.0.1:8797`, and every MCP client
-connects to that one process. Point your clients at it with:
-
-```bash
-delegation-core clients          # writes the http entry + bearer token into known clients
-```
-
-The default MCP port is `8797` to avoid a collision with Headroom's commonly used
-`8787` proxy port. Existing installations keep the `server_port` saved in
-`~/.delegation_core/config.json`. To migrate one, change that setting, restart the
-daemon, and refresh the affected clients with `delegation-core clients` (follow
-its instructions for an existing Codex entry). The dashboard API port is a
-separate setting.
-
-This is a one-time migration for anyone upgrading from v0.10 or earlier, which spoke stdio:
-a leftover `{"command": ..., "args": ["run"]}` entry spawns a second server that fights the
-daemon for the port, the index, and the GPU. One daemon means one resident copy of
-BGE-m3 instead of one per client.
-
-Once connected, ask the running server what it can do - `capabilities()` reports the live
-tool list from `mcp.list_tools()` rather than a count written down here that drifts. Full
-protocol and tool reference: `AGENT_GUIDE.md`.
-
-## Using it as a CLI
-
-Everything the MCP server exposes is also reachable directly from a terminal:
-
-```bash
-delegation-core status                          # vault/model/llama.cpp health
-delegation-core search "auth token refresh"      # BGE search, no LLM needed
-delegation-core note write Reference "Some note" --file notes.md
-delegation-core note read "Some note"
-delegation-core graph build ~/code/my-project    # code graph -> vault
-delegation-core graph affected my-project auth.py  # blast-radius query
-delegation-core graph hook install ~/code/my-project  # auto-rebuild on every commit
-delegation-core process create "Migrate auth" --steps "plan,implement,test"
-delegation-core session status                  # transcript-capture policy and pending requests
-```
-
-Run `delegation-core --help` (and `<command> --help`) for the full tree - `setup`, `run`,
-`status`, `reindex`, `maintain`, `ingest`, `session`, `relink`, `search`, `compress`, `note`,
-`graph`, `process`.
-
-## Engine modes
-
-Set in `config.json` (`engine_mode`), chosen during `setup`:
-
-- **`local`** - summarization/synthesis runs on a local llama.cpp model. Fully offline once
-  the model is downloaded.
-- **`agent`** - no local model; synthesis/compression is delegated to whichever MCP client
-  is calling (e.g. Claude Code). For machines that can't spare the RAM/CPU for a local model.
-- **`hybrid`** - light interactive work delegates to the calling agent; heavy/background work
-  (maintenance, healing, bulk synthesis) always runs locally.
-
-BGE embeddings + the SQLite index search always run locally in every mode.
-
-### Vector index
-
-The index is one SQLite file in WAL mode (`<vault>/.indice_sqlite/indice.db`) with exact
-search in numpy: text, metadata and vector are written in one transaction, so a process
-killed mid-write leaves nothing half done, and several processes can read and write at
-once. It replaces ChromaDB, whose latest release (1.5.9) has open corruption bugs upstream
-(issues 7510, 7238, 7678). `docs/indice-sqlite.md` has the design, the measurements and
-the limits.
-
-A vault that still has a ChromaDB index keeps using it until you migrate:
-
-```bash
-delegation-core service stop
-delegation-core index-migrate --ativar   # exports, imports, verifies row by row, then switches
-delegation-core service start
-```
-
-The old index is never touched, so `index_backend: "chroma"` goes back to it. `chromadb`
-is an optional extra (`pip install 'delegation-core[chroma]'`), needed only to read an old
-index and migrate.
-
-## Development
-
-```bash
-pip install -e ".[dev]"
-pytest tests/ -q
-```
-
-The suite is fast and offline, with no BGE/llama.cpp dependency (the heavier
-collaborators are faked), and `tests/conftest.py` keeps a run from touching the real
-`~/.delegation_core`. A test total used to be printed here and drifted to roughly half
-the real figure; run `pytest tests/ -q` for the number. They cover config, vault helpers and browsing, search scoping,
-note rename/delete, the daemon's request routing, the dashboard API's routes and CORS,
-client tracking, the graph registry/folder-resolution logic, the git hook installer, and
-process tracking. `organizer.py`'s synthesis pipeline is still the notable gap - it needs a
-real model to say anything useful.
-
-## More detail
-
-- `AGENT_GUIDE.md` - full MCP tool reference and protocol, written for the AI agent side.
-- `CHANGELOG.md` - version history.
-- `DEPLOYMENT_LOG.md` - per-deployment upgrade notes (this repo runs on more than one machine).
-- `docs/ATUALIZAR.md` - updating an install from GitHub with `delegation-core update`, and when to migrate the index.
-- `docs/evals-de-busca.md` - the retrieval evals that run with the test suite: 40 notes, 40 questions, and a baseline that fails when search gets worse.
-- `docs/INGEST_CONFIGURATION.md` - declarative ingestion sources, exclusions, safe re-ingestion,
-  and supported-client transcript-capture policy.
-- `THIRD_PARTY_LICENSES/` - attribution for vendored code (Graphify).
+See `LICENSE` and `THIRD_PARTY_LICENSES/` (includes the vendored code-graph pipeline adapted from [Graphify](https://github.com/Graphify-Labs/graphify)).
