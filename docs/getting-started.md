@@ -4,7 +4,7 @@ Delegation-Core Office is a local MCP server and CLI that gives AI coding agents
 
 All clients on the machine connect to a single HTTP daemon (`127.0.0.1:8797` by default), so embeddings, the index, and any local model are loaded once per machine rather than once per client.
 
-## What it is — and what it is not
+## What it is, and what it is not
 
 - **It is** a local memory, retrieval, ingestion, and automation layer shared across Claude Code, Claude Desktop, Antigravity, Codex, Cursor, OpenCode, and Grok.
 - **It is not** a cloud service or a SaaS sync backend. Everything stays on disk under your Obsidian vault and `~/.delegation_core/` unless you explicitly enable opt-in features such as web search (`[web]`).

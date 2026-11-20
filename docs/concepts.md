@@ -52,5 +52,5 @@ When installed with `pip install -e ".[graph]"`, Delegation-Core runs a vendored
 
 ## Cores and workflow tracking
 
-- **Cores** (`src/delegation_core/cores/`): modular capabilities exposed as MCP tools — local skills search (`cores_skills_search`), prompt sanitization (`cores_sanitize_prompt`), document-to-Markdown conversion (`cores_multimodal_ingest`), context pruning (`cores_prune_context`), and a static self-hosted service catalog (`cores_selfhosted_catalog`).
+- **Cores** (`src/delegation_core/cores/`): modular capabilities exposed as MCP tools: local skills search (`cores_skills_search`), prompt sanitization (`cores_sanitize_prompt`), document-to-Markdown conversion (`cores_multimodal_ingest`), context pruning (`cores_prune_context`), and a static self-hosted service catalog (`cores_selfhosted_catalog`).
 - **Cross-session coordination**: lightweight processes (`process_create`, `process_claim`, `process_update`), open questions (`question_record`, `question_resolve`), status cards (`status_card_save`, `standup`), and declarative shell DAG workflows (`dag_run`, `dag_status`).

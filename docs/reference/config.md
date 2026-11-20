@@ -3,7 +3,7 @@
 
 # Configuration keys (`config.json`)
 
-`~/.delegation_core/config.json` accepts **117 keys**. A key that is absent takes the
+`~/.delegation_core/config.json` accepts **118 keys**. A key that is absent takes the
 default below; a key the program does not know is ignored, and `delegation-core doctor`
 reports it. Paths may start with `~`.
 
@@ -86,6 +86,7 @@ reports it. Paths may start with `~`.
 | [`proxy_upstream_openai`](#proxy_upstream_openai) | `str` | `"https://api.openai.com"` |
 | [`ingest_chunk_size`](#ingest_chunk_size) | `int` | `3072` |
 | [`ingest_chunk_overlap`](#ingest_chunk_overlap) | `int` | `200` |
+| [`ingest_dedup_repeated_text`](#ingest_dedup_repeated_text) | `bool` | `true` |
 | [`vault_chunk_size`](#vault_chunk_size) | `int` | `3072` |
 | [`vault_chunk_overlap`](#vault_chunk_overlap) | `int` | `200` |
 | [`embed_max_seq_length`](#embed_max_seq_length) | `int` | `2048` |
@@ -610,6 +611,12 @@ Size, in characters, of the pieces an ingested external file is split into.
 **Type:** `int` · **Default:** `200`
 
 Characters shared between consecutive pieces of an ingested file.
+
+## ingest_dedup_repeated_text
+
+**Type:** `bool` · **Default:** `true`
+
+Drop runs of lines already seen in the same source from plain-text files (.md, .txt) before chunking, so a rewound or resumed session transcript is indexed once. The oldest copy is kept. Turn off when every file must answer for text it shares with another.
 
 ## vault_chunk_size
 
