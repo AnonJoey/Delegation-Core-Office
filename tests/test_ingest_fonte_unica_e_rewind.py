@@ -1,4 +1,8 @@
-"""Testes para 5.1.16 (arquivo unico dentro de pasta ja registrada) e 5.1.17 (rewind/dedup de chunks)."""
+"""Testes para 5.1.16 (arquivo unico dentro de pasta ja registrada) e 5.1.17 (texto repetido por rewind).
+
+Os testes de 5.1.17 usam o chunk_text de verdade: a versao anterior so passava
+com ele trocado por um duble, e com o real descartava 0 trechos de uma copia integral.
+"""
 import pytest
 
 from delegation_core import vault as vault_mod
@@ -6,7 +10,7 @@ from delegation_core.config import Config
 from delegation_core.ingest import (
     IngestManager,
     _load_registry,
-    deduplicar_blocos_repetidos,
+    DeduplicadorDeTexto,
 )
 from delegation_core.vault import VaultManager
 
@@ -70,43 +74,99 @@ def test_arquivo_unico_fora_de_pasta_registrada_cria_fonte_propria(mundo, tmp_pa
     assert set(_load_registry().keys()) == {str(fonte), str(avulso)}
 
 
-def test_deduplicar_blocos_repetidos_remove_rewind_e_preserva_curtos():
-    bloco_longo = (
-        "Transcricao da reuniao semanal de alinhamento tecnico sobre a migracao do indice "
-        "SQLite e a validacao das rotinas de ingestao externa no servidor."
-    )
-    bloco_unico = (
-        "Outro trecho completamente distinto falando sobre o cronograma de entregas da fase dois "
-        "e os criterios de homologacao dos relatorios semanais."
-    )
-    curto = "--- pausa ---"
-    chunks = [bloco_longo, curto, "  " + bloco_longo.upper() + "  ", curto, bloco_unico]
-    unicos, descartados = deduplicar_blocos_repetidos(chunks)
-    assert descartados == 1
-    assert unicos == [bloco_longo, curto, curto, bloco_unico]
+import os
+import random
 
 
-def test_ingest_transcricao_com_rewind_descarta_chunks_duplicados(mundo, monkeypatch):
+def _transcricao(semente: int, falas: int) -> list[str]:
+    rnd = random.Random(semente)
+    palavras = ["reuniao", "cliente", "horas", "painel", "azure", "relatorio", "semana",
+                "entrega", "teste", "ajuste", "prazo", "equipe", "indice", "busca"]
+    return [f"Pessoa {rnd.randint(1, 3)}: " + " ".join(rnd.choice(palavras) for _ in range(rnd.randint(8, 30)))
+            for _ in range(falas)]
+
+
+def _linhas_no_indice(vm, caminho) -> int:
+    return len(vm.collection.get(where={"path": str(caminho)}, include=["metadatas"])["ids"])
+
+
+def _texto_no_indice(vm, caminho) -> str:
+    return "\n".join(vm.collection.get(where={"path": str(caminho)}, include=["documents"])["documents"])
+
+
+def _gravar(caminho, linhas, mtime):
+    caminho.write_text("\n".join(linhas) + "\n", encoding="utf-8")
+    os.utime(caminho, (mtime, mtime))
+
+
+def test_dedup_tira_trecho_repetido_dentro_do_mesmo_arquivo():
+    a = _transcricao(1, 40)
+    b = _transcricao(2, 10)
+    texto = "\n".join(a + b + a[5:30]) + "\n"
+    limpo, removidas = DeduplicadorDeTexto().filtrar(texto)
+    assert removidas == 25
+    assert limpo == "\n".join(a + b) + "\n"
+
+
+def test_dedup_mantem_frase_curta_que_se_repete_de_verdade():
+    texto = "\n".join(["Sim.", "Pessoa 1: vamos ver o painel de horas", "Sim.", "ok", "ok", "Sim."]) + "\n"
+    limpo, removidas = DeduplicadorDeTexto().filtrar(texto)
+    assert removidas == 0 and limpo == texto
+
+
+def test_sessao_retomada_nao_reindexa_o_que_a_original_ja_tem(mundo):
+    """O caso medido em 28/10: a transcricao retomada repete a original e continua."""
     mgr, vm, fonte = mundo
-    bloco = (
-        "Trecho longo de transcricao gravado pelo app que acabou repetido identicamente "
-        "por causa de um rewind na captura de audio durante a reuniao."
-    )
-    bloco_fim = (
-        "Conclusao da reuniao com as acoes definidas para a proxima sprint e confirmacao "
-        "dos responsaveis por cada entregavel tecnico."
-    )
-    transcricao = fonte / "reuniao.md"
-    transcricao.write_text("placeholder", encoding="utf-8")
+    original = _transcricao(3, 120)
+    continuacao = _transcricao(4, 30)
+    _gravar(fonte / "sessao-1.md", original, 1_000_000)
+    _gravar(fonte / "sessao-2.md", original + continuacao, 2_000_000)
 
-    monkeypatch.setattr(
-        "delegation_core.ingest.chunk_text",
-        lambda content, max_chars, overlap: [bloco, bloco, bloco_fim] if content == "placeholder" else [content],
-    )
-    r = mgr.ingest(str(transcricao), force=True)
-    assert r["indexed"] == 1
-    assert r["deduplicated_chunks"] == 1
+    r = mgr.ingest(str(fonte))
+    assert r["indexed"] == 4  # a.md, b.md e as duas sessoes
+    assert r["deduplicated_lines"] == 120
+    texto_2 = _texto_no_indice(vm, fonte / "sessao-2.md")
+    assert original[0] not in texto_2 and original[-1] not in texto_2
+    assert continuacao[0] in texto_2 and continuacao[-1] in texto_2
+    assert original[60] in _texto_no_indice(vm, fonte / "sessao-1.md")
 
-    rows = vm.collection.get(where={"path": str(transcricao)}, include=["metadatas"])
-    assert len(rows["ids"]) == 2
-    assert all(m["total_chunks"] == "2" for m in rows["metadatas"])
+
+def test_copia_integral_nao_vira_linha_e_original_pulado_ainda_conta(mundo):
+    mgr, vm, fonte = mundo
+    original = _transcricao(5, 80)
+    _gravar(fonte / "sessao-1.md", original, 1_000_000)
+    assert mgr.ingest(str(fonte))["indexed"] == 3
+
+    # Rodada seguinte: a original nao mudou (pulada), a copia chega agora.
+    _gravar(fonte / "sessao-1-rewind.md", original, 2_000_000)
+    r = mgr.ingest(str(fonte))
+    assert r["skipped_unchanged"] == 3
+    assert r["skipped_duplicate"] == 1
+    assert _linhas_no_indice(vm, fonte / "sessao-1-rewind.md") == 0
+
+    # E na terceira rodada a copia ja esta carimbada e nao e relida.
+    r3 = mgr.ingest(str(fonte))
+    assert r3["skipped_unchanged"] == 4 and "skipped_duplicate" not in r3
+
+
+def test_dedup_desligado_indexa_a_copia(mundo):
+    mgr, vm, fonte = mundo
+    vm.cfg.ingest_dedup_repeated_text = False
+    original = _transcricao(6, 60)
+    _gravar(fonte / "sessao-1.md", original, 1_000_000)
+    _gravar(fonte / "sessao-2.md", original, 2_000_000)
+    r = mgr.ingest(str(fonte))
+    assert r["indexed"] == 4 and "deduplicated_lines" not in r
+    assert _linhas_no_indice(vm, fonte / "sessao-2.md") > 0
+
+
+def test_arquivo_que_encolhe_nao_deixa_trecho_velho(mundo):
+    mgr, vm, fonte = mundo
+    f = fonte / "longo.md"
+    f.write_text("\n\n".join(f"paragrafo {i} " + "x" * 400 for i in range(40)), encoding="utf-8")
+    mgr.ingest(str(fonte))
+    assert _linhas_no_indice(vm, f) > 1
+    f.write_text("agora e curto", encoding="utf-8")
+    r = mgr.ingest(str(fonte))
+    assert _linhas_no_indice(vm, f) == 1
+    assert r["stale_chunks_removed"] >= 1

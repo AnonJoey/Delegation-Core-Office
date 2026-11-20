@@ -28,7 +28,7 @@ pytest tests/test_ingest*.py
 
 ## Keeping generated documentation in sync
 
-Everything enumerable — MCP tools, feature flags, configuration keys, CLI commands, scheduled tasks, alert rules, dashboard HTTP routes, environment variables, and tool errors — is generated from code into `docs/reference/`.
+Everything enumerable (MCP tools, feature flags, configuration keys, CLI commands, scheduled tasks, alert rules, dashboard HTTP routes, environment variables, and tool errors) is generated from code into `docs/reference/`.
 
 Whenever you add, rename, or change a tool, config key, CLI command, or route:
 

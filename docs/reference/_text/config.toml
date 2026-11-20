@@ -270,6 +270,9 @@ description = "Size, in characters, of the pieces an ingested external file is s
 [ingest_chunk_overlap]
 description = "Characters shared between consecutive pieces of an ingested file."
 
+[ingest_dedup_repeated_text]
+description = "Drop runs of lines already seen in the same source from plain-text files (.md, .txt) before chunking, so a rewound or resumed session transcript is indexed once. The oldest copy is kept. Turn off when every file must answer for text it shares with another."
+
 # ingest.py, docs/INGEST_CONFIGURATION.md
 [ingest_sources]
 description = "Named folders and files to ingest, each with `name`, `path` (or `paths`), `recursive`, `enabled` and `exclude`. Empty: `ingest_folder` accepts any path. Once the list has entries, ingestion accepts only enabled sources declared here. `delegation-core ingest --configured` runs them."

@@ -364,9 +364,6 @@ def _merge_patterns(*groups) -> list[str]:
     return merged
 
 
-_DEDUP_MIN_CHARS = 120
-
-
 def _fonte_pai_registrada(source: Path, registry: dict) -> str | None:
     """Se `source` e um arquivo contido numa pasta ja registrada, devolve a pasta mais especifica.
 
@@ -392,27 +389,85 @@ def _fonte_pai_registrada(source: Path, registry: dict) -> str | None:
     return melhor[1] if melhor is not None else None
 
 
-def deduplicar_blocos_repetidos(chunks: list[str], min_chars: int = _DEDUP_MIN_CHARS) -> tuple[list[str], int]:
-    """Remove chunks duplicados (tipicos de rewind em apps de transcricao), preservando a primeira ocorrencia.
+# Rewind e retomada de sessao: o app grava de novo, num arquivo novo ou no mesmo,
+# um trecho que ja estava gravado. Medido em 28/10/2026 numa maquina de colega:
+# 62 de 222 transcricoes tinham 90% ou mais das linhas repetidas de outra. A
+# repeticao raramente cai alinhada com os trechos de chunk_text (a sobreposicao
+# desloca as fronteiras), entao comparar trechos inteiros descartava 0 de uma
+# copia integral. A comparacao e por janela de linhas seguidas, antes de cortar.
+_DEDUP_JANELA_CHARS = 200
+# So texto corrido. CSV e HTML repetem linhas por natureza (cabecalho, menu), e
+# PDF e Office vem de extracao, onde a duplicata nao e de rewind.
+_DEDUP_SUFIXOS = frozenset({".md", ".markdown", ".mdx", ".txt", ".text"})
 
-    A normalizacao colapsa espacos em branco e ignora maiusculas/minusculas.
-    Chunks mais curtos que `min_chars` sao preservados intactos para nao descartar
-    cabecalhos ou marcadores curtos que podem se repetir legitimamente.
+
+def _janelas_de_linhas(normas: list[str], janela_chars: int):
+    """Para cada linha inicial, a menor sequencia de linhas seguidas com `janela_chars` ou mais.
+
+    Devolve (inicio, fim_exclusivo, chave). Texto mais curto que uma janela nao
+    gera janela nenhuma, entao frases curtas que se repetem de verdade ("ok",
+    "Sim.") nunca contam como duplicata sozinhas.
     """
-    if len(chunks) <= 1:
-        return list(chunks), 0
-    vistos: set[str] = set()
-    unicos: list[str] = []
-    descartados = 0
-    for chunk in chunks:
-        norm = " ".join(chunk.split()).casefold()
-        if len(norm) >= min_chars:
-            if norm in vistos:
-                descartados += 1
-                continue
-            vistos.add(norm)
-        unicos.append(chunk)
-    return unicos, descartados
+    import hashlib
+    n = len(normas)
+    fim = 0
+    soma = 0
+    for ini in range(n):
+        while fim < n and soma < janela_chars:
+            soma += len(normas[fim]) + 1
+            fim += 1
+        if soma < janela_chars:
+            return
+        chave = hashlib.blake2b("\n".join(normas[ini:fim]).encode("utf-8"), digest_size=8).digest()
+        yield ini, fim, chave
+        soma -= len(normas[ini]) + 1
+
+
+class DeduplicadorDeTexto:
+    """Tira de um texto as sequencias de linhas que ja apareceram antes na mesma fonte.
+
+    Uma instancia vale para uma chamada de ingest(): os arquivos passam em ordem
+    de modificacao, e a primeira copia de cada trecho fica. Linhas em branco e
+    espacos nao contam, e maiusculas e minusculas sao iguais.
+    """
+
+    def __init__(self, janela_chars: int = _DEDUP_JANELA_CHARS):
+        self._janela = janela_chars
+        self._vistas: set[bytes] = set()
+
+    @staticmethod
+    def _linhas(conteudo: str) -> tuple[list[str], list[int], list[str]]:
+        linhas = conteudo.splitlines(keepends=True)
+        idx = []
+        normas = []
+        for i, linha in enumerate(linhas):
+            norma = " ".join(linha.split()).casefold()
+            if norma:
+                idx.append(i)
+                normas.append(norma)
+        return linhas, idx, normas
+
+    def semear(self, conteudo: str) -> None:
+        """Registra um texto ja indexado (arquivo pulado por nao ter mudado)."""
+        _linhas, _idx, normas = self._linhas(conteudo)
+        for _ini, _fim, chave in _janelas_de_linhas(normas, self._janela):
+            self._vistas.add(chave)
+
+    def filtrar(self, conteudo: str) -> tuple[str, int]:
+        """Devolve o texto sem as linhas repetidas e quantas linhas sairam."""
+        linhas, idx, normas = self._linhas(conteudo)
+        repetida = [False] * len(normas)
+        for ini, fim, chave in _janelas_de_linhas(normas, self._janela):
+            if chave in self._vistas:
+                for k in range(ini, fim):
+                    repetida[k] = True
+            else:
+                self._vistas.add(chave)
+        removidas = sum(repetida)
+        if not removidas:
+            return conteudo, 0
+        fora = {idx[k] for k, r in enumerate(repetida) if r}
+        return "".join(l for i, l in enumerate(linhas) if i not in fora), removidas
 
 
 class IngestManager:
@@ -444,6 +499,24 @@ class IngestManager:
         except Exception as e:
             logger.warning("Nao consegui conferir o indice para %s (%s); confiando no carimbo", source_key, e)
             return None
+
+    def _apagar_trechos_que_sobraram(self, f_str: str, manter: set[str]) -> int:
+        """Apaga as linhas externas de `f_str` cujo id nao esta em `manter`."""
+        collection = getattr(self._vault, "collection", None)
+        if collection is None or not hasattr(collection, "delete"):
+            return 0
+        try:
+            rows = collection.get(where={"path": f_str}, include=["metadatas"])
+            velhos = [
+                doc_id for doc_id, meta in zip(rows.get("ids") or [], rows.get("metadatas") or [])
+                if doc_id not in manter and (meta or {}).get("is_external") == "true"
+            ]
+            if velhos:
+                collection.delete(ids=velhos)
+            return len(velhos)
+        except Exception as e:
+            logger.warning("Could not remove stale chunks of %s: %s", f_str, e)
+            return 0
 
     def _configured_source_for(self, source: Path) -> tuple[dict, dict] | None:
         """Find the logical source and physical path that authorize ``source``."""
@@ -587,7 +660,22 @@ class IngestManager:
         # que a ingestao rodou. Por isso o indice e consultado uma vez por fonte.
         presentes = None if force else self._arquivos_no_indice(source_key)
         reingeridos_sem_linhas: list[str] = []
-        dedup_chunks = 0
+        skipped_duplicate: list[str] = []
+        linhas_repetidas = 0
+        trechos_velhos = 0
+        dedup = DeduplicadorDeTexto() if getattr(self._cfg, "ingest_dedup_repeated_text", True) else None
+        # Arquivos de texto pulados por nao terem mudado ainda contam como "ja visto"
+        # para os que vierem depois. So sao lidos quando algum arquivo de texto
+        # precisa ser indexado, para que uma fonte sem mudanca nao custe leitura.
+        a_semear: list[Path] = []
+        # A primeira copia de um trecho repetido e a mais antiga: a retomada de
+        # sessao grava a copia depois do original.
+        def _mtime(f: Path) -> float:
+            try:
+                return f.stat().st_mtime
+            except OSError:
+                return 0.0
+        candidates.sort(key=lambda f: (_mtime(f), str(f)))
 
         for f in candidates:
             f_str = str(f)
@@ -605,6 +693,13 @@ class IngestManager:
             if not force and f_str in cached_files:
                 c_info = cached_files[f_str]
                 if isinstance(c_info, (list, tuple)) and len(c_info) >= 2:
+                    # Copia integral de texto ja indexado nao tem linha no indice de
+                    # proposito; sem esta marca ela seria relida a cada rodada.
+                    duplicata = len(c_info) >= 3 and c_info[2] == "duplicate"
+                    if c_info[0] == f_mtime and c_info[1] == f_size and duplicata:
+                        skipped_unchanged.append(f_str)
+                        new_cached_files[f_str] = list(c_info[:3])
+                        continue
                     if c_info[0] == f_mtime and c_info[1] == f_size and presentes is not None and f_str not in presentes:
                         reingeridos_sem_linhas.append(f_str)
                     elif c_info[0] == f_mtime and c_info[1] == f_size:
@@ -615,6 +710,8 @@ class IngestManager:
                         # the one case where the operator needs to know.
                         skipped_unchanged.append(f_str)
                         new_cached_files[f_str] = [f_mtime, f_size]
+                        if dedup is not None and f.suffix.lower() in _DEDUP_SUFIXOS:
+                            a_semear.append(f)
                         continue
 
             try:
@@ -629,9 +726,24 @@ class IngestManager:
                     skipped_empty.append(f.name)
                     continue
 
+                if dedup is not None and f.suffix.lower() in _DEDUP_SUFIXOS:
+                    for anterior in a_semear:
+                        try:
+                            dedup.semear(extract(anterior) or "")
+                        except Exception as e:  # o arquivo pulado nao e o que esta sendo indexado
+                            logger.warning("Dedup: could not read %s: %s", anterior.name, e)
+                    a_semear.clear()
+                    content, removidas = dedup.filtrar(content)
+                    linhas_repetidas += removidas
+                    if not content.strip():
+                        # Copia integral de texto ja indexado: nada novo para embutir.
+                        # O carimbo entra no registro para nao reler a cada rodada.
+                        skipped_duplicate.append(f_str)
+                        new_cached_files[f_str] = [f_mtime, f_size, "duplicate"]
+                        trechos_velhos += self._apagar_trechos_que_sobraram(f_str, set())
+                        continue
+
                 chunks = chunk_text(content, max_chars=max_chars, overlap=overlap)
-                chunks, descartados_arquivo = deduplicar_blocos_repetidos(chunks)
-                dedup_chunks += descartados_arquivo
                 # Ingested files are the bulk of a real index (92.8% of rows on
                 # the deployment that asked for client scoping), so a filter that
                 # skipped them would reach a fourteenth of the corpus and read as
@@ -643,8 +755,10 @@ class IngestManager:
                     getattr(self._cfg, "client_aliases", None),
                 )
                 gravou = True
+                ids_gravados: set[str] = set()
                 for i, chunk in enumerate(chunks):
                     chunk_id = f"{f}::chunk_{i}" if len(chunks) > 1 else str(f)
+                    ids_gravados.add(chunk_id)
                     meta = {
                         "title":         f.stem,
                         "path":          f_str,
@@ -665,6 +779,10 @@ class IngestManager:
                     # Sem isto a CLI dizia "indexado, 0 erros" para o arquivo que nao entrou.
                     errors.append(f"{f.name}: not indexed, the index refused the write (see the daemon log)")
                     continue
+                # O id e caminho::chunk_N, entao um arquivo que encolheu deixava os
+                # trechos acima do novo total no indice para sempre. Medido em 20/11:
+                # um arquivo de 13 trechos reescrito com 1 ficou com 14 linhas.
+                trechos_velhos += self._apagar_trechos_que_sobraram(f_str, ids_gravados)
                 indexed.append(f_str)
                 new_cached_files[f_str] = [f_mtime, f_size]
             except DatalessFileError as e:
@@ -719,8 +837,14 @@ class IngestManager:
         }
         if fonte_pai is not None:
             result["reused_parent_source"] = fonte_pai
-        if dedup_chunks:
-            result["deduplicated_chunks"] = dedup_chunks
+        if linhas_repetidas:
+            result["deduplicated_lines"] = linhas_repetidas
+        if skipped_duplicate:
+            # Separado de skipped_empty: o arquivo tinha texto, so que todo ja indexado.
+            result["skipped_duplicate"] = len(skipped_duplicate)
+            result["duplicate_files"] = skipped_duplicate[:20]
+        if trechos_velhos:
+            result["stale_chunks_removed"] = trechos_velhos
         if configured_match is not None:
             result["configured_source"] = configured_source.get("name") or source_key
         if excluded:
