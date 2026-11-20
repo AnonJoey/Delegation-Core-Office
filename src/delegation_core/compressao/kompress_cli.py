@@ -22,5 +22,5 @@ def cmd_kompress(args) -> int:
 
 def registrar(sub) -> dict:
     p = sub.add_parser("kompress", help="Headroom's Kompress text compressor (ML model): setup or status")
-    p.add_argument("acao", choices=["setup", "status"])
+    p.add_argument("acao", choices=["setup", "status"], help="setup downloads the model; status checks that it loads")
     return {"kompress": cmd_kompress}

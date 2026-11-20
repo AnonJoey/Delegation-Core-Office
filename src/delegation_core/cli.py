@@ -2079,9 +2079,12 @@ def cmd_process_get(args):
     console.print(json.dumps(proc, indent=2))
 
 
-def main():
-    from .stdio_nulo import garantir_stdio
-    garantir_stdio()
+def construir_parser():
+    """O parser inteiro da CLI, sem ler argv nem tocar no stdio.
+
+    Separado do `main` para que a referencia da CLI (`scripts/gerar_referencia.py`) leia os
+    subcomandos e opcoes do mesmo objeto que a CLI usa, sem copia que possa envelhecer.
+    Devolve tambem os subparsers cujo `print_help` o `main` chama."""
     parser = argparse.ArgumentParser(
         prog="delegation-core",
         description="Local MCP delegation server: llama.cpp + BGE + SQLite vector index + Obsidian vault",
@@ -2092,8 +2095,8 @@ def main():
 
     sub.add_parser("setup",    help="Interactive setup wizard (run once per machine)")
     p_tok = sub.add_parser("token", help="Per-client tokens: read-only or read-write")
-    p_tok.add_argument("acao", choices=["create", "list", "revoke"])
-    p_tok.add_argument("name", nargs="?", default="")
+    p_tok.add_argument("acao", choices=["create", "list", "revoke"], help="what to do with client tokens")
+    p_tok.add_argument("name", nargs="?", default="", help="client name (needed for create and revoke)")
     p_tok.add_argument("--write", action="store_true", help="allow tools that write (default: read-only)")
     p_tok.add_argument("--force", action="store_true", help="replace an existing token with the same name")
     p_ocr = sub.add_parser("ocr-setup", help="Download OCR language data so images become searchable")
@@ -2120,8 +2123,8 @@ def main():
                           help="Leave the daemon stopped after updating")
     # Internal: `update` runs this in a fresh interpreter after pip, so the
     # steps that follow come from the version just installed. No help text.
-    p_update_finish = sub.add_parser("update-finish")
-    p_update_finish.add_argument("--root", required=True)
+    p_update_finish = sub.add_parser("update-finish", help="Internal: second half of `update`, run by it in the newly installed code")
+    p_update_finish.add_argument("--root", required=True, help="source checkout the update installed from")
 
     p_repair = sub.add_parser(
         "repair-empty-source",
@@ -2149,7 +2152,7 @@ def main():
 
     p_service = sub.add_parser(
         "service", help="Install/remove/stop/start the daemon as a per-user background service")
-    p_service.add_argument("action", choices=["install", "uninstall", "status", "stop", "start", "restart"])
+    p_service.add_argument("action", choices=["install", "uninstall", "status", "stop", "start", "restart"], help="install, uninstall, status, stop, start or restart the per-user service")
     p_service.add_argument("--visible", action="store_true",
                            help="install, Windows: run the daemon in a visible console window "
                                 "(default is no window), for diagnosing a daemon that did not start")
@@ -2207,8 +2210,8 @@ def main():
     p_mig.add_argument("--ativar", action="store_true", help="set index_backend=sqlite after a verified migration")
     p_mig.add_argument("--force", action="store_true", help="migrate even with the daemon listening (unsafe)")
     p_cmp = sub.add_parser("index-compare", help="Run the same queries on the Chroma and SQLite indexes")
-    p_cmp.add_argument("--from", dest="origem", default=None)
-    p_cmp.add_argument("--amostra", type=int, default=100)
+    p_cmp.add_argument("--from", dest="origem", default=None, help="Chroma index directory (default: the configured one)")
+    p_cmp.add_argument("--amostra", type=int, default=100, help="queries run on both indexes")
     p_reindex = sub.add_parser("reindex", help="Rebuild the search index from vault folders")
     p_reindex.add_argument("--force", action="store_true",
                            help="Reindex every note, not just those changed since last run "
@@ -2241,7 +2244,7 @@ def main():
         "dashboard-api", help="Run the local JSON API used by the Tauri dashboard (standalone/debug)"
     )
     p_dashboard_api.add_argument("--port", type=int, default=0, help="Port to bind (0 = pick a free one)")
-    p_dashboard_api.add_argument("--host", default="127.0.0.1")
+    p_dashboard_api.add_argument("--host", default="127.0.0.1", help="address to listen on")
 
     p_ingest = sub.add_parser("ingest", help="Index files from an external folder without moving them")
     p_ingest.add_argument("path", nargs="?", help="Absolute path to a file or directory to index")
@@ -2258,7 +2261,7 @@ def main():
     session_sub = p_session.add_subparsers(dest="session_command", metavar="session-command")
     session_sub.add_parser("status", help="Show transcript capture mode and pending manual capture")
     p_session_mode = session_sub.add_parser("mode", help="Set automatic, manual, or off transcript capture")
-    p_session_mode.add_argument("mode", choices=["automatic", "manual", "off"])
+    p_session_mode.add_argument("mode", choices=["automatic", "manual", "off"], help="automatic saves every session, manual only the next one after capture-next, off none")
     p_capture_next = session_sub.add_parser("capture-next", help="In manual mode, save the next completed client session")
     p_capture_next.add_argument("--client", choices=["claude", "codex", "any"], required=True,
                                 help="Client whose next completed session may be captured")
@@ -2275,8 +2278,8 @@ def main():
 
     p_search = sub.add_parser("search", help="Query the vault (BGE similarity search, no LLM required)")
     _add_local_flag(p_search)
-    p_search.add_argument("query")
-    p_search.add_argument("--limit", type=int, default=5)
+    p_search.add_argument("query", help="what to search for")
+    p_search.add_argument("--limit", type=int, default=5, help="results to return")
 
     p_compress = sub.add_parser("compress", help="Extract key facts/decisions/action items from text via llama.cpp")
     p_compress.add_argument("source", help="Short label for what this text is (e.g. a filename or 'email thread')")
@@ -2288,7 +2291,7 @@ def main():
 
     p_note_write = note_sub.add_parser("write", help="Write a new note")
     p_note_write.add_argument("folder", help="Vault folder (see: delegation-core status)")
-    p_note_write.add_argument("title")
+    p_note_write.add_argument("title", help="note title (the body comes from stdin or --file)")
     p_note_write.add_argument("--file", default=None, help="Read content from this file instead of stdin")
     _add_local_flag(p_note_write)
 
@@ -2301,14 +2304,14 @@ def main():
     _add_local_flag(p_note_update)
 
     p_note_list = note_sub.add_parser("list", help="List notes in a folder, newest first")
-    p_note_list.add_argument("folder")
-    p_note_list.add_argument("--limit", type=int, default=20)
+    p_note_list.add_argument("folder", help="vault folder")
+    p_note_list.add_argument("--limit", type=int, default=20, help="notes to list")
 
     p_note_sim = note_sub.add_parser("find-similar", help="Find notes semantically similar to a given note")
     _add_local_flag(p_note_sim)
-    p_note_sim.add_argument("name")
-    p_note_sim.add_argument("--threshold", type=float, default=0.80)
-    p_note_sim.add_argument("--limit", type=int, default=5)
+    p_note_sim.add_argument("name", help="note name")
+    p_note_sim.add_argument("--threshold", type=float, default=0.80, help="minimum similarity")
+    p_note_sim.add_argument("--limit", type=int, default=5, help="notes to return")
 
     # ── graph ────────────────────────────────────────────────────────────────
     p_graph = sub.add_parser("graph", help="Code-graph pipeline: build/list/report/affected/hook (needs [graph] extra)")
@@ -2316,29 +2319,29 @@ def main():
 
     p_graph_build = graph_sub.add_parser("build", help="Build a code graph for a local directory")
     _add_local_flag(p_graph_build)
-    p_graph_build.add_argument("path")
+    p_graph_build.add_argument("path", help="directory to graph")
     p_graph_build.add_argument("--name", default="", help="Graph name (default: directory basename)")
     p_graph_build.add_argument("--force", action="store_true", help="Rebuild even if already built")
 
     p_graph_preview = graph_sub.add_parser(
         "preview", help="Show what a build would cover, without building or writing anything")
-    p_graph_preview.add_argument("path")
+    p_graph_preview.add_argument("path", help="directory to preview")
     p_graph_preview.add_argument("--name", default="", help="Graph name (default: directory basename)")
 
     p_graph_extract = graph_sub.add_parser(
         "extract-sources", help="Reconstruct original sources from .js.map sidecars, then graph those")
-    p_graph_extract.add_argument("path")
+    p_graph_extract.add_argument("path", help="directory with the .js.map files")
     p_graph_extract.add_argument("out_dir", help="Destination directory (must be empty or absent)")
 
     graph_sub.add_parser("list", help="List previously built graphs")
 
     p_graph_report = graph_sub.add_parser("report", help="Print a graph's full GRAPH_REPORT.md")
-    p_graph_report.add_argument("name")
+    p_graph_report.add_argument("name", help="graph name (see: delegation-core graph list)")
 
     p_graph_affected = graph_sub.add_parser("affected", help="Blast-radius query: what's affected if X changes")
     p_graph_affected.add_argument("name", help="Graph name (see: delegation-core graph list)")
     p_graph_affected.add_argument("query", help="A file path or symbol label, e.g. auth.py or AuthService.login")
-    p_graph_affected.add_argument("--depth", type=int, default=2)
+    p_graph_affected.add_argument("--depth", type=int, default=2, help="how many hops to follow")
 
     p_graph_hook = graph_sub.add_parser("hook", help="Git post-commit hook: auto-rebuild a graph after every commit")
     hook_sub = p_graph_hook.add_subparsers(dest="hook_command", metavar="hook-command")
@@ -2348,32 +2351,32 @@ def main():
     p_hook_install.add_argument("--name", default="", help="Graph name (default: repo directory basename)")
 
     p_hook_uninstall = hook_sub.add_parser("uninstall", help="Remove the post-commit hook")
-    p_hook_uninstall.add_argument("path", nargs="?", default=".")
+    p_hook_uninstall.add_argument("path", nargs="?", default=".", help="repository (default: the current directory)")
 
     p_hook_status = hook_sub.add_parser("status", help="Check whether the hook is installed")
-    p_hook_status.add_argument("path", nargs="?", default=".")
+    p_hook_status.add_argument("path", nargs="?", default=".", help="repository (default: the current directory)")
 
     # ── process ──────────────────────────────────────────────────────────────
     p_process = sub.add_parser("process", help="Cross-session process tracking: create/list/update/get")
     process_sub = p_process.add_subparsers(dest="process_command", metavar="process-command")
 
     p_proc_create = process_sub.add_parser("create", help="Start tracking a new process")
-    p_proc_create.add_argument("name")
-    p_proc_create.add_argument("--description", default="")
+    p_proc_create.add_argument("name", help="process name")
+    p_proc_create.add_argument("--description", default="", help="what the process is")
     p_proc_create.add_argument("--steps", default="", help="Comma-separated step descriptions")
 
     p_proc_list = process_sub.add_parser("list", help="List tracked processes")
     p_proc_list.add_argument("--status", default="active", help="active|paused|done|cancelled|all")
-    p_proc_list.add_argument("--query", default="")
+    p_proc_list.add_argument("--query", default="", help="only processes whose name, description or notes contain this text")
 
     p_proc_update = process_sub.add_parser("update", help="Update a tracked process")
-    p_proc_update.add_argument("process_id")
-    p_proc_update.add_argument("--note", default="")
-    p_proc_update.add_argument("--step-done", dest="step_done", type=int, default=None)
-    p_proc_update.add_argument("--status", default="")
+    p_proc_update.add_argument("process_id", help="process id")
+    p_proc_update.add_argument("--note", default="", help="note to append")
+    p_proc_update.add_argument("--step-done", dest="step_done", type=int, default=None, help="index of the step to mark done")
+    p_proc_update.add_argument("--status", default="", help="active, paused, done or cancelled")
 
     p_proc_get = process_sub.add_parser("get", help="Full detail view of a tracked process")
-    p_proc_get.add_argument("process_id")
+    p_proc_get.add_argument("process_id", help="process id")
 
     # Comandos dos pacotes que trazem o proprio argparse. Cada `registrar(sub)`
     # acrescenta os subcomandos e devolve {nome: funcao}.
@@ -2381,6 +2384,17 @@ def main():
     for _registrar in _registradores_extras():
         extras.update(_registrar(sub))
 
+    return parser, {"note": p_note, "graph": p_graph, "graph_hook": p_graph_hook,
+                    "process": p_process, "session": p_session, "extras": extras}
+
+
+def main():
+    from .stdio_nulo import garantir_stdio
+    garantir_stdio()
+    parser, partes = construir_parser()
+    p_note, p_graph, p_graph_hook = partes["note"], partes["graph"], partes["graph_hook"]
+    p_process, p_session = partes["process"], partes["session"]
+    extras = partes["extras"]
     args = parser.parse_args()
 
     dispatch = {

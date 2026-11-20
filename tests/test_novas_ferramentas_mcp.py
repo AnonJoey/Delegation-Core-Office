@@ -4,7 +4,7 @@ test_novas_ferramentas_mcp.py — Teste de integração das novas ferramentas MC
 
 import json
 from pathlib import Path
-from delegation_core.server import convert_to_markdown, dag_run, dag_status, telemetry_summary
+from delegation_core.server import convert_to_markdown, dag_run, dag_status
 
 
 def test_convert_to_markdown_tool(tmp_path: Path):
@@ -32,8 +32,3 @@ def test_dag_run_and_status_tools():
     assert stat_resp["data"]["run"]["status"] == "success"
 
 
-def test_telemetry_summary_tool():
-    resp = json.loads(telemetry_summary(hours=1.0))
-    assert resp["status"] == "ok"
-    assert "telemetry" in resp
-    assert "total_calls" in resp["telemetry"]

@@ -1,9 +1,9 @@
-"""
-Pacote unificado de núcleos funcionais consolidando os softwares do ecossistema:
-- agent_harness: Banco FTS5 de skills, sanitização anti-slop e ferramentas de inspeção
-- multimodal: Ingestão multimodal (OCR, Markdown, Whisper STT, TTS, Diagramas)
-- orchestration: Orquestração DAG assíncrona, fila multiagente, CI autônomo e telemetria LLM
-- platform: Plataforma local com poda de contexto, guardião de concorrência/orçamento, grafo de código e telemetria
+"""Functional cores bundled with delegation-core.
+
+- agent_harness: local skills catalog (SQLite FTS5), prompt sanitizer, Python code inspection
+- multimodal: document conversion to Markdown (MarkItDown)
+- platform: context pruning and host metrics
+- self_hosted: a static catalog of self-hosted services (names, ports, roles)
 """
 
 from .unified_facade import UnifiedCoresBridge, get_cores_bridge

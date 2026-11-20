@@ -319,6 +319,10 @@ class Config:
     # ── v0.2: external ingestion (field deployment C) ─────────────────────────────────────
     ingest_chunk_size: int = 3072
     ingest_chunk_overlap: int = 200
+    # Tira do texto corrido (.md, .txt) as sequencias de linhas que ja apareceram
+    # na mesma fonte, a copia de rewind ou retomada de sessao. Desligue se a fonte
+    # repete trechos de proposito e cada arquivo precisa responder por eles.
+    ingest_dedup_repeated_text: bool = True
 
     # ── v0.12: vault note chunking ───────────────────────────────────────────
     # Until v0.12 a vault note was indexed as ONE ChromaDB row holding the whole

@@ -5,12 +5,6 @@ class TestLocalPlatformCore(unittest.TestCase):
     def setUp(self):
         self.platform = UnifiedLocalPlatform()
 
-    def test_agent_session_flow(self):
-        res = self.platform.execute_agent_session("sess_test_10", "// comentario \n print('ok')")
-        self.assertEqual(res["execution_status"], "SUCCESS")
-        self.assertEqual(res["hardware_telemetry"]["status"], "HEALTHY")
-        self.assertTrue(res["agent_guard"]["budget"]["within_budget"])
-
     def test_pruning(self):
         raw = "// Comentario desnecessario \n var x = 10;"
         res = self.platform.pruner.prune_context(raw)

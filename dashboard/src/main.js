@@ -306,9 +306,8 @@ const DOCK_TITLES = {
   search: "Search",
   fleet: "MCP Connections",
   skills: "Skills Studio",
-  orchestrator: "Orchestrator & DAG",
-  multimodal: "Multimodal Media",
-  telemetry: "Homelab Telemetry",
+  multimodal: "Documents",
+  telemetry: "Host",
   vigia: "Vigia",
 };
 
@@ -321,7 +320,6 @@ const MAIN_FOR = {
   tasks: "tasks",
   fleet: "fleet",
   skills: "skills",
-  orchestrator: "orchestrator",
   multimodal: "multimodal",
   telemetry: "telemetry",
   vigia: "vigia",
@@ -340,7 +338,6 @@ function activateTab(name, { persist = true } = {}) {
   if (name === "fleet") refreshMcpConnections();
   if (name === "vigia") refreshVigia();
   if (name === "skills") refreshSkillsStudio();
-  if (name === "orchestrator") refreshOrchestratorStudio();
   if (name === "multimodal") refreshMultimodalStudio();
   if (name === "telemetry") refreshTelemetryStudio();
 
@@ -2319,85 +2316,9 @@ async function runPromptSanitizer() {
   }
 }
 
-// 2. Orchestrator Studio & DAG Flow
-async function refreshOrchestratorStudio() {
-  try {
-    const data = await apiGet("/api/cores/orchestration/telemetry");
-    const summary = document.getElementById("spans-summary-text");
-    if (summary && data.total_spans !== undefined) {
-      summary.textContent = `LangWatch: ${data.total_spans} Spans | ${data.total_tokens || 0} Tokens | ${data.total_duration_sec || 0}s`;
-    }
-  } catch { /* ignore */ }
-}
-
-async function executeWorkflowRun() {
-  const btn = document.getElementById("btn-trigger-workflow");
-  const dockBtn = document.getElementById("btn-run-dag-workflow");
-  const statusPill = document.getElementById("dag-status-pill");
-  const nodes = document.querySelectorAll("#dag-flow-nodes .dag-node");
-
-  if (btn) { btn.disabled = true; btn.textContent = "Running DAG…"; }
-  if (dockBtn) { dockBtn.disabled = true; dockBtn.textContent = "Running…"; }
-  if (statusPill) { statusPill.textContent = "EXECUTING"; statusPill.className = "badge-accent"; }
-
-  nodes.forEach((n) => { n.classList.remove("completed"); n.classList.add("running"); });
-
-  try {
-    const res = await apiPost("/api/cores/orchestration/run", {
-      title: "Interactive Platform DAG Workflow",
-      steps: []
-    });
-
-    nodes.forEach((n) => { n.classList.remove("running"); n.classList.add("completed"); });
-    if (statusPill) { statusPill.textContent = "SUCCESS"; statusPill.className = "badge-status online"; }
-
-    // Render LangWatch Spans Table
-    const tbody = document.getElementById("spans-table-body");
-    const traceId = res.trace_id || "tr-001";
-    const telemetry = res.telemetry || {};
-    const recent = telemetry.recent_spans || [
-      { name: "ingest_context", model: "local-gemma-12b", in_tokens: 150, out_tokens: 40, duration_sec: 0.12 },
-      { name: "prune_tokens", model: "local-gemma-12b", in_tokens: 110, out_tokens: 30, duration_sec: 0.08 },
-      { name: "agent_execute", model: "local-gemma-12b", in_tokens: 280, out_tokens: 120, duration_sec: 0.35 },
-      { name: "record_telemetry", model: "local-gemma-12b", in_tokens: 50, out_tokens: 25, duration_sec: 0.04 },
-    ];
-
-    if (tbody) {
-      tbody.innerHTML = recent.map((sp) => `
-        <tr>
-          <td><span class="badge-subtle">${escapeHtml(traceId)}</span></td>
-          <td><strong>${escapeHtml(sp.name || sp.span_name)}</strong></td>
-          <td>${escapeHtml(sp.model || "local-gemma-12b")}</td>
-          <td>${sp.in_tokens || sp.input_tokens || 0}</td>
-          <td>${sp.out_tokens || sp.output_tokens || 0}</td>
-          <td>${(sp.duration_sec ? (sp.duration_sec * 1000).toFixed(0) : 100)} ms</td>
-          <td><div class="duration-bar" style="width: ${Math.min(Math.max((sp.duration_sec || 0.1) * 300, 15), 180)}px;"></div></td>
-        </tr>
-      `).join("");
-    }
-
-    // Add to dock history
-    const runsList = document.getElementById("dag-runs-list");
-    if (runsList) {
-      const entry = document.createElement("div");
-      entry.className = "dock-item-entry active";
-      entry.innerHTML = `
-        <div class="dock-item-title">${escapeHtml(res.task_id || "DAG Run")} (${res.status})</div>
-        <div class="dock-item-sub">${res.dag_nodes_executed} nodes • ${res.total_duration_sec}s</div>
-      `;
-      runsList.prepend(entry);
-    }
-  } catch (err) {
-    if (statusPill) { statusPill.textContent = "FAILED"; statusPill.className = "badge-status offline"; }
-  } finally {
-    if (btn) { btn.disabled = false; btn.textContent = "▶ Execute Workflow"; }
-    if (dockBtn) { dockBtn.disabled = false; dockBtn.textContent = "▶ Run DAG"; }
-  }
-}
-
-// 3. Multimodal Studio
+// Document conversion
 async function refreshMultimodalStudio() {
-  // ready state
+  // nothing to load: the tab waits for a path
 }
 
 async function runMultimodalConvert() {
@@ -2407,15 +2328,17 @@ async function runMultimodalConvert() {
   const path = input ? input.value.trim() : "";
   if (!path) return;
 
-  if (btn) { btn.disabled = true; btn.textContent = "Ingesting…"; }
-  if (preview) preview.innerHTML = '<div class="pane-state"><div class="spinner"></div><div class="pane-state-title">Converting via MarkItDown / OCRmyPDF…</div></div>';
+  if (btn) { btn.disabled = true; btn.textContent = "Converting…"; }
+  if (preview) preview.innerHTML = '<div class="pane-state"><div class="spinner"></div><div class="pane-state-title">Converting…</div></div>';
 
   try {
     const res = await apiPost("/api/cores/multimodal/convert", { file_path: path });
-    if (preview) {
+    if (preview && res.status !== "SUCCESS") {
+      preview.innerHTML = `<div class="pane-state"><div class="pane-state-title">Conversion failed</div><div class="pane-state-hint">${escapeHtml(res.error || "unknown error")}</div></div>`;
+    } else if (preview) {
       preview.innerHTML = `
         <div style="margin-bottom: 8px;">
-          <span class="badge-status online">${escapeHtml(res.status || "SUCCESS")}</span>
+          <span class="badge-status online">${escapeHtml(res.status)}</span>
           <span class="badge-accent">${escapeHtml(res.pipeline || "markitdown")}</span>
         </div>
         <pre style="white-space: pre-wrap; font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: var(--fg-main);">${escapeHtml(res.markdown || "No text extracted.")}</pre>
@@ -2426,56 +2349,29 @@ async function runMultimodalConvert() {
       preview.innerHTML = `<div class="pane-state"><div class="pane-state-title">Conversion Failed</div><div class="pane-state-hint">${escapeHtml(String(err))}</div></div>`;
     }
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = "Ingest & Convert"; }
+    if (btn) { btn.disabled = false; btn.textContent = "Convert"; }
   }
 }
 
-async function runDiagramGenerate() {
-  const input = document.getElementById("mm-diagram-prompt");
-  const codePane = document.getElementById("mm-diagram-code");
-  const btn = document.getElementById("btn-mm-generate-diagram");
-  const prompt = input ? input.value.trim() : "";
-  if (!prompt) return;
-
-  if (btn) { btn.disabled = true; btn.textContent = "Generating…"; }
-  try {
-    const res = await apiPost("/api/cores/multimodal/diagram", { prompt });
-    if (codePane) {
-      codePane.textContent = res.mermaid_code || "flowchart TD\n    A[Start] --> B[End]";
-    }
-  } catch (err) {
-    if (codePane) codePane.textContent = `Error: ${err.message}`;
-  } finally {
-    if (btn) { btn.disabled = false; btn.textContent = "Generate Diagram"; }
-  }
-}
-
-// 5. Homelab Platform Telemetry Studio
+// Host metrics
 async function refreshTelemetryStudio() {
   try {
     const data = await apiGet("/api/cores/hardware");
-    const nvme = data.nvme_corsair_mp600 || {};
-    const load = data.system_load || {};
-
-    const fill = document.getElementById("hw-btrfs-fill");
-    const usedPct = document.getElementById("hw-btrfs-used-pct");
-    const freeGb = document.getElementById("hw-btrfs-free-gb");
-    const statusBadge = document.getElementById("hw-btrfs-status");
-    const glanceNvme = document.getElementById("glance-nvme");
-
-    const pct = nvme.used_pct ?? 0;
+    const disk = data.disk_home || {};
+    const pct = disk.used_pct ?? 0;
+    const set = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
+    const fill = document.getElementById("hw-disk-fill");
     if (fill) fill.style.width = `${pct}%`;
-    if (usedPct) usedPct.textContent = `${pct}% used`;
-    if (freeGb) freeGb.textContent = `${nvme.free_gb ?? 0} GB free of ${nvme.total_gb ?? 0} GB`;
-    if (statusBadge) statusBadge.textContent = data.status || "HEALTHY";
-    if (glanceNvme) glanceNvme.textContent = `${nvme.free_gb ?? 0} GB free (${pct}%)`;
-
-    const load1m = document.getElementById("hw-load-1m");
-    const load5m = document.getElementById("hw-load-5m");
-    const glanceLoad = document.getElementById("glance-load");
-    if (load1m) load1m.textContent = (load.load_1m ?? 0).toFixed(2);
-    if (load5m) load5m.textContent = (load.load_5m ?? 0).toFixed(2);
-    if (glanceLoad) glanceLoad.textContent = `${(load.load_1m ?? 0).toFixed(2)} / ${(load.load_5m ?? 0).toFixed(2)}`;
+    set("hw-disk-used-pct", `${pct}% used`);
+    set("hw-disk-free-gb", `${disk.free_gb ?? 0} GB free of ${disk.total_gb ?? 0} GB`);
+    set("hw-disk-path", disk.path || "");
+    set("glance-nvme", `${disk.free_gb ?? 0} GB free (${pct}%)`);
+    // Windows has no load average: the daemon sends null and we say so instead of showing zeros.
+    const load = data.system_load;
+    const fmt = (v) => (typeof v === "number" ? v.toFixed(2) : "n/a");
+    set("hw-load-1m", load ? fmt(load.load_1m) : "n/a");
+    set("hw-load-5m", load ? fmt(load.load_5m) : "n/a");
+    set("glance-load", load ? `${fmt(load.load_1m)} / ${fmt(load.load_5m)}` : "n/a");
   } catch { /* ignore */ }
 }
 
@@ -2486,19 +2382,17 @@ async function runPruneBenchmark() {
   const text = input ? input.value.trim() : "";
   if (!text) return;
 
-  if (btn) { btn.disabled = true; btn.textContent = "Compressing…"; }
+  if (btn) { btn.disabled = true; btn.textContent = "Pruning…"; }
   try {
     const res = await apiPost("/api/cores/prune", { text });
     if (badge) {
       badge.hidden = false;
-      const ratio = res.reduction_ratio !== undefined ? `${(res.reduction_ratio * 100).toFixed(1)}%` : "35.0%";
-      const saved = res.tokens_saved_estimate ?? 80;
-      badge.textContent = `Reduction: ${ratio} | Saved: ${saved} tokens`;
+      badge.textContent = `Reduction: ${res.reduction_ratio} | Saved: about ${res.tokens_saved_estimate} tokens`;
     }
   } catch (err) {
     if (badge) { badge.hidden = false; badge.textContent = `Error: ${err.message}`; }
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = "Run Pruning Benchmark"; }
+    if (btn) { btn.disabled = false; btn.textContent = "Prune"; }
   }
 }
 
@@ -2528,17 +2422,9 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // Orchestrator
-  const btnTriggerDag = document.getElementById("btn-trigger-workflow");
-  if (btnTriggerDag) btnTriggerDag.addEventListener("click", executeWorkflowRun);
-  const btnRunDagDock = document.getElementById("btn-run-dag-workflow");
-  if (btnRunDagDock) btnRunDagDock.addEventListener("click", executeWorkflowRun);
-
   // Multimodal
   const btnConvert = document.getElementById("btn-mm-convert");
   if (btnConvert) btnConvert.addEventListener("click", runMultimodalConvert);
-  const btnDiag = document.getElementById("btn-mm-generate-diagram");
-  if (btnDiag) btnDiag.addEventListener("click", runDiagramGenerate);
 
   // Telemetry
   const btnTelemRefresh = document.getElementById("btn-telemetry-full-refresh");

@@ -3092,26 +3092,19 @@ def dag_status(run_id: str) -> str:
     return json.dumps({"status": "ok", "data": res})
 
 
-@mcp.tool()
-def telemetry_summary(hours: float = 24.0) -> str:
-    """Spans recorded by the cores orchestrator: DAG steps, agent sessions, token pruning.
-
-    Counts, latency, tokens and error rate over the last `hours`. It does NOT count MCP tool
-    calls: no tool writes here. For what each MCP tool was called, cost and returned, use
-    usage_report. (Until 17/11/2026 this said "MCP tool calls" and an hour of tool use read
-    as zero calls.)
-    """
-    from .telemetria import get_telemetria
-    t = get_telemetria()
-    return json.dumps({"status": "ok", "telemetry": t.get_summary(hours=hours)})
-
-
-# ── Unified Cores Tools (agent-harness, multimodal, orchestration, platform) ──
+# ── Cores (agent harness, multimodal, platform, self-hosted catalog) ──
+#
+# Until 17/11/2026 this block also had cores_platform_session, cores_selfhosted_route and
+# telemetry_summary. The first two reported success for work they never did (no agent ran,
+# no request was sent) and the third only counted spans of a demonstration pipeline. They
+# were removed for v0.17.0, with the OCR, transcription and diagram paths of the cores.
 
 @mcp.tool()
 def cores_unified_status() -> str:
-    """
-    Status consolidado dos nucleos de software unificados (skills, multimodal, orchestrator, platform).
+    """What the bundled cores have on this machine.
+
+    Number of skills in the local catalog and their sources, the document-conversion capability,
+    host metrics (disk use of the home folder, load) and the size of the self-hosted catalog.
     """
     from .cores import get_cores_bridge
     bridge = get_cores_bridge()
@@ -3120,9 +3113,12 @@ def cores_unified_status() -> str:
 
 @mcp.tool()
 def cores_skills_search(query: str, limit: int = 5) -> str:
-    """
-    Busca FTS5 no catalogo de skills/regras de agentes desta maquina (agent-harness-core).
-    O catalogo nao vem no pacote: e construido pelo ingester em ~/.delegation_core/skills.db.
+    """Full-text search (SQLite FTS5) in this machine's catalog of agent skills and rules.
+
+    The catalog is not shipped: build it with
+    `python -m delegation_core.cores.agent_harness.skills.ingester <folder>`, which writes
+    `~/.delegation_core/skills.db` (or `DELEGATION_CORE_SKILLS_DB`). Without it the search
+    returns no results.
     """
     from .cores import get_cores_bridge
     bridge = get_cores_bridge()
@@ -3132,8 +3128,10 @@ def cores_skills_search(query: str, limit: int = 5) -> str:
 
 @mcp.tool()
 def cores_sanitize_prompt(text: str) -> str:
-    """
-    Auditoria e purificacao de slop sintético, cliches de IA e comentarios obvios de codigo (anti-slop engine).
+    """Find filler phrases typical of generated text and obvious code comments, and return a cleaned copy.
+
+    Pattern based (no model): `audit` lists what matched and a score, `purified` is the text
+    without it, `is_clean` is true when nothing matched.
     """
     from .cores import get_cores_bridge
     bridge = get_cores_bridge()
@@ -3142,8 +3140,12 @@ def cores_sanitize_prompt(text: str) -> str:
 
 @mcp.tool()
 def cores_multimodal_ingest(file_path: str) -> str:
-    """
-    Pipeline multimodal unificado: OCR (OCRmyPDF), Markdown (MarkItDown), Transcricao (Whisper) ou Texto.
+    """Convert a document on this machine to Markdown.
+
+    Reads PDF (text layer), Word, Excel, PowerPoint, HTML, CSV and plain-text formats through
+    delegation_core.markitdown. A file it cannot read returns an error with the reason. This tool
+    does no OCR and no audio transcription: a scanned PDF yields only the text it already carries.
+    To make images searchable by their text, ingest them with ingest_folder (needs tesseract).
     """
     from .cores import get_cores_bridge
     bridge = get_cores_bridge()
@@ -3151,19 +3153,12 @@ def cores_multimodal_ingest(file_path: str) -> str:
 
 
 @mcp.tool()
-def cores_platform_session(session_id: str, prompt: str) -> str:
-    """
-    Executa sessao de agente local com travamento atomico, orcamento de iteracoes, poda de AST e grafo em memoria.
-    """
-    from .cores import get_cores_bridge
-    bridge = get_cores_bridge()
-    return json.dumps(bridge.execute_agent_session(session_id, prompt))
-
-
-@mcp.tool()
 def cores_prune_context(text: str) -> str:
-    """
-    Poda de contexto de tokens via AST + compressao de logs de terminal (Headroom + RTK).
+    """Shrink a text for fewer tokens with pattern rules, keeping the original recoverable.
+
+    Collapses repeated spaces and blank lines and drops obvious code comments (`//` and `#`),
+    leaving URLs and Markdown headings intact. When something was cut, the original is stored
+    and `ccr_hash` recovers it with recall_output.
     """
     from .cores import get_cores_bridge
     bridge = get_cores_bridge()
@@ -3172,23 +3167,15 @@ def cores_prune_context(text: str) -> str:
 
 @mcp.tool()
 def cores_selfhosted_catalog(domain: str = "") -> str:
-    """
-    Catalogo unificado dos 29 servicos self-hosted do ecossistema, filtrado por dominio opcional.
+    """A static catalog of self-hosted services: name, domain, default port and role of each.
+
+    Reference data only: nothing here checks whether a service is installed or running.
+    `domain` filters by one domain.
     """
     from .cores import get_cores_bridge
     bridge = get_cores_bridge()
     results = bridge.list_homelab_services(domain=domain or None)
     return json.dumps({"status": "ok", "count": len(results), "domain_filter": domain, "services": results})
-
-
-@mcp.tool()
-def cores_selfhosted_route(service: str, action: str, user_token: str = "local-admin") -> str:
-    """
-    Roteador e gateway unificado de chamadas para servicos locais self-hosted (Supabase, Vaultwarden, Immich, Gitea, etc.).
-    """
-    from .cores import get_cores_bridge
-    bridge = get_cores_bridge()
-    return json.dumps(bridge.route_homelab_service(target_service=service, action=action, user_token=user_token))
 
 
 # ── entry point ───────────────────────────────────────────────────────────────

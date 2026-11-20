@@ -1,7 +1,6 @@
-"""
-markdown_converter.py — Adaptador unificado do motor MarkItDown para o núcleo multimodal.
-Fusão com delegation_core.markitdown (pypdf, python-docx, openpyxl, python-pptx, bs4).
-"""
+"""Document conversion for the multimodal core, through delegation_core.markitdown
+(pypdf, python-docx, openpyxl, python-pptx, BeautifulSoup). A file it cannot read is an error,
+never a success with placeholder text."""
 
 from __future__ import annotations
 
@@ -15,7 +14,7 @@ class MarkdownConverter:
     """Conversor unificado de documentos para Markdown estruturado."""
 
     def __init__(self):
-        self.engine_name = "Microsoft MarkItDown (Local Native)"
+        self.engine_name = "delegation_core.markitdown (pypdf, python-docx, openpyxl, python-pptx, BeautifulSoup)"
         self.supported_extensions = [
             ".pdf", ".docx", ".doc", ".xlsx", ".xlsm", ".pptx", ".ppt",
             ".html", ".htm", ".csv", ".tsv", ".md", ".txt", ".json", ".yaml", ".toml"
@@ -31,24 +30,11 @@ class MarkdownConverter:
         basename = path.name
 
         try:
-            # Executa conversão real com o motor completo markitdown
             markdown_content = self._converter.convert(path)
-        except Exception as e:
-            # Fallback estruturado para metadados caso o arquivo seja um mock inválido
-            file_size = path.stat().st_size
-            markdown_content = (
-                f"# Documento: {basename}\n\n"
-                f"## Metadados\n"
-                f"- Formato: {ext}\n"
-                f"- Tamanho: {file_size} bytes\n"
-                f"- Motor: {self.engine_name}\n"
-                f"- Nota: Conteúdo gerado via parser de fallback ({e})\n\n"
-                f"## Conteudo Estruturado\n"
-                f"| Campo | Valor |\n"
-                f"| :--- | :--- |\n"
-                f"| Status | Convertido com sucesso via MarkItDown |\n"
-                f"| LLM-Ready | Sim |\n"
-            )
+        except Exception as e:  # noqa: BLE001 - o motivo vai para quem chamou
+            # Ate 17/11/2026 a falha virava SUCCESS com uma tabela dizendo "Convertido com sucesso".
+            return {"status": "ERROR", "error": f"Could not convert {basename}: {e}",
+                    "source_file": str(path), "format": ext}
 
         return {
             "status": "SUCCESS",
