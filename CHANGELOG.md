@@ -5,7 +5,7 @@ This changelog is derived directly from the canonical versioning recorded across
 
 ---
 
-## Unreleased
+## v0.17.0 (2026-11-23) - Port of the TEST fork into Office (except OSINT), official English documentation, cores that reported work they never did removed, ingestion fixes
 
 ### Removed (cores that reported work they never did)
 
