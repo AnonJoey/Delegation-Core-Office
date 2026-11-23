@@ -3,7 +3,7 @@
 
 # Configuration keys (`config.json`)
 
-`~/.delegation_core/config.json` accepts **118 keys**. A key that is absent takes the
+`~/.delegation_core/config.json` accepts **121 keys**. A key that is absent takes the
 default below; a key the program does not know is ignored, and `delegation-core doctor`
 reports it. Paths may start with `~`.
 
@@ -76,12 +76,15 @@ reports it. Paths may start with `~`.
 | [`paperclip_memory_folder`](#paperclip_memory_folder) | `str` | `"Reference"` |
 | [`kompress_enabled`](#kompress_enabled) | `bool` | `true` |
 | [`kompress_device`](#kompress_device) | `str` | `"cpu"` |
+| [`shell_kompress`](#shell_kompress) | `bool` | `false` |
+| [`compress_code_ast`](#compress_code_ast) | `bool` | `false` |
 | [`proxy_enabled`](#proxy_enabled) | `bool` | `false` |
 | [`proxy_port`](#proxy_port) | `int` | `8789` |
 | [`proxy_min_chars`](#proxy_min_chars) | `int` | `2000` |
 | [`proxy_cross_turn_dedup`](#proxy_cross_turn_dedup) | `bool` | `false` |
 | [`proxy_read_lifecycle`](#proxy_read_lifecycle) | `bool` | `false` |
 | [`proxy_read_superseded`](#proxy_read_superseded) | `bool` | `false` |
+| [`proxy_ccr`](#proxy_ccr) | `bool` | `false` |
 | [`proxy_upstream_anthropic`](#proxy_upstream_anthropic) | `str` | `"https://api.anthropic.com"` |
 | [`proxy_upstream_openai`](#proxy_upstream_openai) | `str` | `"https://api.openai.com"` |
 | [`ingest_chunk_size`](#ingest_chunk_size) | `int` | `3072` |
@@ -552,6 +555,18 @@ Compresses prose with the Kompress model (ModernBERT), in `compress_output` and 
 
 Where the Kompress model runs. `cpu` by default, because the GPU is shared with the embedding model and the local model.
 
+## shell_kompress
+
+**Type:** `bool` · **Default:** `false`
+
+Also run the daemon's Kompress over `delegation-core shell` output that goes to the compressor (commands of an RTK Rust module not ported: docker, kubectl, npm...). Off by default: measured on 23/11/2026 on CPU with the model loaded, 0.76 to 0.97 s for 7,600 characters and 17% smaller; the first call takes 4.5 s to load the model. That time is added to the agent's Bash command. Only applies when the daemon answers the `shell`; the local path never loads the model.
+
+## compress_code_ast
+
+**Type:** `bool` · **Default:** `false`
+
+Send source code that automatic detection finds to the AST code compressor (a port of Headroom's CodeAwareCompressor: keeps imports and signatures, trims function bodies, output always parses). Off by default, as in Headroom, which points to the code-graph tools instead. `compress_output(kind="code")` always uses it. Grammars: Python, JavaScript, TypeScript, Go, Rust, Java.
+
 ## proxy_enabled
 
 **Type:** `bool` · **Default:** `false`
@@ -587,6 +602,12 @@ A file read whose file was edited afterwards becomes a marker with the key to re
 **Type:** `bool` · **Default:** `false`
 
 Like `proxy_read_lifecycle`, for a read that was later repeated in full.
+
+## proxy_ccr
+
+**Type:** `bool` · **Default:** `false`
+
+Automatic retrieval of compressed originals (Headroom's CCR). When a request carries a compression marker whose original is in the store, the proxy adds a `delegation_core_retrieve` tool and resolves the model's calls to it (up to 3 rounds), so the client only sees the final answer. Streams keep flowing: only the retrieval call is held back. Off by default: adding a tool changes the request, so the provider's prompt cache restarts the first time it appears. Anthropic Messages and OpenAI Chat Completions; not OpenAI Responses.
 
 ## proxy_upstream_anthropic
 

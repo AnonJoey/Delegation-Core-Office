@@ -296,6 +296,17 @@ class Config:
     # de uma chamada: `delegation-core kompress setup` baixa.
     kompress_enabled: bool = True
     kompress_device: str = "cpu"
+    # A saida de `delegation-core shell` que vai ao compressor (comandos de modulo Rust do RTK nao
+    # portado: docker, kubectl, npm...) passa tambem pelo Kompress do daemon (6.1.3). Desligado por
+    # padrao: medido em 23/11/2026 nesta maquina, em CPU, com o modelo ja carregado, 0,76 a 0,97 s
+    # para 7.600 caracteres e 17% a menos; a primeira chamada leva 4,5 s (carga do modelo). E esse
+    # tempo a mais em cada comando Bash do agente contra os tokens a menos. So vale com o daemon
+    # atendendo o `shell`: o caminho local nunca carrega o modelo.
+    shell_kompress: bool = False
+    # Compressor de codigo por AST (6.3.1, porte do CodeAwareCompressor do Headroom): na deteccao
+    # automatica, codigo-fonte passa por ele. Desligado como no original, que manda usar as
+    # ferramentas do grafo de codigo. `compress_output(kind="code")` usa sempre.
+    compress_code_ast: bool = False
 
     # ── proxy de API (pacote proxy, o proxy do Headroom fundido ao daemon) ───
     # Desligado por padrao: ligado, o agente aponta ANTHROPIC_BASE_URL (ou o
@@ -313,6 +324,12 @@ class Config:
     # no Headroom e o contrario. `proxy_read_superseded` faz o mesmo com o Read refeito inteiro depois.
     proxy_read_lifecycle: bool = False
     proxy_read_superseded: bool = False
+    # Recuperacao automatica do original (6.3.3, CCR do Headroom): quando um pedido traz ponteiro de
+    # compressao com o original na guarda, o proxy acrescenta a ferramenta `delegation_core_retrieve`
+    # e resolve as chamadas a ela (ate 3 rodadas), entregando ao cliente so a resposta final.
+    # Desligado como as outras: acrescentar uma ferramenta muda o pedido, e o cache do provedor
+    # recomeca na primeira vez em que ela entra. Anthropic Messages e OpenAI Chat; Responses nao.
+    proxy_ccr: bool = False
     proxy_upstream_anthropic: str = "https://api.anthropic.com"
     proxy_upstream_openai: str = "https://api.openai.com"
 
