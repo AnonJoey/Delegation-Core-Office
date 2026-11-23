@@ -116,7 +116,28 @@ def _trabalho(conteudo: str, contexto: str, tipo: str, bias: float, guardar: boo
     if str(config.CONFIG_DIR) != config_dir:
         config.CONFIG_DIR = Path(config_dir)
         execucao._CON.clear()
-    return roteador.comprimir(conteudo, contexto, tipo, bias, guardar, kompress=False)
+    # O worker nao grava em `saidas.sqlite3`: junta o que o CCR guardaria e devolve ao daemon,
+    # que e o unico escritor (6.1.2). Antes, cada worker abria o arquivo e gravava sozinho.
+    execucao._COLETOR = []
+    try:
+        r = roteador.comprimir(conteudo, contexto, tipo, bias, guardar, kompress=False)
+        return {"resultado": r, "ccr": execucao._COLETOR}
+    finally:
+        execucao._COLETOR = None
+
+
+def _gravar_do_worker(volta: dict) -> dict:
+    """Grava no processo do daemon o que o worker juntou, e devolve o resultado da compressao.
+
+    A ordem importa: o original vai para a guarda ANTES de o texto comprimido, que aponta para
+    ele (`Retrieve more: hash=...`), chegar a quem pediu."""
+    pendentes = volta.get("ccr") or []
+    if pendentes:
+        from .ccr import Guarda
+        g = Guarda()
+        for chave, conteudo in pendentes:
+            g.put(chave, conteudo)
+    return volta["resultado"]
 
 
 def _metodo_de_inicio() -> str:
@@ -166,8 +187,9 @@ async def comprimir(conteudo: str, contexto: str = "", tipo: str = "auto", bias:
     caiu = False
     try:
         # O ValueError de um `tipo` invalido sai do worker como ele e e tratado pelo chamador.
-        r = await asyncio.get_running_loop().run_in_executor(
+        volta = await asyncio.get_running_loop().run_in_executor(
             _pool(n), _trabalho, conteudo, contexto, tipo, bias, guardar, str(config.CONFIG_DIR))
+        r = await asyncio.to_thread(_gravar_do_worker, volta)
     except (BrokenProcessPool, OSError, RuntimeError) as e:
         logger.warning("pool de compressores indisponivel (%s: %s); usando thread", type(e).__name__, e)
         _descartar()

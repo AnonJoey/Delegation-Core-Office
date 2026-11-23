@@ -23,6 +23,14 @@ class Guarda:
         return c
 
     def put(self, chave: str, conteudo: str) -> None:
+        if execucao._COLETOR is not None:
+            # Worker do pool: quem grava e o daemon, quando o resultado volta (6.1.2).
+            execucao._COLETOR.append((chave, conteudo))
+            return
+        if not execucao.e_escritor():
+            from .. import cliente_fino
+            if cliente_fino.guardar_ccr(chave, conteudo):
+                return
         with execucao._TRAVA:
             c = self._con()
             c.execute("INSERT OR REPLACE INTO ccr VALUES (?, ?, ?)", (chave, conteudo, time.time()))

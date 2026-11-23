@@ -5,6 +5,16 @@ This changelog is derived directly from the canonical versioning recorded across
 
 ---
 
+## Unreleased
+
+### Changed
+
+- **`shell`, `recall` and the `filters hook` go through the daemon, and the daemon is the only writer of `saidas.sqlite3`** (backlog 6.1.2). Each Bash command the agent runs through the hook becomes a new `delegation-core shell` process. Measured on 23/11/2026: 65 to 76 ms per `shell` and 65 ms per hook, 50 ms of which was importing the CLI and building the argparse of every subcommand, plus about 20 ms loading the TOML filters again. The `delegation-core` entry point is now `entrada_rapida`, which recognizes those three forms exactly and asks the daemon (`cliente_fino`, stdlib only, raw HTTP to the local API with the bearer token). The command still runs once, in the agent's own process, directory and environment; the daemon only plans how to run it and filters the captured output. Measured with a test daemon: `make all` 76 to 23 ms, `echo` 75 to 21 ms, hook 65 to 15 ms. `git`, `gh`, `ls`, `grep` and `wc` keep running locally (their modules call the tool more than once) and gain only the faster entry, 67 to 51 ms, with their recall store written by the daemon.
+- **Before, three kinds of process wrote `saidas.sqlite3`:** every `shell`, the daemon (MCP tools and proxy), and each worker of the compression pool, which stored the reversible original (CCR) on its own. Now the workers collect what they would store and the daemon writes it when the result comes back, before handing the compressed text, which points at it, to the caller.
+- **Any failure of the daemon falls back to the previous local path**: daemon down, wrong port or token, a 413 above 32 MB of output, a truncated or non-200 answer, a timeout. A failure after the command ran never runs it again: the output is filtered locally. `DELEGATION_CORE_SEM_DAEMON=1` forces the local path.
+- New local API routes, all behind the bearer token: `POST /api/saidas/plano`, `/api/saidas/exibir`, `/api/saidas/guardar`, `/api/saidas/ccr`, `/api/saidas/recall` and `/api/filtros/reescrever`.
+- Limit: the output-filter hook is not registered by the installer, so on a machine where nobody registered it by hand only explicit `delegation-core shell` calls take this path.
+
 ## v0.17.0 (2026-11-23) - Port of the TEST fork into Office (except OSINT), official English documentation, cores that reported work they never did removed, ingestion fixes
 
 ### Removed (cores that reported work they never did)
