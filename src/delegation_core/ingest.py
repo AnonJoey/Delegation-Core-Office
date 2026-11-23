@@ -13,6 +13,7 @@ import json
 import logging
 import os
 import tempfile
+import unicodedata
 from collections import Counter
 from datetime import datetime
 from pathlib import Path
@@ -110,22 +111,72 @@ def _update_source_entry(source_key: str, entry: dict):
         logger.warning("Could not update registry entry for %s: %s", source_key, e)
 
 
+def _caminho_nfc(caminho) -> str:
+    """Caminho em NFC.
+
+    O macOS pode devolver nomes de pasta em NFD (o "c" seguido do cedilha
+    combinante) e o parametro de quem chama costuma vir em NFC. As duas
+    grafias aparecem iguais na tela e sao strings diferentes: medido em
+    21/11/2026 num Mac, `ingest_forget` respondia `removed_chunks: 0` com
+    30.300 trechos em 1.560 caminhos mortos de uma pasta "Capacitacao".
+    """
+    return unicodedata.normalize("NFC", str(caminho))
+
+
 def _remove_source_entry(source_key: str) -> bool:
     """Tira uma entrada do registro, sob a mesma trava do acrescimo.
 
     Remover sem trava perde update do mesmo jeito que acrescentar: um
     `ingest_forget` correndo junto de um `ingest_folder` pode ressuscitar o
     que acabou de ser removido, ou levar junto o que acabou de ser gravado.
+
+    A chave exata vence. So quando ela nao esta no registro a busca aceita
+    outra forma Unicode do mesmo caminho: no Linux e no Windows dois nomes
+    que diferem so na forma podem coexistir, e o pedido por um nao deve
+    levar o outro.
     """
     try:
         with arquivo_travado(_REGISTRY_FILE):
             fresh = _load_registry()
-            had_entry = fresh.pop(source_key, None) is not None
+            if source_key in fresh:
+                chaves = [source_key]
+            else:
+                alvo = _caminho_nfc(source_key)
+                chaves = [k for k in fresh if _caminho_nfc(k) == alvo]
+            had_entry = bool(chaves)
+            for chave in chaves:
+                del fresh[chave]
             _atomic_write_registry(fresh)
         return had_entry
     except Exception as e:
         logger.warning("Could not remove registry entry for %s: %s", source_key, e)
         return False
+
+
+def _ids_da_fonte(linhas, grafias, pais, forma) -> list:
+    """Ids das linhas que pertencem a fonte, com os caminhos passados por `forma`.
+
+    Pertence quem tem `source_folder` igual a uma das grafias ou `path` igual
+    a uma base ou contido nela (contencao por diretorio, nao `startswith`:
+    "Capacitacao2" nao e atingida por um pedido sobre "Capacitacao").
+    """
+    alvos = {forma(g) for g in grafias}
+    bases = [Path(forma(b)) for b in pais]
+    ids = []
+    for doc_id, meta in linhas:
+        meta = meta or {}
+        if forma(meta.get("source_folder") or "") in alvos:
+            ids.append(doc_id)
+            continue
+        p_str = meta.get("path", "")
+        if p_str:
+            try:
+                p = Path(forma(p_str))
+                if any(p == base or base in p.parents for base in bases):
+                    ids.append(doc_id)
+            except Exception:
+                pass
+    return ids
 
 
 def fontes_do_indice(chroma_dir: Path) -> dict[str, dict[str, str]]:
@@ -926,21 +977,14 @@ class IngestManager:
         removed = 0
         try:
             rows = _paged_get(collection, where={"is_external": "true"}, include=["metadatas"])
-            ids = []
-            for doc_id, meta in zip(rows.get("ids") or [], rows.get("metadatas") or []):
-                meta = meta or {}
-                if meta.get("source_folder") in grafias:
-                    ids.append(doc_id)
-                    continue
-                p_str = meta.get("path", "")
-                if p_str:
-                    try:
-                        p = Path(p_str)
-                        # Exact match or parent directory containment (not loose string startswith)
-                        if any(p == base or base in p.parents for base in pais):
-                            ids.append(doc_id)
-                    except Exception:
-                        pass
+            linhas = list(zip(rows.get("ids") or [], rows.get("metadatas") or []))
+            ids = _ids_da_fonte(linhas, grafias, pais, str)
+            if not ids:
+                # Nada na grafia exata: tenta o mesmo caminho em outra forma
+                # Unicode (ver `_caminho_nfc`). Exata primeiro para que, onde
+                # o sistema de arquivos aceita os dois nomes lado a lado, o
+                # pedido por um nao apague os trechos do outro.
+                ids = _ids_da_fonte(linhas, grafias, pais, _caminho_nfc)
             if ids:
                 # Delete in batches to avoid SQLite variable limits
                 batch_size = 5000
