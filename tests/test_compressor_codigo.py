@@ -26,7 +26,7 @@ RAIZ = Path(__file__).resolve().parent.parent
 
 FONTES = {
     "python": [RAIZ / "src" / "delegation_core"],
-    "javascript": [RAIZ / "dashboard" / "src"],
+    "javascript": [RAIZ / "dashboard" / "src", Path.home() / "Projects" / "openclaw", Path.home() / "Projects" / "grafana" / "public"],
     "typescript": [Path.home() / "Projects" / "openclaw" / "src"],
     "go": [Path.home() / "Projects" / "grafana" / "pkg"],
     "rust": [Path.home() / "Projects" / "rtk" / "src"],
@@ -43,7 +43,8 @@ def _corpus(rnd: random.Random, por_lingua: int = 12) -> list[dict]:
             if not pasta.exists():
                 continue
             for p in pasta.rglob(f"*{EXT[lingua]}"):
-                if "node_modules" in p.parts or ".venv" in p.parts or "headroom_py" in p.parts:
+                if ("node_modules" in p.parts or ".venv" in p.parts or "headroom_py" in p.parts
+                        or "dist" in p.parts or p.name.endswith(".min.js")):
                     continue
                 try:
                     if 1500 < p.stat().st_size < 40000:
