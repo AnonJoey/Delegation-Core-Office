@@ -569,9 +569,6 @@ class _Handler(BaseHTTPRequestHandler):
             self._handle_cores_skills(query)
         elif parsed.path == "/api/cores/skill":
             self._handle_cores_skill_by_id(query)
-        elif parsed.path == "/api/cores/orchestration/telemetry":
-            from .cores.unified_facade import get_cores_bridge
-            self._send_json(get_cores_bridge().get_llm_telemetry())
         elif parsed.path == "/api/cores/hardware":
             from .cores.unified_facade import get_cores_bridge
             self._send_json(get_cores_bridge().get_hardware_metrics())
@@ -709,10 +706,6 @@ class _Handler(BaseHTTPRequestHandler):
             self._handle_cores_sanitize()
         elif parsed.path == "/api/cores/multimodal/convert":
             self._handle_cores_multimodal_convert()
-        elif parsed.path == "/api/cores/multimodal/diagram":
-            self._handle_cores_multimodal_diagram()
-        elif parsed.path == "/api/cores/orchestration/run":
-            self._handle_cores_orchestration_run()
         elif parsed.path == "/api/cores/prune":
             self._handle_cores_prune()
         else:
@@ -855,8 +848,9 @@ class _Handler(BaseHTTPRequestHandler):
                 pass
 
         _cfg.save()
-        from dataclasses import asdict
-        self._send_json({"ok": True, "config": asdict(_cfg)})
+        # A mesma config publica do GET: ate 17/11/2026 esta resposta era `asdict(_cfg)`, com o
+        # token mestre e os tokens de todos os clientes dentro.
+        self._send_json({"ok": True, "config": _config_publico(_cfg)})
 
     def _handle_purge_orphans(self) -> None:
         import os
@@ -1161,51 +1155,6 @@ class _Handler(BaseHTTPRequestHandler):
             return
         from .cores.unified_facade import get_cores_bridge
         res = get_cores_bridge().ingest_multimodal_asset(file_path)
-        self._send_json(res)
-
-    def _handle_cores_multimodal_diagram(self) -> None:
-        data = self._read_json_body()
-        if data is None:
-            return
-        prompt = str(data.get("prompt", "")).strip()
-        if not prompt:
-            self._send_json({"error": "prompt is required"}, status=400)
-            return
-        from .cores.unified_facade import get_cores_bridge
-        res = get_cores_bridge().generate_diagram(prompt)
-        self._send_json(res)
-
-    def _handle_cores_orchestration_run(self) -> None:
-        import asyncio
-        data = self._read_json_body()
-        if data is None:
-            return
-        title = str(data.get("title", "")).strip() or "Dynamic DAG Workflow"
-        raw_steps = data.get("steps") or []
-        
-        steps = []
-        if isinstance(raw_steps, list) and raw_steps:
-            for s in raw_steps:
-                if isinstance(s, dict) and "name" in s:
-                    s_name = str(s["name"])
-                    s_deps = s.get("deps", [])
-                    steps.append({
-                        "name": s_name,
-                        "action": lambda n=s_name: f"executed_{n}",
-                        "deps": s_deps,
-                        "in_tokens": int(s.get("in_tokens", 100)),
-                        "out_tokens": int(s.get("out_tokens", 50))
-                    })
-        if not steps:
-            steps = [
-                {"name": "ingest_context", "action": lambda: "Context ingested", "deps": [], "in_tokens": 150, "out_tokens": 40},
-                {"name": "prune_tokens", "action": lambda: "Tokens pruned via Headroom", "deps": ["ingest_context"], "in_tokens": 110, "out_tokens": 30},
-                {"name": "agent_execute", "action": lambda: "Agent step executed", "deps": ["prune_tokens"], "in_tokens": 280, "out_tokens": 120},
-                {"name": "record_telemetry", "action": lambda: "Telemetry recorded", "deps": ["agent_execute"], "in_tokens": 50, "out_tokens": 25},
-            ]
-        from .cores.unified_facade import get_cores_bridge
-        bridge = get_cores_bridge()
-        res = asyncio.run(bridge.execute_task_workflow(title, steps))
         self._send_json(res)
 
     def _handle_cores_prune(self) -> None:

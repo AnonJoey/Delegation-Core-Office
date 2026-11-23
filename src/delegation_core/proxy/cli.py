@@ -35,5 +35,5 @@ def cmd_proxy(args) -> int:
 
 def registrar(sub) -> dict:
     p = sub.add_parser("proxy", help="API proxy that compresses tool outputs before they reach the model")
-    p.add_argument("acao", choices=["env", "status", "run"])
+    p.add_argument("acao", choices=["env", "status", "run"], help="env prints the variables that point an agent at the proxy; status checks it; run serves it in the foreground")
     return {"proxy": cmd_proxy}

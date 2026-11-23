@@ -19,7 +19,7 @@ mais de `sync_threshold` linhas cai com SIGSEGV.
 |---|---|---|
 | Notas do vault (curadas) | 568 | todas |
 | Notas geradas no vault | 10.023 | todas |
-| Pastas externas ingeridas | 6.365 | 6.356 sim, 9 movidos para `Soteria/Deliverables/_arquivo/2026-10-02` |
+| Pastas externas ingeridas | 6.365 | 6.356 sim, 9 movidos para `Client/Deliverables/_arquivo/2026-10-02` |
 
 Conclusao: nada existe so no indice. Os markdowns do vault sao a fonte da verdade e o
 indice e derivado. Mesmo assim a migracao parte de uma exportacao neutra completa

@@ -141,10 +141,10 @@ def cmd_filters(args) -> int:
 
 def registrar(sub) -> dict:
     p = sub.add_parser("shell", help="Run a shell command and show its output through the RTK filters")
-    p.add_argument("comando", help="the command line, run with /bin/sh -c")
+    p.add_argument("comando", help="the command line, run with sh when available, otherwise the system shell")
     p = sub.add_parser("recall", help="Original output saved when a filter cut it")
-    p.add_argument("hash")
-    p.add_argument("--from", dest="from_line", type=int, default=0)
+    p.add_argument("hash", help="the hash from the recall hint")
+    p.add_argument("--from", dest="from_line", type=int, default=0, help="first line to show (1 = the start)")
     p = sub.add_parser("filters", help="Output filters: list, verify (RTK inline tests), hook (Claude Code PreToolUse)")
-    p.add_argument("acao", choices=["list", "verify", "hook"])
+    p.add_argument("acao", choices=["list", "verify", "hook"], help="list the filters, verify them against RTK's inline tests, or answer as a Claude Code PreToolUse hook")
     return {"shell": cmd_run, "recall": cmd_recall, "filters": cmd_filters}

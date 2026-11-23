@@ -285,14 +285,14 @@ def cmd_backup(args) -> int:
 
 def registrar(sub) -> dict:
     p = sub.add_parser("export", help="Export config (no secrets) and state to a .zip")
-    p.add_argument("path")
+    p.add_argument("path", help="where to write the .zip")
     p.add_argument("--with-vault", action="store_true", help="also pack the vault's markdown")
     p = sub.add_parser("import", help="Import an export .zip (dry run unless --apply)")
-    p.add_argument("path")
+    p.add_argument("path", help="the .zip to import")
     p.add_argument("--map", action="append", help="OLD=NEW path prefix rewrite, repeatable")
     p.add_argument("--vault", default="", help="where to unpack vault notes, if the package has them")
-    p.add_argument("--apply", action="store_true")
+    p.add_argument("--apply", action="store_true", help="write the changes (without it, only report what would change)")
     p = sub.add_parser("backup", help="Rotating local backup of config and state")
-    p.add_argument("--keep", type=int, default=10)
-    p.add_argument("--status", action="store_true")
+    p.add_argument("--keep", type=int, default=10, help="backups to keep")
+    p.add_argument("--status", action="store_true", help="show the existing backups instead of making one")
     return {"export": cmd_export, "import": cmd_import, "backup": cmd_backup}

@@ -314,11 +314,11 @@ def cmd_proposals(args) -> int:
 def registrar(sub) -> dict:
     p = sub.add_parser("proposals", help="Note edits proposed by agents: list/show/apply/reject")
     s = p.add_subparsers(dest="acao", required=True)
-    pl = s.add_parser("list")
-    pl.add_argument("--status", default="pending", choices=["pending", "applied", "rejected", "stale", "all"])
+    pl = s.add_parser("list", help="list proposals")
+    pl.add_argument("--status", default="pending", choices=["pending", "applied", "rejected", "stale", "all"], help="which proposals to list")
     for nome in ("show", "reject"):
-        s.add_parser(nome).add_argument("id")
-    pa = s.add_parser("apply")
-    pa.add_argument("id")
-    pa.add_argument("--force", action="store_true")
+        s.add_parser(nome, help=f"{nome} a proposal").add_argument("id", help="proposal id")
+    pa = s.add_parser("apply", help="apply a proposal to its note")
+    pa.add_argument("id", help="proposal id")
+    pa.add_argument("--force", action="store_true", help="apply even if the note changed since the proposal (otherwise it is marked stale)")
     return {"proposals": cmd_proposals}

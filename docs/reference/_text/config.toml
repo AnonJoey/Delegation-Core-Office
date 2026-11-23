@@ -1,0 +1,502 @@
+# English descriptions of the config.json keys, rendered into docs/reference/config.md by
+# scripts/gerar_referencia.py. Type and default come from the Config dataclass, never from here.
+# Each entry was written from the code that reads the key (file named in the comment above it).
+
+# ── vault ────────────────────────────────────────────────────────────────────
+
+# vault.py, wizard.py
+[vault_path]
+description = "Folder of the Markdown vault the daemon serves. Required: with it empty the program reports that it is not configured. `~` is expanded."
+
+# vault.py, config.resolve_folder
+[vault_folders]
+description = "Folders inside the vault that hold notes. Names are matched case-insensitively, and the real folder name is what the program uses as a path. The wizard writes the vault's own folder names here."
+
+# ── local model ──────────────────────────────────────────────────────────────
+
+# engine.py
+[motor_local]
+description = "Which server runs the local model: `llamacpp` (llama-server with a GGUF file) or `mlx` (mlx_lm.server on Apple Silicon). With `mlx`, `llama_binary` points at mlx_lm.server and `llama_model` is the MLX model folder or its Hugging Face repository id."
+
+# engine.py, config.is_configured
+[llama_binary]
+description = "Path to the local model server binary (llama-server, or mlx_lm.server when `motor_local` is `mlx`). Required unless `engine_mode` is `agent`."
+
+# engine.py, config.is_configured
+[llama_model]
+description = "The local model: a GGUF file for llama.cpp, or an MLX folder or repository id. Required unless `engine_mode` is `agent`."
+
+# engine.py, config.llama_url
+[llama_port]
+description = "Loopback port the local model server listens on."
+
+# engine.py
+[llama_ctx]
+description = "Context window, in tokens, given to the local model server. With `llama_parallel` above 1 it is split between the slots."
+
+# engine.py
+[llama_ngl]
+description = "Model layers offloaded to the GPU. `999` offloads all of them; llama.cpp keeps what does not fit in system memory."
+
+# engine.py
+[llama_parallel]
+description = "Requests the local model server answers at the same time (`--parallel`). `1` does not pass the flag. The context (`llama_ctx`) is divided among the slots."
+
+# engine.py, dispositivos.py
+[llama_device]
+description = "Where the local model runs, independent of where the embedding model runs (`embed_device`). `auto`: llama.cpp decides from `llama_ngl` and free VRAM. `gpu`: the same, and the model process never inherits a hidden GPU. `cpu`: no layers on the GPU, and the GPU is hidden from the model process only."
+
+# engine.py
+[llama_enable_thinking]
+description = "Lets a reasoning model spend its token budget on a private thinking channel. Off by default: a budget that runs out while the model is still thinking comes back as an empty answer with HTTP 200 and no error."
+
+# engine.py
+[llama_queue_concurrency]
+description = "How many requests to the local model may be in flight at once, across every client of the daemon. Raise it only when the model server has matching parallel slots (`llama_parallel`)."
+
+# ── embeddings and search ────────────────────────────────────────────────────
+
+# embeddings.py, wizard.py
+[bge_model]
+description = "Embedding model for search. `BAAI/bge-base-en-v1.5` (English, smaller) or `BAAI/bge-m3` (multilingual, recommended by the wizard for Portuguese or mixed-language notes). Each model has its own collection in the index, so switching keeps the other model's index."
+
+# embeddings.py, config.load
+[search_threshold]
+description = "Minimum similarity for a search result to be returned. When the key is absent from config.json, the measured value for `bge_model` is used instead of the default shown here: 0.55 for bge-base, 0.45 for bge-m3, 0.50 for any other model."
+
+# graphbridge.py, notewriter.py, merger.py
+[merge_threshold]
+description = "Similarity at or above which two notes count as the same topic: a new note is merged into the existing one, and related notes get a wikilink."
+
+# vault.py
+[vault_chunk_size]
+description = "Size, in characters, of the pieces a vault note is split into for indexing. Every piece is embedded separately, so a long note is searchable in full; keep it under the token ceiling of `embed_max_seq_length`."
+
+# vault.py
+[vault_chunk_overlap]
+description = "Characters shared between consecutive pieces of a vault note, so a sentence cut at a boundary is still found."
+
+# embeddings.py
+[embed_max_seq_length]
+description = "Token ceiling the embedding model is run with. Set explicitly because attention memory grows with the square of the sequence: bge-m3's own limit (8192) can exhaust a 16 GB GPU during a reindex. `0` keeps the model's own default."
+
+# embeddings.py
+[embed_batch_size]
+description = "Pieces embedded per batch. Lower it if a reindex runs out of GPU memory."
+
+# embeddings.py, server.py
+[embed_load_timeout_sec]
+description = "Seconds allowed for loading the embedding model. Past it, searches answer with the reason (also shown by `heartbeat`) instead of hanging, and loading continues in the background. `0` removes the limit."
+
+# embeddings.py
+[embed_device]
+description = "Where the embedding model runs: `auto` (the accelerator available), `cpu`, `cuda` or `mps`. Use `cpu` when the embedding model and the local model do not fit on the same GPU."
+
+# embeddings.py
+[embed_backend]
+description = "What computes the embeddings: `torch` (sentence-transformers), `llamacpp` (a llama-server started with `--embeddings`) or `auto`. `auto` uses llama.cpp only when its binary and GGUF file are present, so an update never leaves an existing index without an embedder. The wizard writes `llamacpp` on Apple Silicon."
+
+# embeddings.py
+[embed_llama_binary]
+description = "llama-server used for embeddings when `embed_backend` is `llamacpp`. Empty: the `llama-server` on the PATH. Separate from `llama_binary`, which on a Mac points at mlx_lm.server."
+
+# embeddings.py
+[embed_gguf]
+description = "GGUF file of the embedding model for the llama.cpp backend."
+
+# embeddings.py
+[embed_port]
+description = "Loopback port of the llama-server that serves embeddings."
+
+# vault.py, server.py
+[default_search_scope]
+description = "Scope `search_vault` uses when the caller does not pass one: `notes`, `generated`, `external`, `notes+external` or `all`. Empty decides per vault: `notes+external` when generated code-graph articles are the majority of the vault, `all` otherwise."
+
+# vault.py
+[client_path_roots]
+description = "Folders whose immediate subfolders name a client, so the `client` filter of `search_vault` also reaches ingested files. With `/Work/Acme` here, `/Work/Acme/Nortex/deck.pdf` belongs to client `nortex`. Empty by default: no client is guessed from a path."
+
+# vault.py
+[client_aliases]
+description = "Maps a client name to the canonical one, for names that normalization cannot merge because they are different strings, e.g. `{\"campo-incorporadora\": \"campo\"}`."
+
+# vault.py
+[subkind_weights]
+description = "Multiplier applied to the similarity of each kind of result (`curated`, `chat`, `transcript`, `generated`, `external`). Below 1.0 a kind ranks lower when similarities are close; by default raw transcripts and chats rank slightly below curated notes."
+
+# busca_hibrida.py
+[busca_hibrida]
+description = "Hybrid search in `search_vault`: lexical (BM25) and dense results fused by reciprocal rank and reordered by a cross-encoder. Without the reordering model available, search stays dense, because fusion alone made paraphrased questions worse."
+
+# busca_hibrida.py
+[busca_reordenar]
+description = "Reorders hybrid-search candidates with the cross-encoder. Off, fused results are returned in fusion order."
+
+# busca_hibrida.py, ranqueamento/rerank.py
+[busca_reordenador_modelo]
+description = "Cross-encoder used to reorder results. Empty: `BAAI/bge-reranker-v2-m3`. The model is never downloaded during a search: if it is not in the local cache, search stays dense and `delegation-core doctor` says so."
+
+# busca_hibrida.py
+[busca_reordenador_dispositivo]
+description = "Where the cross-encoder runs. `auto` uses the GPU when 1.5 GB is free at load time and otherwise turns reordering off (on CPU it cost about 5.8 s per query). `cuda` or `cpu` force one."
+
+# busca_hibrida.py
+[busca_profundidade_rerank]
+description = "How many fused candidates the cross-encoder reorders."
+
+# busca_hibrida.py
+[busca_caracteres_rerank]
+description = "Characters of each candidate the cross-encoder reads."
+
+# busca_hibrida.py
+[busca_razao_lexico_dominante]
+description = "When the best lexical match scores at least this many times the second (BM25), it goes to the top regardless of reordering: an exact match, such as a copied phrase or an identifier, that reordering used to bury. `0` turns it off."
+
+# ── synthesis and maintenance ────────────────────────────────────────────────
+
+# engine.py
+[max_tokens]
+description = "Ceiling on tokens the local model may generate for one task."
+
+# synthesizer.py
+[synthesis_enabled]
+description = "Lets the local model synthesize notes (titles, summaries, structure) during maintenance and ingestion. Off, those paths use the extractive fallback."
+
+# synthesizer.py
+[synthesis_lang]
+description = "Language of the synthesis prompts: `en` or `pt`."
+
+# engine.py, calibracao.py
+[budget_mode]
+description = "How generation is capped. `normal`: only `max_tokens`. `cpu`: strict caps so a CPU-only machine stays within the MCP client timeout. `auto`: caps derived from the measured tokens per second and `mcp_timeout_sec`."
+
+# calibracao.py
+[tok_sec]
+description = "Legacy. The measured speed of the local model now lives in `~/.delegation_core/calibracao.json`; this key is read only while that file has never been written, so an older install keeps its calibration."
+
+# engine.py
+[mcp_timeout_sec]
+description = "Time budget, in seconds, that `budget_mode` `auto` keeps generation within (with a 0.70 safety factor)."
+
+# organizer.py
+[quality_threshold]
+description = "Synthesis quality score below which a note is marked for review and later re-synthesized by maintenance."
+
+# organizer.py
+[heal_per_run]
+description = "Maximum number of low-quality notes one maintenance pass re-synthesizes."
+
+# merger.py, vault.py
+[never_merge_folders]
+description = "Folders whose notes are never merged into others or re-synthesized. Always combined with `sessions` and `meetings`, which are protected regardless."
+
+# splitter.py
+[split_min_chars]
+description = "A file at or above this many characters is split into several notes when ingested (by headings when it has them, otherwise by paragraphs). A PDF with more than one page is always split."
+
+# splitter.py
+[split_max_notes]
+description = "Maximum notes one split produces."
+
+# ── engine mode ──────────────────────────────────────────────────────────────
+
+# config.route, engine.py
+[engine_mode]
+description = "Where text generation runs. `local`: the local model does everything. `agent`: no local model; interactive tools return the retrieved material for the calling assistant, and background maintenance uses an extractive fallback. `hybrid`: interactive work goes to the calling assistant, background work (synthesis, healing, ingestion) to the local model, and an interactive input of `hybrid_local_min_chars` or more returns a cost estimate and an offer to run it locally (`use_local=true`). Embeddings and search always run locally."
+
+# config.route
+[hybrid_local_min_chars]
+description = "In `hybrid` mode, interactive inputs at or above this size are not delegated: the tool returns a cost estimate and offers the local model."
+
+# engine.py
+[local_idle_shutdown_sec]
+description = "In `agent` mode, seconds the local model may stay loaded with no queued task before it is unloaded. `0` never unloads. In `local` and `hybrid` modes it does not apply."
+
+# fatos_vault.py, digestao_vault.py, sonho_vault.py
+[local_em_modo_agent]
+description = "In `agent` mode, background jobs that need the local model (fact extraction, transcript digestion, dream) postpone their work and report how much is pending, instead of starting the model. `true` authorizes them to start it; it unloads after `local_idle_shutdown_sec`."
+
+# ── daemon ───────────────────────────────────────────────────────────────────
+
+# server.py
+[server_host]
+description = "Address the daemon listens on. Keep it on loopback: the token guards against other local processes, not against the network."
+
+# server.py, clients.py
+[server_port]
+description = "Port of the daemon's MCP endpoint."
+
+# server.py
+[server_path]
+description = "Path of the MCP endpoint, e.g. `http://127.0.0.1:8797/mcp`."
+
+# auth.py, config.ensure_server_token
+[server_token]
+description = "Master bearer token every client presents. Generated on first start; empty means not generated yet, never unauthenticated. `delegation-core clients --show` prints it."
+
+# escopos.py, auth.py
+[client_tokens]
+description = "Additional tokens, one per client: `{name: {\"token\": ..., \"scope\": \"read\" | \"write\"}}`. A `read` token can only call tools that do not write. Manage with `delegation-core token create`, `list` and `revoke`."
+
+# dashboard_api.py
+[dashboard_port]
+description = "Loopback port of the dashboard's HTTP API, served by the daemon. `0` turns it off."
+
+# server.py
+[loop_watchdog_sec]
+description = "Seconds the daemon's event loop may stay stuck before the process writes every thread's stack to a file and exits, so the service manager starts a fresh one. `0` turns it off."
+
+# ── index ────────────────────────────────────────────────────────────────────
+
+# config.chroma_path, config.sqlite_path, recuperacao.py
+[index_path]
+description = "Where the search index lives. Empty: inside the vault (`.indice_sqlite`), or in `~/.delegation_core/indice_sqlite` when the vault is in a synced folder (OneDrive, iCloud), where a sync client can damage a database it copies mid-write. Automatic index recovery may fill this key by itself."
+
+# config.usa_sqlite, migracao_indice.py
+[index_backend]
+description = "Index storage: `sqlite` (the current one), `chroma` (the old ChromaDB index, needs the `[chroma]` extra) or empty, which picks by what exists on disk and never replaces an index that has data with an empty one. Switch with `delegation-core index-migrate`, not by editing this key."
+
+# daemon.py, cli.py
+[allow_local_index_fallback]
+description = "When no daemon answers, index commands do the work in their own process. Turn this off on a machine where the daemon must be the only writer: the command then refuses instead. `--local` still forces it. A `no_auto_reindex` file in `~/.delegation_core` has the same effect without editing this key."
+
+# ── ingestion ────────────────────────────────────────────────────────────────
+
+# ingest.py
+[ingest_chunk_size]
+description = "Size, in characters, of the pieces an ingested external file is split into."
+
+# ingest.py
+[ingest_chunk_overlap]
+description = "Characters shared between consecutive pieces of an ingested file."
+
+[ingest_dedup_repeated_text]
+description = "Drop runs of lines already seen in the same source from plain-text files (.md, .txt) before chunking, so a rewound or resumed session transcript is indexed once. The oldest copy is kept. Turn off when every file must answer for text it shares with another."
+
+# ingest.py, docs/INGEST_CONFIGURATION.md
+[ingest_sources]
+description = "Named folders and files to ingest, each with `name`, `path` (or `paths`), `recursive`, `enabled` and `exclude`. Empty: `ingest_folder` accepts any path. Once the list has entries, ingestion accepts only enabled sources declared here. `delegation-core ingest --configured` runs them."
+
+# ingest.py
+[ingest_exclude_patterns]
+description = "Patterns skipped by every ingestion: a directory name (`node_modules`), a file pattern (`*.log`) or a path relative to the source (`exports/private/*`)."
+
+# hooks/session_export.py, cli.py
+[session_transcripts]
+description = "Whether the end-of-session hook saves raw transcripts: `{\"mode\": \"automatic\"}` saves every session, `manual` only the next one after `delegation-core session capture-next`, `off` none."
+
+# server.py, config.py
+[web_search_enabled]
+description = "Enables `search_web` (DuckDuckGo). Off by default because it reaches the public internet, outside the local-only design; needs the `[web]` extra (`pip install \"delegation-core[web]\"`)."
+
+# ── links ────────────────────────────────────────────────────────────────────
+
+# linker.py, vault.py
+[external_link_dirs]
+description = "Folders outside the vault whose `.md` files are valid targets of a `[[wikilink]]`, so links to them do not count as broken (for example the memory files of an assistant kept elsewhere)."
+
+# ── history, schedule, alerts ────────────────────────────────────────────────
+
+# historico_vault.py
+[historico_enabled]
+description = "Keeps every version of each note, by content, in `<vault>/.historico`: captured hourly and around relink, maintenance, rename and restore. Enables `vault_note_history`, `vault_note_diff` and `vault_note_restore`."
+
+# vigia.py
+[agenda_enabled]
+description = "Runs the scheduled tasks and the alert rules inside the daemon. Off, neither runs and their tools are hidden."
+
+# vigia.py, agenda/agenda.py
+[agenda_tarefas]
+description = "Replaces the default schedule (see [scheduled tasks](schedule.md)). Each entry has `nome`, `cron`, `acao`, optional `argumentos` and `ligada` (default `true`). `null` uses the defaults; an empty list runs no task."
+
+# vigia.py
+[alertas_desktop]
+description = "Also shows alerts as desktop notifications, through `notify-send` when it exists. Alerts are always logged."
+
+# vigia.py
+[alerta_indice_atrasado]
+description = "Notes changed but not reindexed above which the `indice_atrasado` alert can open."
+
+# vigia.py, boletim.py
+[alerta_processo_parado_dias]
+description = "Days without an update after which an active tracked process counts as stalled, for the `processo_parado` alert and the daily bulletin."
+
+# ── dream, facts, links to code ──────────────────────────────────────────────
+
+# sonho_vault.py
+[recordacao_enabled]
+description = "Logs what every `search_vault` returned and for which question, so the dream pass and `recall_stats` know what the vault is used for."
+
+# sonho_vault.py
+[recordacao_path]
+description = "Database of the search log. Empty: `~/.delegation_core/recordacao.sqlite3`."
+
+# sonho_vault.py
+[achados_path]
+description = "Database of dream findings (pairs where a newer note updates or contradicts an older one). Empty: `~/.delegation_core/achados.sqlite3`."
+
+# sonho_vault.py
+[sonho_enabled]
+description = "The dream pass: the local model compares recent notes with older ones and records the pairs where the newer note updates or contradicts the older. Enables the `dream_*` tools; the nightly run is the `sonho-noturno` task."
+
+# digestao_vault.py
+[digestao_enabled]
+description = "Summarizes raw session transcripts that have no curated session note, with the local model. Enables `digest_transcripts`; the nightly run is the `digestao-noturna` task."
+
+# referencias_vault.py
+[referencias_enabled]
+description = "Detects paths cited in notes that no longer exist on this machine. Enables `vault_dead_refs` and the `dead_refs` marks in `search_vault`. Only POSIX paths are recognized."
+
+# referencias_vault.py
+[referencias_casa]
+description = "Home folder used to expand `~/` in cited paths and to decide what is a local path. Empty: the daemon's own home."
+
+# fatos_vault.py
+[fatos_enabled]
+description = "Extracts durable facts (which port, path, model or version something uses) from notes with the local model. Enables `vault_facts`."
+
+# fatos_vault.py
+[fatos_path]
+description = "Database of extracted facts. Empty: `~/.delegation_core/fatos.sqlite3`."
+
+# fatos_vault.py
+[fatos_pastas]
+description = "Folders whose notes are mined for facts. `null`: Decisions, Fixes, Infrastructure, Procedures, Projects and Tools."
+
+# fatos_vault.py
+[fatos_na_escrita]
+description = "Queues fact extraction for a note right after it is written, when the note is in one of `fatos_pastas`; otherwise facts wait for the nightly `fatos-noturno` task. In `agent` mode the write never starts the local model (see `local_em_modo_agent`)."
+
+# codigo_vault.py
+[codigo_enabled]
+description = "Links notes to the code they cite (functions, classes, files) in built code graphs. Enables `vault_note_code`, `graph_notes` and `graph_changed_notes`."
+
+# codigo_vault.py
+[codigo_path]
+description = "Database of note-to-code links. Empty: `~/.delegation_core/codigo.sqlite3`."
+
+# codigo_vault.py
+[codigo_pastas]
+description = "Folders whose notes are linked to code. `null`: Decisions, Fixes, Infrastructure, Procedures, Projects and Tools."
+
+# ── memory aging and handoff (port of ai-memory) ─────────────────────────────
+
+# envelhecimento_vault.py, docs/ai-memory.md
+[envelhecimento_enabled]
+description = "Memory aging: notes in `envelhecimento_pastas` that nobody reads cool down and are compacted into a summary plus their durable facts; a note with `expires_at:` in its frontmatter goes to `.lixeira/` once expired, anywhere in the vault. Nothing is deleted: the full text is kept in the note history and `vault_note_restore` brings it back. Enables `vault_forget_sweep` and `vault_note_feedback`."
+
+# envelhecimento_vault.py
+[envelhecimento_pastas]
+description = "Folders whose notes can cool down. `null`: only Sessions."
+
+# envelhecimento/retencao.py
+[envelhecimento_meia_vida_dias]
+description = "Half-life, in days, of a note's retention when nobody reads it. Every read holds the note up for a few more weeks."
+
+# envelhecimento_vault.py
+[envelhecimento_limiar_frio]
+description = "Retention below which a note counts as cold. With the defaults, a note never read falls below it in about 80 days."
+
+# envelhecimento_vault.py
+[envelhecimento_compactar]
+description = "A cold note is compacted (rewritten as summary plus durable facts, marked `compacted: true`). Off, a cold note is moved to `.lixeira/` instead."
+
+# envelhecimento_vault.py
+[envelhecimento_path]
+description = "Database of note reads used by aging. Empty: `~/.delegation_core/acessos.sqlite3`."
+
+# passagem_vault.py, docs/ai-memory.md
+[passagem_enabled]
+description = "Handoffs between agents: a typed snapshot of where work stopped, picked up atomically so only one session gets it. Enables the `handoff_*` tools and the handoff parts of the session hooks."
+
+# passagem_vault.py
+[passagem_path]
+description = "Database of handoffs. Empty: `~/.delegation_core/passagens.sqlite3`."
+
+# hooks/session_start_brief.py
+[resumo_niveis_enabled]
+description = "The session-start brief shows changed notes as layered excerpts (deepest first for pinned notes) instead of a list of paths."
+
+# hooks/session_start_brief.py
+[resumo_niveis_orcamento]
+description = "Size, in bytes, of the layered session-start brief."
+
+# ranqueamento_vault.py, docs/ai-memory.md
+[autoridade_enabled]
+description = "Authority in search: canonical notes (decisions, rules, `canonical` tag, pinned) move up and historical or session notes move down. When on, search reads four times more candidates."
+
+# ranqueamento_vault.py
+[autoridade_forca]
+description = "Strength of the authority factor: `1.0` is the full effect, `0.5` half, `0` none."
+
+# ── usage, secrets, governance ───────────────────────────────────────────────
+
+# livro_mcp.py
+[livro_enabled]
+description = "Records every tool call (duration, characters in and out, error, size of the notes the answer points to). Enables `usage_report`."
+
+# livro_mcp.py
+[livro_path]
+description = "Database of the tool-call log. Empty: `~/.delegation_core/livro.sqlite3`."
+
+# segredos/
+[redigir_segredos]
+description = "Covers API keys, tokens, private keys and the server token before a note is written and in every line the `logs` tool returns."
+
+# governanca/
+[tool_policies]
+description = "Per-client tool policies: `{client | \"*\": {tool | \"read\" | \"write\" | \"destructive\": action}}`, where the action is `allow`, `block`, `require_approval` or `rate_limit:N/S`. Empty changes nothing. Manage with `delegation-core policy` and `delegation-core approvals`."
+
+# governanca/
+[approval_ttl_hours]
+description = "Hours a pending approval request stays valid."
+
+# canais.py
+[update_channel]
+description = "What `delegation-core update` installs: `branch` pulls the current branch of the source checkout; `stable` checks out the newest `v*` tag (detached HEAD)."
+
+# adaptador_paperclip.py
+[paperclip_memory_folder]
+description = "Vault folder that holds Paperclip memory records, under `<folder>/paperclip/<company>/`."
+
+# ── output compression and API proxy ─────────────────────────────────────────
+
+# compressao/roteador.py
+[kompress_enabled]
+description = "Compresses prose with the Kompress model (ModernBERT), in `compress_output` and in the API proxy. The model is never downloaded during a call: `delegation-core kompress setup` downloads it."
+
+# compressao/roteador.py
+[kompress_device]
+description = "Where the Kompress model runs. `cpu` by default, because the GPU is shared with the embedding model and the local model."
+
+# proxy/
+[proxy_enabled]
+description = "Starts the API proxy inside the daemon. An agent pointed at `http://127.0.0.1:<proxy_port>` (for example through `ANTHROPIC_BASE_URL`) has its large tool results compressed before they reach the model."
+
+# proxy/
+[proxy_port]
+description = "Loopback port of the API proxy."
+
+# proxy/
+[proxy_min_chars]
+description = "Tool results at or above this size pass through the compressors."
+
+# proxy/dedup.py
+[proxy_cross_turn_dedup]
+description = "A tool-result passage identical to one in an earlier result of the same request becomes a short pointer to it. Changes the bytes sent, so it is off by default."
+
+# proxy/
+[proxy_read_lifecycle]
+description = "A file read whose file was edited afterwards becomes a marker with the key to recover the original (`recall_output`). Changes earlier turns, so it is off by default."
+
+# proxy/
+[proxy_read_superseded]
+description = "Like `proxy_read_lifecycle`, for a read that was later repeated in full."
+
+# proxy/
+[proxy_upstream_anthropic]
+description = "Where the proxy forwards Anthropic API requests."
+
+# proxy/
+[proxy_upstream_openai]
+description = "Where the proxy forwards OpenAI API requests."
