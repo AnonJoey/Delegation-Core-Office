@@ -10,6 +10,9 @@ description = "Memory cap, in MB, for the background graph rebuild started by th
 [DELEGATION_CORE_HOME]
 description = "Folder of the DAG run history (`dag_executions.db`) kept by `dag_run`. Default `~/.delegation_core`. The rest of the program's state always lives in `~/.delegation_core`."
 
+[DELEGATION_CORE_SEM_DAEMON]
+description = "Any non-empty value makes `shell`, `recall` and the `filters hook` skip the daemon and filter in their own process, the path used when the daemon does not answer. For diagnosis, and set by the test suite so no test talks to a real daemon."
+
 [DELEGATION_CORE_SKILLS_DB]
 description = "Path of the skills catalog. Default `~/.delegation_core/skills.db`."
 
