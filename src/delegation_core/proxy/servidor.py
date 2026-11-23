@@ -25,6 +25,25 @@ def _upstream(cfg, caminho: str) -> str:
     return (getattr(cfg, "proxy_upstream_anthropic", "") or "https://api.anthropic.com").rstrip("/")
 
 
+def _pelo_pool(laco, esperas: list):
+    """A compressao do proxy pelo pool do daemon, na classe interativa (6.1.3).
+
+    `reescrever` roda numa thread (as funcoes de reescrita sao sincronas) e chama isto para cada
+    resultado de ferramenta. A chamada volta ao laco do proxy, entra no portao unico do daemon com
+    prioridade INTERATIVA e espera o resultado. Antes, o proxy chamava o roteador direto naquela
+    thread: segurava o GIL do daemon e nao passava pela fila. O Kompress, quando entra, roda no
+    processo do daemon, onde o modelo fica carregado uma vez so."""
+    from ..compressao import pool
+
+    def comprimir(texto: str) -> dict:
+        async def uma():
+            pool.ESPERAS.set(esperas)
+            return await pool.comprimir(texto, "", "auto", 1.0, prioridade=pool.INTERATIVA)
+        return asyncio.run_coroutine_threadsafe(uma(), laco).result()
+
+    return comprimir
+
+
 def criar_app(cfg, livro=None, cliente_http=None):
     from starlette.applications import Starlette
     from starlette.requests import Request
@@ -49,6 +68,7 @@ def criar_app(cfg, livro=None, cliente_http=None):
         t0 = time.monotonic()
         corpo = await req.body()
         rel = None
+        espera = 0.0
         if req.method == "POST" and corpo and "json" in (req.headers.get("content-type") or ""):
             try:
                 dados = json.loads(corpo)
@@ -56,7 +76,11 @@ def criar_app(cfg, livro=None, cliente_http=None):
                 dados = None
             if isinstance(dados, dict):
                 try:
-                    novo, rel = await asyncio.to_thread(reescrever, caminho, dados, minimo, dedup, leitura, superseded)
+                    esperas: list = []
+                    comprimir = _pelo_pool(asyncio.get_running_loop(), esperas)
+                    novo, rel = await asyncio.to_thread(reescrever, caminho, dados, minimo, dedup, leitura, superseded,
+                                                        comprimir)
+                    espera = sum(esperas)
                     if rel.comprimidos or rel.trechos_dedup or rel.leituras_obsoletas:
                         corpo = json.dumps(novo, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
                 except Exception as e:  # noqa: BLE001 - comprimir e acessorio: falhou, vai o original
@@ -74,7 +98,7 @@ def criar_app(cfg, livro=None, cliente_http=None):
         if rel is not None and livro is not None and rel.blocos:
             try:
                 livro.registrar(f"proxy:{rel.formato}", time.monotonic() - t0, rel.chars_antes, rel.chars_depois,
-                                cliente=req.headers.get("user-agent", "")[:60])
+                                cliente=req.headers.get("user-agent", "")[:60], espera=espera)
             except Exception:  # noqa: BLE001
                 pass
         if rel is not None and (rel.comprimidos or rel.trechos_dedup or rel.leituras_obsoletas):

@@ -296,6 +296,13 @@ class Config:
     # de uma chamada: `delegation-core kompress setup` baixa.
     kompress_enabled: bool = True
     kompress_device: str = "cpu"
+    # A saida de `delegation-core shell` que vai ao compressor (comandos de modulo Rust do RTK nao
+    # portado: docker, kubectl, npm...) passa tambem pelo Kompress do daemon (6.1.3). Desligado por
+    # padrao: medido em 23/11/2026 nesta maquina, em CPU, com o modelo ja carregado, 0,76 a 0,97 s
+    # para 7.600 caracteres e 17% a menos; a primeira chamada leva 4,5 s (carga do modelo). E esse
+    # tempo a mais em cada comando Bash do agente contra os tokens a menos. So vale com o daemon
+    # atendendo o `shell`: o caminho local nunca carrega o modelo.
+    shell_kompress: bool = False
 
     # ── proxy de API (pacote proxy, o proxy do Headroom fundido ao daemon) ───
     # Desligado por padrao: ligado, o agente aponta ANTHROPIC_BASE_URL (ou o

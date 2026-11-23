@@ -70,9 +70,13 @@ class LivroMiddleware(Middleware):
         self.cfg = cfg
 
     async def on_call_tool(self, context: MiddlewareContext, call_next):
+        from .compressao import pool
         t0 = time.monotonic()
         erro = ""
         resultado = None
+        # A ferramenta que comprime anota aqui quanto esperou na fila do pool (6.1.3).
+        esperas: list = []
+        marca = pool.ESPERAS.set(esperas)
         try:
             resultado = await call_next(context)
             return resultado
@@ -80,12 +84,14 @@ class LivroMiddleware(Middleware):
             erro = type(e).__name__
             raise
         finally:
+            pool.ESPERAS.reset(marca)
             try:
-                self._lancar(context, resultado, time.monotonic() - t0, erro)
+                self._lancar(context, resultado, time.monotonic() - t0, erro,
+                             sum(esperas) if esperas else None)
             except Exception as e:  # noqa: BLE001
                 logger.debug("livro nao lancou esta chamada: %s", e)
 
-    def _lancar(self, context, resultado, segundos: float, erro: str) -> None:
+    def _lancar(self, context, resultado, segundos: float, erro: str, espera: float | None = None) -> None:
         lv = livro(self.cfg)
         if lv is None:
             return
@@ -106,4 +112,5 @@ class LivroMiddleware(Middleware):
         if info is not None:
             cliente = getattr(info, "name", "") or ""
         lv.registrar(nome, segundos, len(json.dumps(args, ensure_ascii=False, default=str)), len(texto),
-                     cliente=cliente, chars_apontados=chars_apontados(self.cfg, texto), erro=erro)
+                     cliente=cliente, chars_apontados=chars_apontados(self.cfg, texto), erro=erro,
+                     espera=espera)
