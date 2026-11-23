@@ -320,6 +320,12 @@ class Config:
     # no Headroom e o contrario. `proxy_read_superseded` faz o mesmo com o Read refeito inteiro depois.
     proxy_read_lifecycle: bool = False
     proxy_read_superseded: bool = False
+    # Recuperacao automatica do original (6.3.3, CCR do Headroom): quando um pedido traz ponteiro de
+    # compressao com o original na guarda, o proxy acrescenta a ferramenta `delegation_core_retrieve`
+    # e resolve as chamadas a ela (ate 3 rodadas), entregando ao cliente so a resposta final.
+    # Desligado como as outras: acrescentar uma ferramenta muda o pedido, e o cache do provedor
+    # recomeca na primeira vez em que ela entra. Anthropic Messages e OpenAI Chat; Responses nao.
+    proxy_ccr: bool = False
     proxy_upstream_anthropic: str = "https://api.anthropic.com"
     proxy_upstream_openai: str = "https://api.openai.com"
 

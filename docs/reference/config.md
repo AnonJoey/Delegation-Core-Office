@@ -3,7 +3,7 @@
 
 # Configuration keys (`config.json`)
 
-`~/.delegation_core/config.json` accepts **119 keys**. A key that is absent takes the
+`~/.delegation_core/config.json` accepts **120 keys**. A key that is absent takes the
 default below; a key the program does not know is ignored, and `delegation-core doctor`
 reports it. Paths may start with `~`.
 
@@ -83,6 +83,7 @@ reports it. Paths may start with `~`.
 | [`proxy_cross_turn_dedup`](#proxy_cross_turn_dedup) | `bool` | `false` |
 | [`proxy_read_lifecycle`](#proxy_read_lifecycle) | `bool` | `false` |
 | [`proxy_read_superseded`](#proxy_read_superseded) | `bool` | `false` |
+| [`proxy_ccr`](#proxy_ccr) | `bool` | `false` |
 | [`proxy_upstream_anthropic`](#proxy_upstream_anthropic) | `str` | `"https://api.anthropic.com"` |
 | [`proxy_upstream_openai`](#proxy_upstream_openai) | `str` | `"https://api.openai.com"` |
 | [`ingest_chunk_size`](#ingest_chunk_size) | `int` | `3072` |
@@ -594,6 +595,12 @@ A file read whose file was edited afterwards becomes a marker with the key to re
 **Type:** `bool` · **Default:** `false`
 
 Like `proxy_read_lifecycle`, for a read that was later repeated in full.
+
+## proxy_ccr
+
+**Type:** `bool` · **Default:** `false`
+
+Automatic retrieval of compressed originals (Headroom's CCR). When a request carries a compression marker whose original is in the store, the proxy adds a `delegation_core_retrieve` tool and resolves the model's calls to it (up to 3 rounds), so the client only sees the final answer. Streams keep flowing: only the retrieval call is held back. Off by default: adding a tool changes the request, so the provider's prompt cache restarts the first time it appears. Anthropic Messages and OpenAI Chat Completions; not OpenAI Responses.
 
 ## proxy_upstream_anthropic
 

@@ -496,6 +496,9 @@ description = "A file read whose file was edited afterwards becomes a marker wit
 [proxy_read_superseded]
 description = "Like `proxy_read_lifecycle`, for a read that was later repeated in full."
 
+[proxy_ccr]
+description = "Automatic retrieval of compressed originals (Headroom's CCR). When a request carries a compression marker whose original is in the store, the proxy adds a `delegation_core_retrieve` tool and resolves the model's calls to it (up to 3 rounds), so the client only sees the final answer. Streams keep flowing: only the retrieval call is held back. Off by default: adding a tool changes the request, so the provider's prompt cache restarts the first time it appears. Anthropic Messages and OpenAI Chat Completions; not OpenAI Responses."
+
 # proxy/
 [proxy_upstream_anthropic]
 description = "Where the proxy forwards Anthropic API requests."
