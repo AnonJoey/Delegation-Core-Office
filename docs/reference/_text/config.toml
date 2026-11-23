@@ -469,6 +469,9 @@ description = "Compresses prose with the Kompress model (ModernBERT), in `compre
 [kompress_device]
 description = "Where the Kompress model runs. `cpu` by default, because the GPU is shared with the embedding model and the local model."
 
+[compress_code_ast]
+description = "Send source code that automatic detection finds to the AST code compressor (a port of Headroom's CodeAwareCompressor: keeps imports and signatures, trims function bodies, output always parses). Off by default, as in Headroom, which points to the code-graph tools instead. `compress_output(kind=\"code\")` always uses it. Grammars: Python, JavaScript, TypeScript, Go, Rust, Java."
+
 # proxy/
 [proxy_enabled]
 description = "Starts the API proxy inside the daemon. An agent pointed at `http://127.0.0.1:<proxy_port>` (for example through `ANTHROPIC_BASE_URL`) has its large tool results compressed before they reach the model."

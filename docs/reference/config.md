@@ -3,7 +3,7 @@
 
 # Configuration keys (`config.json`)
 
-`~/.delegation_core/config.json` accepts **118 keys**. A key that is absent takes the
+`~/.delegation_core/config.json` accepts **119 keys**. A key that is absent takes the
 default below; a key the program does not know is ignored, and `delegation-core doctor`
 reports it. Paths may start with `~`.
 
@@ -76,6 +76,7 @@ reports it. Paths may start with `~`.
 | [`paperclip_memory_folder`](#paperclip_memory_folder) | `str` | `"Reference"` |
 | [`kompress_enabled`](#kompress_enabled) | `bool` | `true` |
 | [`kompress_device`](#kompress_device) | `str` | `"cpu"` |
+| [`compress_code_ast`](#compress_code_ast) | `bool` | `false` |
 | [`proxy_enabled`](#proxy_enabled) | `bool` | `false` |
 | [`proxy_port`](#proxy_port) | `int` | `8789` |
 | [`proxy_min_chars`](#proxy_min_chars) | `int` | `2000` |
@@ -551,6 +552,12 @@ Compresses prose with the Kompress model (ModernBERT), in `compress_output` and 
 **Type:** `str` · **Default:** `"cpu"`
 
 Where the Kompress model runs. `cpu` by default, because the GPU is shared with the embedding model and the local model.
+
+## compress_code_ast
+
+**Type:** `bool` · **Default:** `false`
+
+Send source code that automatic detection finds to the AST code compressor (a port of Headroom's CodeAwareCompressor: keeps imports and signatures, trims function bodies, output always parses). Off by default, as in Headroom, which points to the code-graph tools instead. `compress_output(kind="code")` always uses it. Grammars: Python, JavaScript, TypeScript, Go, Rust, Java.
 
 ## proxy_enabled
 

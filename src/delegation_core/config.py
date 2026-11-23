@@ -296,6 +296,10 @@ class Config:
     # de uma chamada: `delegation-core kompress setup` baixa.
     kompress_enabled: bool = True
     kompress_device: str = "cpu"
+    # Compressor de codigo por AST (6.3.1, porte do CodeAwareCompressor do Headroom): na deteccao
+    # automatica, codigo-fonte passa por ele. Desligado como no original, que manda usar as
+    # ferramentas do grafo de codigo. `compress_output(kind="code")` usa sempre.
+    compress_code_ast: bool = False
 
     # ── proxy de API (pacote proxy, o proxy do Headroom fundido ao daemon) ───
     # Desligado por padrao: ligado, o agente aponta ANTHROPIC_BASE_URL (ou o
