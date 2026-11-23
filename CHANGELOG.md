@@ -5,6 +5,13 @@ This changelog is derived directly from the canonical versioning recorded across
 
 ---
 
+## Unreleased
+
+### Fixed
+
+- **The Windows installer failed on upgrade before installing anything.** `install.py` upgraded pip by running the venv's `pip.exe`, and Windows does not let a running `pip.exe` replace itself, so the very first step exited with `ERROR: To modify pip, please run ... python.exe -m pip` and the package stayed at the old version. Measured on 23/11/2026 upgrading v0.16.0 to v0.17.0. Every pip call now goes through `python -m pip`; `tests/test_install_py.py` checks the command.
+- **`clients --claude-desktop` wrote to a file the Microsoft Store build of Claude Desktop does not read.** The Store app is an MSIX package and Windows redirects its `AppData/Roaming` to `AppData/Local/Packages/Claude_<id>/LocalCache/Roaming`; the command wrote to the real Roaming, answered `already-configured`, and Desktop kept loading its other MCP servers but not delegation-core. `claude_desktop_config_path()` now uses the package's folder when it exists, which also covers `post-install`, the wizard and the client registry. `tests/test_claude_desktop_da_store.py`: 2 of its 5 cases fail without the fix.
+
 ## v0.17.0 (2026-11-23) - Port of the TEST fork into Office (except OSINT), official English documentation, cores that reported work they never did removed, ingestion fixes
 
 ### Removed (cores that reported work they never did)

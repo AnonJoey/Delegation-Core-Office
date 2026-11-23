@@ -65,11 +65,35 @@ CODEX_HOOKS = Path.home() / ".codex" / "hooks.json"
 ANTIGRAVITY_CONFIG = Path.home() / ".gemini" / "config" / "mcp_config.json"
 
 
+def _pasta_do_claude_da_store() -> Path | None:
+    """A pasta de configuracao do Claude Desktop instalado pela Microsoft Store.
+
+    O app da Store e um pacote MSIX, e o Windows redireciona o `AppData/Roaming`
+    dele para `AppData/Local/Packages/Claude_<id>/LocalCache/Roaming`. Um
+    processo de fora do pacote, como este, grava no Roaming de verdade, que o app
+    nao le enquanto a copia redirecionada existir. Medido em 23/11/2026: o
+    `clients --claude-desktop` respondia `already-configured` sobre o Roaming, o
+    Desktop carregava os outros servidores e nao o delegation-core.
+
+    `LocalCache/Roaming/Claude` so existe depois que o app rodou uma vez; antes
+    disso o Roaming normal continua sendo o caminho.
+    """
+    pacotes = Path.home() / "AppData" / "Local" / "Packages"
+    for pacote in sorted(pacotes.glob("Claude_*")):
+        pasta = pacote / "LocalCache" / "Roaming" / "Claude"
+        if pasta.is_dir():
+            return pasta
+    return None
+
+
 def claude_desktop_config_path() -> Path:
     system = platform.system()
     if system == "Darwin":
         return Path.home() / "Library" / "Application Support" / "Claude" / "claude_desktop_config.json"
     elif system == "Windows":
+        da_store = _pasta_do_claude_da_store()
+        if da_store is not None:
+            return da_store / "claude_desktop_config.json"
         return Path.home() / "AppData" / "Roaming" / "Claude" / "claude_desktop_config.json"
     else:
         return Path.home() / ".config" / "Claude" / "claude_desktop_config.json"
