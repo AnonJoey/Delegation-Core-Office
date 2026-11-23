@@ -32,7 +32,11 @@ EXCECOES = {
     # Do fork (filtros de saida e test-drive). Os filtros rodam como comando de shell dentro do
     # terminal do usuario, que ja tem console, e herdam esse terminal; os modulos do RTK usam
     # /bin/sh e nunca foram validados no Windows.
-    ("cli.py", "cmd_run"): "filtro de saida: roda o comando por /bin/sh dentro do terminal do usuario, so POSIX",
+    # 6.1.2: o comando do `shell` passou do `cli.cmd_run` para `cliente_fino.rodar`, usado pelo
+    # cliente fino e pelo caminho local. O motivo antigo dizia "so POSIX", o que deixou de valer em
+    # 17/11, quando sem `sh` o comando passou a ir ao `cmd.exe`: o que segura a excecao e que o
+    # `shell` roda dentro do Bash do agente, que tem console, e o modo direto herda esse stderr.
+    ("cliente_fino.py", "rodar"): "filtro de saida: roda o comando do agente dentro do terminal do agente, que tem console, e herda o stderr dele",
     ("__init__.py", "argumentos_do_shell"): "printf por /bin/sh, so POSIX",
     ("ambiente.py", "capturar_bytes"): "modulo do RTK: herda o terminal do usuario, que ja tem console",
     ("ambiente.py", "repassar"): "modulo do RTK: escreve no terminal do usuario",

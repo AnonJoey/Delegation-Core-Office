@@ -616,7 +616,11 @@ class _Handler(BaseHTTPRequestHandler):
                 break
             remaining -= len(chunk)
 
-    def _read_json_body(self) -> dict | None:
+    #: Teto das rotas de saida de comando (6.1.2): a saida de um build ou de um log passa de 1 MB.
+    #: Acima disto o cliente fino recebe 413 e filtra no proprio processo, sem perder nada.
+    _MAX_SAIDA_BYTES = 32_000_000
+
+    def _read_json_body(self, limite: int | None = None) -> dict | None:
         """Parse the request body as JSON. Returns None (and has already sent an
         error response) if the body is missing, oversized, or not valid JSON —
         callers should return immediately when this returns None."""
@@ -624,7 +628,7 @@ class _Handler(BaseHTTPRequestHandler):
         if length <= 0:
             self._send_json({"error": "missing request body"}, status=400)
             return None
-        if length > self._MAX_BODY_BYTES:
+        if length > (limite or self._MAX_BODY_BYTES):
             # Answer, but read the body first. Closing with unread bytes still in
             # the socket makes the client see a connection reset instead of the
             # 413 — the rejection arrives as a transport failure, which is the
@@ -645,7 +649,66 @@ class _Handler(BaseHTTPRequestHandler):
             return None
         return data
 
+    def _rota_saidas(self, caminho: str) -> None:
+        """As rotas do cliente fino do `shell`, do `recall` e do hook (6.1.2).
+
+        Rodam no processo do daemon, que assim e o unico escritor de `saidas.sqlite3`. O daemon
+        nunca roda o comando do agente: so decide como rodar (`plano`) e filtra a saida que o
+        cliente ja capturou (`exibir`)."""
+        from .filtros_saida import execucao, servico
+        data = self._read_json_body(self._MAX_SAIDA_BYTES)
+        if data is None:
+            return
+        comando = data.get("comando")
+        if caminho == "/api/saidas/plano":
+            if not isinstance(comando, str) or not comando.strip():
+                self._send_json({"error": "comando is required"}, status=400)
+                return
+            self._send_json(servico.plano(comando))
+        elif caminho == "/api/saidas/exibir":
+            modo, saida, codigo = data.get("modo"), data.get("saida"), data.get("codigo")
+            if (not isinstance(comando, str) or modo not in ("modulo", "toml", "rota", "direto")
+                    or not isinstance(saida, str) or not isinstance(codigo, int) or isinstance(codigo, bool)):
+                self._send_json({"error": "comando, modo, saida and codigo (int) are required"}, status=400)
+                return
+            # O Kompress so roda aqui, no daemon, onde o modelo fica carregado uma vez (6.1.3).
+            r = servico.exibir(comando, modo, saida, codigo,
+                               kompress=bool(getattr(_cfg, "shell_kompress", False)))
+            self._send_json({"output": r.get("output", saida)})
+        elif caminho == "/api/saidas/guardar":
+            conteudo, codigo, ate = data.get("conteudo"), data.get("codigo"), data.get("mostrado_ate", 1)
+            if (not isinstance(conteudo, str) or not isinstance(comando, str) or not isinstance(ate, int)
+                    or (codigo is not None and not isinstance(codigo, int))):
+                self._send_json({"error": "conteudo, comando and mostrado_ate are required"}, status=400)
+                return
+            self._send_json({"guardado": execucao.guardar(conteudo, comando, codigo, ate)})
+        elif caminho == "/api/saidas/ccr":
+            chave, conteudo = data.get("chave"), data.get("conteudo")
+            if not isinstance(chave, str) or not chave or not isinstance(conteudo, str):
+                self._send_json({"error": "chave and conteudo are required"}, status=400)
+                return
+            from .compressao.ccr import Guarda
+            Guarda().put(chave, conteudo)
+            self._send_json({"ok": True})
+        elif caminho == "/api/saidas/recall":
+            h, a_partir = data.get("hash"), data.get("from", 0)
+            if not isinstance(h, str) or not h or not isinstance(a_partir, int):
+                self._send_json({"error": "hash is required"}, status=400)
+                return
+            r = execucao.recuperar(h, a_partir)
+            self._send_json({"found": False} if r is None else dict(r, found=True))
+        elif caminho == "/api/filtros/reescrever":
+            from .filtros_saida.cli import reescrever
+            payload, executavel = data.get("payload"), data.get("executavel", "delegation-core")
+            if not isinstance(payload, dict) or not isinstance(executavel, str):
+                self._send_json({"error": "payload is required"}, status=400)
+                return
+            self._send_json({"resposta": reescrever(payload, executavel)})
+
     def _route_post(self, parsed) -> None:
+        if parsed.path.startswith(("/api/saidas/", "/api/filtros/")):
+            self._rota_saidas(parsed.path)
+            return
         if parsed.path == "/api/vault/note/rename":
             self._handle_note_rename()
         elif parsed.path == "/api/vault/note/create":

@@ -1,4 +1,4 @@
-from .cli import main
+from .entrada_rapida import main
 
 # SystemExit com o retorno: sem isto, `python -m delegation_core` saia 0 mesmo
 # quando o comando falhava (achado pelo teste do `shell`, 05/10/2026). O

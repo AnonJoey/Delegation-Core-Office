@@ -3312,6 +3312,11 @@ def run_server(cfg: Config):
         for erro in _vigia.erros_de_config:
             logger.warning("agenda_tarefas: %s", erro)
 
+    # Este processo e o unico escritor de `saidas.sqlite3` (6.1.2): o `shell`, o hook e os workers
+    # do pool pedem a ele. Vem antes do proxy e da API local, que gravam por aqui.
+    from .filtros_saida import execucao as _execucao_saidas
+    _execucao_saidas.marcar_escritor()
+
     # Proxy de API (pacote proxy): desligado por padrao, no mesmo processo.
     if getattr(cfg, "proxy_enabled", False):
         try:
