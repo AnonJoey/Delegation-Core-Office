@@ -34,6 +34,9 @@ class Relatorio:
     trechos_dedup: int = 0
     #: Reads obsoletos trocados por marcador (proxy/leitura.py).
     leituras_obsoletas: int = 0
+    #: Como comprimir um texto: `(texto) -> resultado do roteador`. None: o roteador direto, nesta
+    #: thread. O servidor do proxy passa o pool do daemon, na classe interativa (6.1.3).
+    comprimir: object = field(default=None, repr=False, compare=False)
 
 
 def comprimir_texto(texto: str, minimo: int, rel: Relatorio) -> str:
@@ -49,8 +52,11 @@ def comprimir_texto(texto: str, minimo: int, rel: Relatorio) -> str:
         if pronto is not None:
             _MEMO.move_to_end(chave)
     if pronto is None:
-        from ..compressao.roteador import comprimir
-        r = comprimir(texto, "", "auto", 1.0)
+        if rel.comprimir is not None:
+            r = rel.comprimir(texto)
+        else:
+            from ..compressao.roteador import comprimir
+            r = comprimir(texto, "", "auto", 1.0)
         pronto = r["output"]
         rel.compressores[r["compressor"]] = rel.compressores.get(r["compressor"], 0) + 1
         with _TRAVA:
@@ -165,8 +171,8 @@ def _leitura(corpo: dict, rel: Relatorio, superseded: bool) -> dict:
 
 
 def reescrever(caminho: str, corpo: dict, minimo: int, dedup: bool = False, leitura: bool = False,
-               superseded: bool = False) -> tuple[dict, Relatorio]:
-    rel = Relatorio()
+               superseded: bool = False, comprimir=None) -> tuple[dict, Relatorio]:
+    rel = Relatorio(comprimir=comprimir)
     f = ROTAS.get(caminho.rstrip("/"))
     if f is None:
         return corpo, rel

@@ -29,7 +29,8 @@ import logging
 import multiprocessing
 import os
 import threading
-import weakref
+import contextvars
+import time
 from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures.process import BrokenProcessPool
 from pathlib import Path
@@ -47,52 +48,80 @@ INTERATIVA, LOTE = 0, 1
 
 
 class _Portao:
-    """Fila por prioridade na frente dos workers. Vive no laco de eventos, sem travas: so o laco a toca."""
+    """Fila por prioridade na frente dos workers, UMA para o daemon inteiro (6.1.3).
+
+    Ate 23/11/2026 havia um portao por laco de eventos. O proxy roda num laco proprio (uvicorn,
+    noutra thread) e o MCP noutro, entao a prioridade de um nunca competia com a do outro: cada
+    um tinha a sua fila e as mesmas vagas. Agora o portao e unico e atravessa threads: a trava
+    guarda a fila e as vagas, e a vaga chega a quem espera pelo laco dele
+    (`call_soon_threadsafe`). Quem desiste, ou cujo laco acabou, passa a vaga adiante."""
 
     def __init__(self, vagas: int):
         self.vagas = vagas
         self.livres = vagas
         self._fila: list = []
         self._ordem = itertools.count()
+        self._trava = threading.Lock()
 
     async def entrar(self, prioridade: int) -> None:
-        if self.livres > 0 and not self._fila:
-            self.livres -= 1
-            return
-        vez = asyncio.get_running_loop().create_future()
-        heapq.heappush(self._fila, (prioridade, next(self._ordem), vez))
+        laco = asyncio.get_running_loop()
+        with self._trava:
+            if self.livres > 0 and not self._fila:
+                self.livres -= 1
+                return
+            vez = laco.create_future()
+            heapq.heappush(self._fila, (prioridade, next(self._ordem), laco, vez))
         try:
             await vez
         except asyncio.CancelledError:
-            # Quem ja recebeu a vaga e foi cancelado antes de usa-la passa a vaga adiante.
+            # A vaga chegou e a tarefa foi cancelada antes de usa-la: a vaga vai adiante.
             if vez.done() and not vez.cancelled():
                 self.sair()
             raise
 
     def sair(self) -> None:
-        while self._fila:
-            _, _, vez = heapq.heappop(self._fila)
-            if not vez.cancelled():
-                vez.set_result(None)
-                return
-        self.livres += 1
+        while True:
+            with self._trava:
+                if not self._fila:
+                    self.livres += 1
+                    return
+                _, _, laco, vez = heapq.heappop(self._fila)
+            if vez.cancelled():
+                continue
+            try:
+                laco.call_soon_threadsafe(self._dar, vez)
+            except RuntimeError:
+                continue   # o laco de quem esperava ja fechou: a vaga vai ao proximo
+            return
+
+    def _dar(self, vez) -> None:
+        """Roda no laco de quem espera. Se ele desistiu nesse meio-tempo, a vaga segue."""
+        if vez.cancelled():
+            self.sair()
+        else:
+            vez.set_result(None)
 
     @property
     def esperando(self) -> int:
-        return sum(1 for _, _, v in self._fila if not v.cancelled())
+        with self._trava:
+            return sum(1 for _, _, _, v in self._fila if not v.cancelled())
 
 
-_PORTOES: "weakref.WeakKeyDictionary" = weakref.WeakKeyDictionary()
+_PORTAO: _Portao | None = None
+
+#: Onde `comprimir` anota quanto cada chamada esperou por um worker, em segundos. Quem quer saber
+#: (o livro, para cada ferramenta MCP; o proxy, para cada pedido) poe uma lista aqui antes e le
+#: depois. Lista, e nao numero: a tarefa filha copia o contexto, mas a lista e a mesma.
+ESPERAS: contextvars.ContextVar[list | None] = contextvars.ContextVar("espera_do_pool", default=None)
 
 
 def _portao(n: int) -> _Portao:
-    """O portao do laco de eventos de agora (um por laco: os testes sobem um laco por chamada)."""
-    laco = asyncio.get_running_loop()
-    p = _PORTOES.get(laco)
-    if p is None or p.vagas != n:
-        p = _Portao(n)
-        _PORTOES[laco] = p
-    return p
+    """O portao do daemon. Recriado so quando o numero de workers muda (os testes mudam)."""
+    global _PORTAO
+    with _TRAVA:
+        if _PORTAO is None or _PORTAO.vagas != n:
+            _PORTAO = _Portao(n)
+        return _PORTAO
 
 
 def workers() -> int:
@@ -166,8 +195,11 @@ def _descartar() -> None:
 
 
 def encerrar() -> None:
-    """Fecha o pool, para quem sai e para os testes."""
+    """Fecha o pool e esquece o portao, para quem sai e para os testes."""
+    global _PORTAO
     _descartar()
+    with _TRAVA:
+        _PORTAO = None
 
 
 def _candidato_a_kompress(r: dict) -> bool:
@@ -183,7 +215,11 @@ async def comprimir(conteudo: str, contexto: str = "", tipo: str = "auto", bias:
     if n == 0:
         return await asyncio.to_thread(roteador.comprimir, conteudo, contexto, tipo, bias, guardar, kompress)
     portao = _portao(n)
+    t0 = time.monotonic()
     await portao.entrar(prioridade)
+    esperas = ESPERAS.get()
+    if esperas is not None:
+        esperas.append(time.monotonic() - t0)
     caiu = False
     try:
         # O ValueError de um `tipo` invalido sai do worker como ele e e tratado pelo chamador.

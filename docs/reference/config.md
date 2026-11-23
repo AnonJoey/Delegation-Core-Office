@@ -3,7 +3,7 @@
 
 # Configuration keys (`config.json`)
 
-`~/.delegation_core/config.json` accepts **118 keys**. A key that is absent takes the
+`~/.delegation_core/config.json` accepts **119 keys**. A key that is absent takes the
 default below; a key the program does not know is ignored, and `delegation-core doctor`
 reports it. Paths may start with `~`.
 
@@ -76,6 +76,7 @@ reports it. Paths may start with `~`.
 | [`paperclip_memory_folder`](#paperclip_memory_folder) | `str` | `"Reference"` |
 | [`kompress_enabled`](#kompress_enabled) | `bool` | `true` |
 | [`kompress_device`](#kompress_device) | `str` | `"cpu"` |
+| [`shell_kompress`](#shell_kompress) | `bool` | `false` |
 | [`proxy_enabled`](#proxy_enabled) | `bool` | `false` |
 | [`proxy_port`](#proxy_port) | `int` | `8789` |
 | [`proxy_min_chars`](#proxy_min_chars) | `int` | `2000` |
@@ -551,6 +552,12 @@ Compresses prose with the Kompress model (ModernBERT), in `compress_output` and 
 **Type:** `str` · **Default:** `"cpu"`
 
 Where the Kompress model runs. `cpu` by default, because the GPU is shared with the embedding model and the local model.
+
+## shell_kompress
+
+**Type:** `bool` · **Default:** `false`
+
+Also run the daemon's Kompress over `delegation-core shell` output that goes to the compressor (commands of an RTK Rust module not ported: docker, kubectl, npm...). Off by default: measured on 23/11/2026 on CPU with the model loaded, 0.76 to 0.97 s for 7,600 characters and 17% smaller; the first call takes 4.5 s to load the model. That time is added to the agent's Bash command. Only applies when the daemon answers the `shell`; the local path never loads the model.
 
 ## proxy_enabled
 

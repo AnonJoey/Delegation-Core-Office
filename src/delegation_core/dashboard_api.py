@@ -671,7 +671,9 @@ class _Handler(BaseHTTPRequestHandler):
                     or not isinstance(saida, str) or not isinstance(codigo, int) or isinstance(codigo, bool)):
                 self._send_json({"error": "comando, modo, saida and codigo (int) are required"}, status=400)
                 return
-            r = servico.exibir(comando, modo, saida, codigo)
+            # O Kompress so roda aqui, no daemon, onde o modelo fica carregado uma vez (6.1.3).
+            r = servico.exibir(comando, modo, saida, codigo,
+                               kompress=bool(getattr(_cfg, "shell_kompress", False)))
             self._send_json({"output": r.get("output", saida)})
         elif caminho == "/api/saidas/guardar":
             conteudo, codigo, ate = data.get("conteudo"), data.get("codigo"), data.get("mostrado_ate", 1)
