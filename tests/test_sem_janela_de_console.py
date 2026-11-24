@@ -42,6 +42,7 @@ EXCECOES = {
     ("ambiente.py", "repassar"): "modulo do RTK: escreve no terminal do usuario",
     ("ambiente.py", "transmitir"): "modulo do RTK: repassa a saida ao terminal do usuario",
     ("test_drive.py", "cmd_test_drive"): "sobe o daemon em primeiro plano para o usuario ver (Ctrl-C)",
+    ("procs.py", "instalar_guarda"): "substituto do os.system: passa pelo Popen ja guardado, que decide pelo console",
 }
 
 

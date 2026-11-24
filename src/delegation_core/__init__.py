@@ -20,3 +20,10 @@
 # metadata at install time, and this machine's reported 0.7.0 while the source
 # said 0.10.0.
 __version__ = "0.17.0"
+
+# No Windows, nenhum processo filho do delegation-core abre janela de console: ver procs.py.
+import os as _os
+
+if _os.name == "nt":
+    from delegation_core import procs as _procs
+    _procs.instalar_guarda()

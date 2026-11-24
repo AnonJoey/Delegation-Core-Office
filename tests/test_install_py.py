@@ -61,6 +61,22 @@ def test_extras_que_falham_caem_para_o_pacote_puro(tmp_path):
     assert r.feitos[-1][-1] == str(tmp_path)
 
 
+def test_pip_sempre_pelo_python_do_venv(tmp_path):
+    """No Windows o pip.exe nao se atualiza ("To modify pip, please run ... -m pip"): a
+    instalacao nova parava no primeiro passo. Todo pip passa por `python -m pip`."""
+    m = _modulo()
+
+    class Anota(m.Executor):
+        def __call__(self, cmd, check=True, quieto=False):
+            self.feitos.append([str(c) for c in cmd])
+            return 1 if str(cmd[-1]).endswith("[graph,web]") else 0
+    r = Anota()
+    m.instalar(r, raiz=tmp_path, venv=tmp_path / "v")
+    assert len(r.feitos) == 3
+    for cmd in r.feitos:
+        assert Path(cmd[0]).stem == "python" and cmd[1:3] == ["-m", "pip"], cmd
+
+
 def test_post_install_que_falha_devolve_o_codigo(tmp_path, monkeypatch, capsys):
     m = _modulo()
     monkeypatch.setattr(m, "VENV", tmp_path / "venv")
@@ -102,3 +118,23 @@ def test_apt_pede_so_o_que_falta(monkeypatch):
 def test_o_shim_de_bash_entrega_os_argumentos_ao_install_py():
     r = subprocess.run(["bash", str(RAIZ / "install.sh"), "--help"], capture_output=True, text=True)
     assert r.returncode == 0 and "--dry-run" in r.stdout
+
+
+@pytest.mark.parametrize("winget,depois,instalou", [(True, True, True), (False, False, False), (True, False, False)])
+def test_windows_sem_vcredist_instala_pelo_winget(monkeypatch, capsys, winget, depois, instalou):
+    """Num Windows limpo o torch morria no post-install (WinError 126, c10.dll) sem o VC++."""
+    m = _modulo()
+    estados = iter([False, depois])
+    monkeypatch.setattr(m, "vcredist_presente", lambda: next(estados))
+    monkeypatch.setattr(m.shutil, "which", lambda nome: "C:/winget.exe" if winget and nome == "winget" else None)
+
+    class Anota(m.Executor):
+        def __call__(self, cmd, check=True, quieto=False):
+            self.feitos.append([str(c) for c in cmd])
+            return 0
+    r = Anota()
+    msg = m.deps_windows(r)
+    assert bool(r.feitos and r.feitos[0][:4] == ["winget", "install", "--id", m.VCREDIST_WINGET]) == winget
+    assert ("installed" in msg and "MISSING" not in msg) == instalou
+    if not instalou:
+        assert m.VCREDIST_URL in capsys.readouterr().out
