@@ -113,6 +113,26 @@ def vcredist_presente() -> bool | None:
     return False
 
 
+VCREDIST_WINGET = "Microsoft.VCRedist.2015+.x64"
+VCREDIST_URL = "https://aka.ms/vs/17/release/vc_redist.x64.exe"
+
+
+def deps_windows(rodar: Executor) -> str:
+    """O torch (do sentence-transformers) nao carrega sem o VC++ Redistributable: num Windows 11
+    limpo o post-install morria com WinError 126 em c10.dll (VM de teste, 24/11/2026). Antes o
+    instalador dizia "usually not required" e seguia."""
+    if vcredist_presente():
+        return "VC++ Redistributable OK"
+    print("  VC++ Redistributable not found: PyTorch (used for embeddings) needs it.")
+    if shutil.which("winget"):
+        rodar(["winget", "install", "--id", VCREDIST_WINGET, "--exact", "--silent",
+               "--accept-package-agreements", "--accept-source-agreements"], check=False)
+        if rodar.dry_run or vcredist_presente():
+            return "VC++ Redistributable installed"
+    print(f"  Install it from {VCREDIST_URL} and run this installer again.")
+    return "VC++ Redistributable MISSING: the finishing step will fail until it is installed"
+
+
 def deps_sistema(rodar: Executor) -> str:
     sistema = platform.system()
     if sistema == "Linux":
@@ -120,8 +140,7 @@ def deps_sistema(rodar: Executor) -> str:
     if sistema == "Darwin":
         return deps_macos(rodar)
     if sistema == "Windows":
-        return ("VC++ Redistributable OK" if vcredist_presente()
-                else "VC++ Redistributable not detected (usually not required)")
+        return deps_windows(rodar)
     return f"{sistema}: no system packages checked"
 
 

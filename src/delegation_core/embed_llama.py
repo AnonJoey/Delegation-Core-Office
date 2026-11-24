@@ -129,7 +129,9 @@ def comando_do_servidor(cfg) -> list[str]:
 
 def _detached() -> dict:
     if os.name == "nt":
-        return {"creationflags": subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP}
+        # CREATE_NO_WINDOW, nao DETACHED_PROCESS: desanexado, o servidor nao tem console e cada
+        # programa de console que ele lancasse abriria uma janela visivel (24/11/2026).
+        return {"creationflags": 0x08000000 | subprocess.CREATE_NEW_PROCESS_GROUP}
     return {"start_new_session": True}
 
 
