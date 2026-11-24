@@ -7,6 +7,10 @@ This changelog is derived directly from the canonical versioning recorded across
 
 ## Unreleased
 
+### Fixed
+
+- **The Windows installer failed on upgrade before installing anything.** `install.py` upgraded pip by running the venv's `pip.exe`, and Windows does not let a running `pip.exe` replace itself, so the very first step exited with `ERROR: To modify pip, please run ... python.exe -m pip` and the package stayed at the old version. Measured on 23/11/2026 upgrading v0.16.0 to v0.17.0. Every pip call now goes through `python -m pip`; `tests/test_install_py.py` checks the command.
+- **`clients --claude-desktop` wrote to a file the Microsoft Store build of Claude Desktop does not read.** The Store app is an MSIX package and Windows redirects its `AppData/Roaming` to `AppData/Local/Packages/Claude_<id>/LocalCache/Roaming`; the command wrote to the real Roaming, answered `already-configured`, and Desktop kept loading its other MCP servers but not delegation-core. `claude_desktop_config_path()` now uses the package's folder when it exists, which also covers `post-install`, the wizard and the client registry. `tests/test_claude_desktop_da_store.py`: 2 of its 5 cases fail without the fix.
 ### Added
 
 - **AST code compressor** (backlog 6.3.1): a port of Headroom's `CodeAwareCompressor` (`compressao/headroom_py/transforms/code_compressor.py`, Apache 2.0). It keeps imports, signatures and error handling, trims function bodies, and only returns output that still parses; the original goes to the CCR store, so `recall_output` brings it back. The only logic change from the original: grammars come from the `tree_sitter_<language>` packages the code graph already installs (Python, JavaScript, TypeScript, Go, Rust, Java) instead of `tree_sitter_language_pack`, which is not a dependency here; a language without a grammar takes the original's fallback path. `compress_output(kind="code")` always uses it; automatic detection only with the new `compress_code_ast` option, off by default as in Headroom, which points to the code-graph tools instead. If it does not compress, Kompress tries, as in the original.

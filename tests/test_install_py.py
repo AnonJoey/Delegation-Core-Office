@@ -40,6 +40,10 @@ def test_dry_run_na_ordem_certa(tmp_path, monkeypatch):
     assert m.main(["--dry-run", "--sem-pacotes-de-sistema"]) == 0
     assert feitos[0][1:3] == ["-m", "venv"]
     assert feitos[1][-3:] == ["pip", "wheel", "setuptools<82"]
+    # `python -m pip`, nunca `pip.exe`: no Windows o pip.exe nao se substitui
+    # enquanto roda, e o upgrade do proprio pip falhava (23/11/2026, v0.17.0).
+    assert Path(feitos[1][0]).stem == "python" and feitos[1][1:3] == ["-m", "pip"]
+    assert feitos[2][1:3] == ["-m", "pip"]
     assert feitos[2][-1].endswith("[graph,web]")
     assert feitos[3][-3:] == ["post-install", "--root", str(RAIZ)]
 

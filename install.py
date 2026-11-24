@@ -153,11 +153,13 @@ def backup_da_anterior(venv: Path = VENV, destino_base: Path = CONFIG_DIR,
 
 
 def instalar(rodar: Executor, raiz: Path = RAIZ, venv: Path = VENV) -> None:
-    pip = _bin("pip", venv)
-    rodar([pip, "install", "--quiet", "--upgrade", "pip", "wheel", "setuptools<82"])
-    if rodar([pip, "install", f"{raiz}[graph,web]"], check=False, quieto=True):
+    # `python -m pip`, nao `pip.exe`: no Windows o pip.exe nao pode se
+    # substituir enquanto roda, e o upgrade do proprio pip falha.
+    pip = [_bin("python", venv), "-m", "pip"]
+    rodar([*pip, "install", "--quiet", "--upgrade", "pip", "wheel", "setuptools<82"])
+    if rodar([*pip, "install", f"{raiz}[graph,web]"], check=False, quieto=True):
         print("  Extras [graph,web] failed; installing the package without them.")
-        rodar([pip, "install", str(raiz)])
+        rodar([*pip, "install", str(raiz)])
 
 
 def main(argv: list[str] | None = None) -> int:
