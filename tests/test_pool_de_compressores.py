@@ -142,7 +142,8 @@ def _falso_pool(monkeypatch, ordem, duracao=0.15):
     def trabalho(conteudo, contexto, tipo, bias, guardar, config_dir):
         ordem.append(conteudo)
         time.sleep(duracao)
-        return {"output": conteudo}
+        # O contrato do worker desde o 6.1.2: o resultado e o que a guarda reversivel juntou.
+        return {"resultado": {"output": conteudo}, "ccr": []}
 
     monkeypatch.setenv("DELEGATION_CORE_COMPRESS_WORKERS", "1")
     monkeypatch.setattr(pool, "_pool", lambda n: exec_)

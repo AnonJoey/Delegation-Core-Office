@@ -22,7 +22,7 @@ import re
 
 from .ccr import Guarda
 
-_TIPOS = ("auto", "diff", "search", "log", "text", "json")
+_TIPOS = ("auto", "diff", "search", "log", "text", "json", "code")
 _SEM_PERDA = {"diff": "diff", "search": "search", "build": "log", "log": "log", "text": "text",
               "structured_config": "config"}
 
@@ -49,6 +49,29 @@ def _kompress(texto: str, guarda):
         return None
 
 
+def _codigo_ast_ligado() -> bool:
+    try:
+        from .. import config as _config
+        return bool(getattr(_config.Config.load(), "compress_code_ast", False))
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _codigo(texto: str, contexto: str, guarda):
+    """(comprimido, chave) pelo compressor de codigo, ou None se ele nao comprimiu ou falhou.
+
+    So aceita saida que o proprio compressor validou como sintaxe valida."""
+    try:
+        from .headroom_py.transforms.code_compressor import CodeAwareCompressor, CodeCompressorConfig
+        c = CodeAwareCompressor(CodeCompressorConfig(enable_ccr=guarda is not None))
+        r = c.compress(texto, context=contexto)
+        if not r.syntax_valid or r.compressed == texto:
+            return None
+        return r.compressed, r.cache_key
+    except Exception:  # noqa: BLE001 - sem tree-sitter, linguagem sem gramatica ou falha: fica o anterior
+        return None
+
+
 def comprimir(conteudo: str, contexto: str = "", tipo: str = "auto", bias: float = 1.0,
               guardar: bool = True, kompress: bool = True) -> dict:
     from .headroom_py.transforms.content_detector import detect_content_type
@@ -59,7 +82,7 @@ def comprimir(conteudo: str, contexto: str = "", tipo: str = "auto", bias: float
         d = detect_content_type(conteudo)
         detectado, confianca = d.content_type.value, round(float(d.confidence), 3)
     else:
-        detectado, confianca = {"log": "build", "json": "json_array"}.get(tipo, tipo), None
+        detectado, confianca = {"log": "build", "json": "json_array", "code": "source_code"}.get(tipo, tipo), None
     guarda = Guarda() if guardar else None
     chave = None
     compressor = "lossless"
@@ -85,6 +108,17 @@ def comprimir(conteudo: str, contexto: str = "", tipo: str = "auto", bias: float
         if r.was_modified and _tokens(r.compressed) < _tokens(saida):
             m = _MARCA_CCR.search(r.compressed)
             saida, chave, compressor = r.compressed, (m.group(1) if m else None), "smartcrusher"
+    elif detectado == "source_code" and (tipo == "code" or _codigo_ast_ligado()):
+        # 6.3.1: compressor por AST do Headroom. Pedido explicito (`kind="code"`) sempre; na deteccao
+        # automatica so com `compress_code_ast`, desligado como no original ("use code graph MCP
+        # tools instead"). Se ele nao comprimir, o Kompress tenta, como no original.
+        r = _codigo(conteudo, contexto, guarda)
+        if r is not None and _tokens(r[0]) < _tokens(saida):
+            saida, chave, compressor = r[0], r[1], "code"
+        elif kompress:
+            k = _kompress(saida, guarda)
+            if k is not None and _tokens(k[0]) < _tokens(saida):
+                saida, chave, compressor = k[0], k[1], "kompress"
     if detectado == "text" and kompress and compressor in ("lossless", "none"):
         r = _kompress(saida, guarda)
         if r is not None and _tokens(r[0]) < _tokens(saida):

@@ -2935,8 +2935,9 @@ async def compress_output(content: str, context: str = "", kind: str = "auto") -
     """
     Shrink a large tool output (git diff, grep/rg results, build or test log,
     JSON arrays, any text) with Headroom's compressors before reasoning over it.
-    kind: auto|diff|search|log|text|json. context is your question: it steers which hunks
-    and matches survive. Cut content stays retrievable: the result ends with
+    kind: auto|diff|search|log|text|json|code. context is your question: it steers which hunks
+    and matches survive. `code` keeps imports and signatures and trims function bodies through
+    the AST (Python, JavaScript, TypeScript, Go, Rust, Java). Cut content stays retrievable: the result ends with
     `Retrieve more: hash=...`; pass that hash to recall_output.
     """
     from .compressao import pool
@@ -3310,6 +3311,11 @@ def run_server(cfg: Config):
         atexit.register(_vigia.parar)
         for erro in _vigia.erros_de_config:
             logger.warning("agenda_tarefas: %s", erro)
+
+    # Este processo e o unico escritor de `saidas.sqlite3` (6.1.2): o `shell`, o hook e os workers
+    # do pool pedem a ele. Vem antes do proxy e da API local, que gravam por aqui.
+    from .filtros_saida import execucao as _execucao_saidas
+    _execucao_saidas.marcar_escritor()
 
     # Proxy de API (pacote proxy): desligado por padrao, no mesmo processo.
     if getattr(cfg, "proxy_enabled", False):

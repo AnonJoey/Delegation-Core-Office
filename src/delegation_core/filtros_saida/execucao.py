@@ -37,6 +37,24 @@ BUSY_TIMEOUT_MS = 5000
 _TRAVA = threading.Lock()
 _CON: dict[str, sqlite3.Connection] = {}
 
+# ── escritor unico (item 6.1.2) ──
+# So o daemon grava em `saidas.sqlite3`. Os outros processos pedem a ele (`cliente_fino`) e so
+# gravam por conta propria quando ele nao atende (desligado, outra maquina, versao antiga).
+# Os workers do pool de compressao nao gravam nem pedem: juntam o que guardariam (`_COLETOR`) e o
+# daemon grava quando o resultado volta (`compressao.pool`).
+_ESCRITOR = False
+_COLETOR: list | None = None
+
+
+def marcar_escritor() -> None:
+    """Chamado uma vez pelo daemon ao subir: este processo passa a ser o escritor de `saidas.sqlite3`."""
+    global _ESCRITOR
+    _ESCRITOR = True
+
+
+def e_escritor() -> bool:
+    return _ESCRITOR
+
 
 def tokens(texto: str) -> int:
     return math.ceil(len(texto.encode("utf-8")) / 4)
@@ -148,6 +166,11 @@ def guardar(conteudo: str, comando: str, codigo: int | None = None, mostrado_ate
         return None
     h = hashlib.sha256(comando.encode("utf-8") + b"\x00" + b).hexdigest()[:12]
     total = contar_linhas(b)
+    if not _ESCRITOR:
+        from .. import cliente_fino
+        atendido, g = cliente_fino.guardar(conteudo, comando, codigo, mostrado_ate)
+        if atendido:
+            return g
     try:
         with _TRAVA:
             c = _con()

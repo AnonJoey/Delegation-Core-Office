@@ -8,5 +8,6 @@
 | `DELEGATION_CORE_COMPRESS_WORKERS` | `compressao/pool.py` | Worker processes for output compression, so it never holds the daemon's event loop. Default: half the CPUs, at most 4. `0` compresses in a thread of the daemon instead. |
 | `DELEGATION_CORE_GRAPH_REBUILD_MEMORY_LIMIT_MB` | `graph_hook_rebuild.py` | Memory cap, in MB, for the background graph rebuild started by the git post-commit hook (Linux and macOS). Unset: no cap. The rebuild always runs at lower priority. |
 | `DELEGATION_CORE_HOME` | `dag_runner.py` | Folder of the DAG run history (`dag_executions.db`) kept by `dag_run`. Default `~/.delegation_core`. The rest of the program's state always lives in `~/.delegation_core`. |
+| `DELEGATION_CORE_SEM_DAEMON` | `cliente_fino.py` | Any non-empty value makes `shell`, `recall` and the `filters hook` skip the daemon and filter in their own process, the path used when the daemon does not answer. For diagnosis, and set by the test suite so no test talks to a real daemon. |
 | `DELEGATION_CORE_SKILLS_DB` | `cores/agent_harness/db.py`, `server.py` | Path of the skills catalog. Default `~/.delegation_core/skills.db`. |
 | `DELEGATION_CORE_TOKEN` | `clients.py` | Not read by the daemon: it is the variable Codex is configured to read the bearer token from (`bearer_token_env_var`). Export the server token in it for Codex to connect. |

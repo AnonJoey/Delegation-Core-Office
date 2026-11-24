@@ -90,6 +90,19 @@ def _importar_o_pacote_inteiro():
 
 
 @pytest.fixture(autouse=True)
+def _sem_daemon_real(monkeypatch):
+    """Nenhum teste fala com o daemon de verdade desta maquina (6.1.2).
+
+    O `cliente_fino` le a porta e o token do config.json; com CONFIG_DIR reapontado ele ja nao
+    os acha, e esta trava cobre o caso de algum teste ler o config real. Os testes do proprio
+    cliente fino tiram a variavel e sobem um daemon de teste."""
+    monkeypatch.setenv("DELEGATION_CORE_SEM_DAEMON", "1")
+    from delegation_core.filtros_saida import execucao
+    monkeypatch.setattr(execucao, "_ESCRITOR", False)
+    monkeypatch.setattr(execucao, "_COLETOR", None)
+
+
+@pytest.fixture(autouse=True)
 def _sem_escrita_no_estado_real(tmp_path, monkeypatch):
     """Reaponta todo caminho de estado do usuario para um diretorio temporario."""
     import importlib

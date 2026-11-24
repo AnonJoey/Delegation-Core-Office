@@ -1,8 +1,8 @@
 harm_rank,function,line,error_type,retryable,has_remedy,message
 1,ask_vault,2074,failure,False,True,Local model unavailable for ask_vault: {e}. Use search_vault.
 2,compress,715,failure,False,False,Compression failed: {e}
-3,convert_to_markdown,3062,failure,False,False,Failed to convert document: {e}
-4,dag_run,3079,failure,False,False,Failed to execute DAG: {e}
+3,convert_to_markdown,3063,failure,False,False,Failed to convert document: {e}
+4,dag_run,3080,failure,False,False,Failed to execute DAG: {e}
 5,dream_apply,2366,failure,False,False,dream_apply could not write {old}: {e}
 6,graph_changed_notes,2188,failure,False,False,"{r[""error""]}"
 7,handoff_cancel,2326,failure,False,False,"{r[""error""]}"
@@ -19,8 +19,8 @@ harm_rank,function,line,error_type,retryable,has_remedy,message
 18,vault_note_restore,1232,failure,False,False,"{r[""error""]}"
 19,_memoria_paperclip,2735,invalid_input,False,False,{str(e)}
 20,_perguntas,2808,invalid_input,False,False,{str(e)}
-21,approval_list,3013,invalid_input,False,True,"status must be one of {', '.join(ESTADOS)}, all"
-22,compress_output,2946,invalid_input,False,False,{str(e)}
+21,approval_list,3014,invalid_input,False,True,"status must be one of {', '.join(ESTADOS)}, all"
+22,compress_output,2947,invalid_input,False,False,{str(e)}
 23,graph_node,1839,invalid_input,False,True,"direction must be one of: both, out, in"
 24,handoff_create,2289,invalid_input,False,False,"{r[""error""]}"
 25,logs,2015,invalid_input,False,False,"{r[""erro""]}"
@@ -33,7 +33,7 @@ harm_rank,function,line,error_type,retryable,has_remedy,message
 32,vault_list_notes,1121,invalid_input,False,True,Invalid folder '{folder}'. Valid: {_vault.cfg.vault_folders}
 33,vault_note_feedback,2262,invalid_input,False,False,"{r[""error""]}"
 34,vault_proposals,2622,invalid_input,False,True,status: pending|applied|rejected|stale|all
-35,dag_status,3091,not_found,False,True,DAG run not found: {run_id}
+35,dag_status,3092,not_found,False,True,DAG run not found: {run_id}
 36,dream_apply,2344,not_found,False,False,No open finding for {old} updated by {new}. dream_findings lists them.
 37,dream_apply,2349,not_found,False,False,Note not readable: {old} ({e})
 38,dream_dismiss,2417,not_found,False,False,No finding for {old} updated by {new}
@@ -45,7 +45,7 @@ harm_rank,function,line,error_type,retryable,has_remedy,message
 44,process_get,2556,not_found,False,False,Process not found: {process_id}
 45,process_update,2522,not_found,False,False,Process not found: {process_id}
 46,read_note,603,not_found,False,False,Note not found: {note_name}
-47,recall_output,2966,not_found,False,False,no saved output for {hash}
+47,recall_output,2967,not_found,False,False,no saved output for {hash}
 48,schedule_run,1943,not_found,False,False,"{r[""error""]}"
 49,status_card_delete,2700,not_found,False,False,card not found: {name}
 50,vault_dead_refs,2386,not_found,False,False,Note not found: {note}

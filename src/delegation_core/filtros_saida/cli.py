@@ -20,72 +20,34 @@ from __future__ import annotations
 import json
 import re
 import shlex
-import subprocess
 import sys
 
 _COMPOSTO = re.compile(r"[|;&<>`\n]|\$\(")
 
 
 
-def _no_shell(comando: str):
-    """(argv, shell=) para rodar `comando` no shell do sistema.
-
-    `sh -c` onde houver `sh` (Linux, macOS, Windows com o Git Bash no PATH); sem ele, o shell
-    padrao do Python (`cmd.exe` no Windows). Ate 17/11/2026 era "/bin/sh" fixo, e no Windows
-    todo `delegation-core shell` dava FileNotFoundError."""
-    import os
-    import shutil
-    sh = shutil.which("sh") or ("/bin/sh" if os.path.exists("/bin/sh") else None)
-    return ([sh, "-c", comando], False) if sh else (comando, True)
-
 def cmd_run(args) -> int:
-    from . import execucao, motor
+    """O caminho local do `shell`: o mesmo plano e a mesma saida do daemon (`servico`), neste
+    processo. Usado quando o daemon nao atende, e sempre para git e gh (modo `local`)."""
+    from .. import cliente_fino
+    from . import modulos, servico
     comando = args.comando
-    from . import modulos
-    # Modulo que roda o comando por conta propria (git, gh): consulta a ferramenta mais de
-    # uma vez e monta o resultado, como o `run_*` do RTK.
-    rodavel = modulos.rodavel(comando)
-    if rodavel is not None:
+    plano = servico.plano(comando)
+    if plano["modo"] == "local":
+        # Modulo que roda o comando por conta propria (git, gh): consulta a ferramenta mais de
+        # uma vez e monta o resultado, como o `run_*` do RTK. A guarda dele vai ao daemon.
         from .modulos.ambiente import Ambiente
         amb = Ambiente()
-        codigo = modulos.rodar_modulo(rodavel, amb)
+        codigo = modulos.rodar_modulo(modulos.rodavel(comando), amb)
         amb.flush()
         return codigo
-    achado = modulos.modulo_para(comando)
-    if achado is not None:
-        # Modulo do RTK portado: stdout e stderr juntos, como no RTK, salvo o
-        # modulo que o RTK roda com `stdout_only` (o stderr segue para o stderr).
-        so_stdout = getattr(achado[1], "SO_STDOUT", False)
-        argv, usar_shell = _no_shell(modulos.comando_do_rtk(comando))
-        p = subprocess.run(argv, shell=usar_shell, stdout=subprocess.PIPE,
-                           stderr=None if so_stdout else subprocess.STDOUT)
-        print(modulos.aplicar(comando, p.stdout.decode("utf-8", "replace"), p.returncode, injetado=True)["output"])
-        return p.returncode
-    f = motor.achar(comando)
-    juntar = bool(f and f.filter_stderr)
-    argv, usar_shell = _no_shell(comando)
-    p = subprocess.run(argv, shell=usar_shell, stdout=subprocess.PIPE,
-                       stderr=subprocess.PIPE if juntar else None)
-    saida = p.stdout.decode("utf-8", "replace")
-    if juntar:
-        saida += (p.stderr or b"").decode("utf-8", "replace")
-    if f is None:
-        # Comando de um modulo Rust do RTK (anotado, nao portado): compressor do delegation-core.
-        from . import modulos_rtk
-        m = modulos_rtk.modulo_para(comando)
-        if m is None:
-            sys.stdout.write(saida)
-            return p.returncode
-        from ..compressao.roteador import comprimir
-        tipo = m["delegation_core_route"] if m["delegation_core_route"] in ("diff", "search", "log", "text") else "auto"
-        # Sem Kompress: ele carrega um modelo de ~1,5 GB por processo e leva de 3 a 7 s
-        # para ganhar de 19 a 25% de tamanho. O `shell` roda a cada comando Bash do agente
-        # (pelo hook), e cada comando e um processo novo. O Kompress continua no daemon.
-        print(comprimir(saida, comando, tipo, kompress=False)["output"])
-        return p.returncode
-    r = execucao.exibir(f, saida, comando, p.returncode)
-    print(r["output"])
-    return p.returncode
+    saida, codigo = cliente_fino.rodar(comando, plano)
+    if saida is None:
+        return codigo
+    # Sem Kompress no caminho local: ele carrega um modelo de ~1,5 GB por processo e leva de 3 a
+    # 7 s para ganhar de 19 a 25% de tamanho. Quem tem o modelo carregado e o daemon.
+    print(servico.exibir(comando, plano["modo"], saida, codigo)["output"])
+    return codigo
 
 
 def cmd_recall(args) -> int:

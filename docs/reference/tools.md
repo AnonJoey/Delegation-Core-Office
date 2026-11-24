@@ -262,8 +262,9 @@ Max input: 6000 characters (1500 in CPU budget mode). Chunk longer content.
 
 Shrink a large tool output (git diff, grep/rg results, build or test log,
 JSON arrays, any text) with Headroom's compressors before reasoning over it.
-kind: auto|diff|search|log|text|json. context is your question: it steers which hunks
-and matches survive. Cut content stays retrievable: the result ends with
+kind: auto|diff|search|log|text|json|code. context is your question: it steers which hunks
+and matches survive. `code` keeps imports and signatures and trims function bodies through
+the AST (Python, JavaScript, TypeScript, Go, Rust, Java). Cut content stays retrievable: the result ends with
 `Retrieve more: hash=...`; pass that hash to recall_output.
 
 **Access:** write

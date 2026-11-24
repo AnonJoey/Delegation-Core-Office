@@ -469,6 +469,12 @@ description = "Compresses prose with the Kompress model (ModernBERT), in `compre
 [kompress_device]
 description = "Where the Kompress model runs. `cpu` by default, because the GPU is shared with the embedding model and the local model."
 
+[shell_kompress]
+description = "Also run the daemon's Kompress over `delegation-core shell` output that goes to the compressor (commands of an RTK Rust module not ported: docker, kubectl, npm...). Off by default: measured on 23/11/2026 on CPU with the model loaded, 0.76 to 0.97 s for 7,600 characters and 17% smaller; the first call takes 4.5 s to load the model. That time is added to the agent's Bash command. Only applies when the daemon answers the `shell`; the local path never loads the model."
+
+[compress_code_ast]
+description = "Send source code that automatic detection finds to the AST code compressor (a port of Headroom's CodeAwareCompressor: keeps imports and signatures, trims function bodies, output always parses). Off by default, as in Headroom, which points to the code-graph tools instead. `compress_output(kind=\"code\")` always uses it. Grammars: Python, JavaScript, TypeScript, Go, Rust, Java."
+
 # proxy/
 [proxy_enabled]
 description = "Starts the API proxy inside the daemon. An agent pointed at `http://127.0.0.1:<proxy_port>` (for example through `ANTHROPIC_BASE_URL`) has its large tool results compressed before they reach the model."
@@ -492,6 +498,9 @@ description = "A file read whose file was edited afterwards becomes a marker wit
 # proxy/
 [proxy_read_superseded]
 description = "Like `proxy_read_lifecycle`, for a read that was later repeated in full."
+
+[proxy_ccr]
+description = "Automatic retrieval of compressed originals (Headroom's CCR). When a request carries a compression marker whose original is in the store, the proxy adds a `delegation_core_retrieve` tool and resolves the model's calls to it (up to 3 rounds), so the client only sees the final answer. Streams keep flowing: only the retrieval call is held back. Off by default: adding a tool changes the request, so the provider's prompt cache restarts the first time it appears. Anthropic Messages and OpenAI Chat Completions; not OpenAI Responses."
 
 # proxy/
 [proxy_upstream_anthropic]
