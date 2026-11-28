@@ -121,9 +121,14 @@ def hf_hub_download_local_first(
         or the local-lookup error when ``allow_network`` is ``False`` and the
         file is not cached.
     """
+    # Sem isto a leitura "so do cache" abaixo ainda resolvia huggingface.co (hub_local.py).
+    from delegation_core.hub_local import sem_telemetria
+
+    sem_telemetria()
     from huggingface_hub import hf_hub_download
     from huggingface_hub.errors import EntryNotFoundError, LocalEntryNotFoundError
 
+    sem_telemetria()
     revision = _resolve_revision(repo_id, revision)
 
     try:

@@ -102,6 +102,89 @@ def _sem_daemon_real(monkeypatch):
     monkeypatch.setattr(execucao, "_COLETOR", None)
 
 
+def _endereco_local(endereco) -> bool:
+    """Laco, endereco nao especificado ou socket de caminho (AF_UNIX): fica nesta maquina."""
+    if not isinstance(endereco, tuple) or not endereco:
+        return True
+    host = str(endereco[0]).lower()
+    return host in ("", "localhost", "::1", "::", "0.0.0.0") or host.startswith("127.") or host.startswith("::ffff:127.")
+
+
+def _nome_local(host) -> bool:
+    if host is None or isinstance(host, (bytes, bytearray)) and not host:
+        return True
+    nome = host.decode("ascii", "replace") if isinstance(host, (bytes, bytearray)) else str(host)
+    nome = nome.strip().lower().rstrip(".")
+    if nome in ("", "localhost") or nome.endswith(".localhost"):
+        return True
+    import ipaddress
+    try:
+        ipaddress.ip_address(nome.split("%", 1)[0])
+        return True          # IP literal nao consulta DNS; quem decide e o bloqueio do connect
+    except ValueError:
+        pass
+    import socket
+    try:
+        return nome == socket.gethostname().lower()
+    except OSError:
+        return False
+
+
+@pytest.fixture(autouse=True)
+def _sem_rede_de_verdade(monkeypatch):
+    """Nenhum teste sai desta maquina: conexao e consulta de nome para fora sao recusadas.
+
+    ESCRITO DEPOIS DE MEDIR, em 27/11/2026. Um gancho de auditoria (`sys.addaudithook`) em todos os
+    processos da suite mostrou `test_linguagem_sem_gramatica_cai_no_kompress_sem_quebrar` abrindo
+    conexao com o Hugging Face: o recuo do compressor de codigo chamava o Kompress com o download
+    ligado e a suite baixava 264 MB de modelo a cada rodada numa maquina sem o cache. O teste
+    passava, porque trocava so o `_kompress` do roteador.
+
+    A recusa tem a forma de "sem rede" (`ENETUNREACH`, `gaierror`), que e o que o codigo ja trata
+    numa maquina desconectada. Como o codigo em teste costuma engolir esse erro, a tentativa fica
+    anotada e o teste falha no fim, pelo nome. Vale para este processo; filho que a suite dispara
+    nao herda monkeypatch.
+    """
+    import errno
+    import socket
+
+    tentativas: list[str] = []
+    connect_real = socket.socket.connect
+    connect_ex_real = socket.socket.connect_ex
+    getaddrinfo_real = socket.getaddrinfo
+
+    def connect(self, endereco, *resto):
+        if not _endereco_local(endereco):
+            tentativas.append(f"connect {endereco!r}")
+            raise OSError(errno.ENETUNREACH, f"blocked by the test suite: no test connects to {endereco!r}")
+        return connect_real(self, endereco, *resto)
+
+    def connect_ex(self, endereco, *resto):
+        if not _endereco_local(endereco):
+            tentativas.append(f"connect {endereco!r}")
+            return errno.ENETUNREACH
+        return connect_ex_real(self, endereco, *resto)
+
+    def getaddrinfo(host, *resto, **nomeados):
+        if not _nome_local(host):
+            tentativas.append(f"getaddrinfo {host!r}")
+            raise socket.gaierror(socket.EAI_NONAME, f"blocked by the test suite: no test resolves {host!r}")
+        return getaddrinfo_real(host, *resto, **nomeados)
+
+    monkeypatch.setattr(socket.socket, "connect", connect)
+    monkeypatch.setattr(socket.socket, "connect_ex", connect_ex)
+    monkeypatch.setattr(socket, "getaddrinfo", getaddrinfo)
+
+    yield tentativas
+
+    if tentativas:
+        vistos = ", ".join(sorted(set(tentativas)))
+        pytest.fail(
+            f"o teste tentou sair desta maquina: {vistos}. Nenhum teste usa a rede: "
+            "troque por um dublê o passo que baixa ou consulta (as tentativas foram recusadas)."
+        )
+
+
 @pytest.fixture(autouse=True)
 def _sem_escrita_no_estado_real(tmp_path, monkeypatch):
     """Reaponta todo caminho de estado do usuario para um diretorio temporario."""

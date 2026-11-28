@@ -152,6 +152,50 @@ def test_linguagem_sem_gramatica_cai_no_kompress_sem_quebrar(monkeypatch):
     assert pedidos == [1] and r["compressor"] == "kompress"
 
 
+def test_o_recuo_para_o_kompress_nunca_baixa_o_modelo(monkeypatch):
+    """O modelo do Kompress so vem por `delegation-core kompress setup` (config.py). O recuo do
+    compressor de codigo roda dentro de uma chamada do daemon e chamava o Kompress com o download
+    ligado: linguagem sem gramatica, sem modelo em cache, e o daemon ia buscar 264 MB."""
+    from delegation_core.compressao.headroom_py.transforms import kompress_compressor as kc
+
+    pedidos = []
+
+    class Falso:
+        def compress(self, conteudo, **nomeados):
+            pedidos.append(nomeados)
+            return type("R", (), {"compressed": conteudo, "original_tokens": 3, "compressed_tokens": 3,
+                                  "compression_ratio": 1.0})()
+
+    monkeypatch.setattr(kc, "KompressCompressor", Falso)
+    monkeypatch.setattr(kc, "is_kompress_available", lambda: True)
+    r = cc.CodeAwareCompressor(cc.CodeCompressorConfig(enable_ccr=False))._fallback_compress("int a;", 3)
+    assert pedidos == [{"allow_download": False}] and r.compressed == "int a;"
+
+
+def test_linguagem_sem_gramatica_nao_pede_nada_ao_hugging_face(monkeypatch):
+    """De ponta a ponta, com o Kompress de verdade e sem o modelo: toda leitura do Hub fica no cache."""
+    hub = pytest.importorskip("huggingface_hub")
+    pytest.importorskip("onnxruntime")
+    from delegation_core.compressao.headroom_py import onnx_runtime
+
+    fora_do_cache = []
+    real = hub.hf_hub_download
+
+    def vigiado(*args, **nomeados):
+        if not nomeados.get("local_files_only"):
+            fora_do_cache.append((args, nomeados))
+            raise OSError("o teste nao baixa modelo")
+        return real(*args, **nomeados)
+
+    monkeypatch.setattr(hub, "hf_hub_download", vigiado)
+    monkeypatch.setattr(onnx_runtime, "hf_hub_download_local_first", onnx_runtime.hf_hub_download_local_first)
+    monkeypatch.setattr(roteador, "_kompress", lambda texto, guarda: None)
+    c = "#include <stdio.h>\n" + "".join(f"int f{i}(int a) {{\n  int b = a * {i};\n  return b + {i};\n}}\n" for i in range(80))
+    r = roteador.comprimir(c, "", "code", 1.0, False, True)
+    assert fora_do_cache == [], fora_do_cache
+    assert r["compressor"] != "code"
+
+
 def test_saida_que_nao_passa_na_propria_validacao_e_descartada(monkeypatch):
     class Falso:
         def __init__(self, *a, **k):
