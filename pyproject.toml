@@ -18,7 +18,10 @@ dependencies = [
     # and sse_app() are gone, replaced by http_app(), and FastMCP.__init__ grew
     # the auth= parameter this server now depends on. The old floor-only range
     # let a resolver pick either major.
-    "fastmcp>=3.4,<4",
+    # Piso 3.4.10: o pip-audit de 27/11/2026 aponta a 3.4.8 (GHSA-7xgj-8392-5q4r) e da a 3.4.10
+    # como correcao. Com o piso em 3.4 uma instalacao antiga nunca saia da versao que tinha: o
+    # `update` so troca o que o piso obriga.
+    "fastmcp>=3.4.10,<4",
     # Indice vetorial: SQLite (stdlib) + numpy, em indice_sqlite.py. O ChromaDB saiu
     # das dependencias obrigatorias: so e preciso para ler um indice antigo e migrar
     # (extra "chroma"), porque a 1.5.9 tem defeitos de corrupcao abertos.
@@ -31,7 +34,8 @@ dependencies = [
     # started it" for the dashboard's start/stop button (dashboard_api.py)
     "psutil>=5.9.0",
     # file format extraction
-    "pypdf>=4.0.0",
+    # Piso 6.21.4: primeira sem os 11 avisos que o pip-audit lista para a 6.21.0 (27/11/2026).
+    "pypdf>=6.21.4",
     # o pypdf precisa dele para ler o encoding de fonte CFF Type1; sem ele o texto sai incompleto
     "fonttools>=4.0.0",
     "python-docx>=1.0.0",

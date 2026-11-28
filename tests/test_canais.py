@@ -40,6 +40,12 @@ def repo(tmp_path, monkeypatch):
     monkeypatch.setattr(installer, "_pip_install", lambda r: (diario.append("pip"), (True, "ok"))[1])
     monkeypatch.setattr(installer, "refresh_shipped_files", lambda r: {})
     monkeypatch.setattr(installer, "stale_dist_copies", lambda: [])
+    # O fim do update roda num processo filho (`python -m delegation_core update-finish`), e
+    # monkeypatch nao atravessa processo: sem este dublê o filho reescrevia de verdade a unit do
+    # systemd e os hooks do Claude Code e do Codex com o python da suite, e chamava
+    # `systemctl --user daemon-reload` e `enable --now`. Medido em 27/11/2026 com HOME falso: o
+    # settings.json ganhou hooks apontando para o venv da suite e a unit, o ExecStart dele.
+    monkeypatch.setattr(installer, "_finish_in_new_code", lambda r: (diario.append("finish"), [])[1])
     return raiz
 
 

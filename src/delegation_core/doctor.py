@@ -160,6 +160,45 @@ def check_config_keys(config_file: Path | None = None) -> dict:
             "fix": f"remover ou corrigir em {caminho}; chave desconhecida nao vale e nao da erro"}
 
 
+#: Enderecos em que so esta maquina alcanca o daemon.
+_SO_ESTA_MAQUINA = ("localhost", "::1")
+
+
+def _host_de_laco(host: str) -> bool:
+    h = (host or "").strip().lower().strip("[]")
+    return h in _SO_ESTA_MAQUINA or h.startswith("127.")
+
+
+def check_network_exposure(cfg) -> dict:
+    """Daemon escutando fora do laco.
+
+    O `config.py` diz que `server_host` fica no laco e que o token e uma guarda contra outros
+    processos LOCAIS, nao isolamento de rede. Mas a chave aceita `0.0.0.0`, e ate aqui ninguem
+    avisava do que isso abre. Medido em 27/11/2026 num servidor com `server_host: 0.0.0.0`,
+    `tool_policies` vazio e um token so: as portas respondiam pela rede Wi-Fi, e uma chamada a
+    `dag_run` executou um comando de shell com a conta do daemon, sem aprovacao. Quem tem o
+    token nessa rede tem um terminal na maquina.
+    """
+    from .governanca import politica_efetiva
+
+    host = str(getattr(cfg, "server_host", "") or "")
+    if _host_de_laco(host):
+        return {"check": "network_exposure", "status": "ok",
+                "detail": f"server_host {host}: only this machine reaches the daemon"}
+    acao, _origem = politica_efetiva(getattr(cfg, "tool_policies", None) or {}, "", "dag_run")
+    partes = [f"server_host {host}: other machines can reach the daemon over plain HTTP"]
+    if acao == "allow":
+        partes.append("dag_run (runs shell commands as the daemon's user) is allowed for every client")
+    else:
+        partes.append(f"dag_run is {acao}")
+    if not (getattr(cfg, "client_tokens", None) or {}):
+        partes.append("one shared token for every client")
+    return {"check": "network_exposure", "status": "warn", "detail": "; ".join(partes),
+            "fix": "set server_host back to 127.0.0.1 and reach the daemon through an SSH tunnel or a "
+                   "private network; if it must stay exposed, close the port in the firewall for the "
+                   "networks that do not need it and run: delegation-core policy set '*' dag_run block"}
+
+
 def check_graph_extra() -> dict:
     try:
         import tree_sitter  # noqa: F401
@@ -1074,6 +1113,7 @@ def run_all(cfg) -> dict:
         check_hooks(),
         check_graph_extra(),
         check_config_keys(),
+        check_network_exposure(cfg),
         check_ingest_registry(),
         check_context_weight(),
         check_graph_registry(cfg),

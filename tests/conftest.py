@@ -102,6 +102,89 @@ def _sem_daemon_real(monkeypatch):
     monkeypatch.setattr(execucao, "_COLETOR", None)
 
 
+def _endereco_local(endereco) -> bool:
+    """Laco, endereco nao especificado ou socket de caminho (AF_UNIX): fica nesta maquina."""
+    if not isinstance(endereco, tuple) or not endereco:
+        return True
+    host = str(endereco[0]).lower()
+    return host in ("", "localhost", "::1", "::", "0.0.0.0") or host.startswith("127.") or host.startswith("::ffff:127.")
+
+
+def _nome_local(host) -> bool:
+    if host is None or isinstance(host, (bytes, bytearray)) and not host:
+        return True
+    nome = host.decode("ascii", "replace") if isinstance(host, (bytes, bytearray)) else str(host)
+    nome = nome.strip().lower().rstrip(".")
+    if nome in ("", "localhost") or nome.endswith(".localhost"):
+        return True
+    import ipaddress
+    try:
+        ipaddress.ip_address(nome.split("%", 1)[0])
+        return True          # IP literal nao consulta DNS; quem decide e o bloqueio do connect
+    except ValueError:
+        pass
+    import socket
+    try:
+        return nome == socket.gethostname().lower()
+    except OSError:
+        return False
+
+
+@pytest.fixture(autouse=True)
+def _sem_rede_de_verdade(monkeypatch):
+    """Nenhum teste sai desta maquina: conexao e consulta de nome para fora sao recusadas.
+
+    ESCRITO DEPOIS DE MEDIR, em 27/11/2026. Um gancho de auditoria (`sys.addaudithook`) em todos os
+    processos da suite mostrou `test_linguagem_sem_gramatica_cai_no_kompress_sem_quebrar` abrindo
+    conexao com o Hugging Face: o recuo do compressor de codigo chamava o Kompress com o download
+    ligado e a suite baixava 264 MB de modelo a cada rodada numa maquina sem o cache. O teste
+    passava, porque trocava so o `_kompress` do roteador.
+
+    A recusa tem a forma de "sem rede" (`ENETUNREACH`, `gaierror`), que e o que o codigo ja trata
+    numa maquina desconectada. Como o codigo em teste costuma engolir esse erro, a tentativa fica
+    anotada e o teste falha no fim, pelo nome. Vale para este processo; filho que a suite dispara
+    nao herda monkeypatch.
+    """
+    import errno
+    import socket
+
+    tentativas: list[str] = []
+    connect_real = socket.socket.connect
+    connect_ex_real = socket.socket.connect_ex
+    getaddrinfo_real = socket.getaddrinfo
+
+    def connect(self, endereco, *resto):
+        if not _endereco_local(endereco):
+            tentativas.append(f"connect {endereco!r}")
+            raise OSError(errno.ENETUNREACH, f"blocked by the test suite: no test connects to {endereco!r}")
+        return connect_real(self, endereco, *resto)
+
+    def connect_ex(self, endereco, *resto):
+        if not _endereco_local(endereco):
+            tentativas.append(f"connect {endereco!r}")
+            return errno.ENETUNREACH
+        return connect_ex_real(self, endereco, *resto)
+
+    def getaddrinfo(host, *resto, **nomeados):
+        if not _nome_local(host):
+            tentativas.append(f"getaddrinfo {host!r}")
+            raise socket.gaierror(socket.EAI_NONAME, f"blocked by the test suite: no test resolves {host!r}")
+        return getaddrinfo_real(host, *resto, **nomeados)
+
+    monkeypatch.setattr(socket.socket, "connect", connect)
+    monkeypatch.setattr(socket.socket, "connect_ex", connect_ex)
+    monkeypatch.setattr(socket, "getaddrinfo", getaddrinfo)
+
+    yield tentativas
+
+    if tentativas:
+        vistos = ", ".join(sorted(set(tentativas)))
+        pytest.fail(
+            f"o teste tentou sair desta maquina: {vistos}. Nenhum teste usa a rede: "
+            "troque por um dublê o passo que baixa ou consulta (as tentativas foram recusadas)."
+        )
+
+
 @pytest.fixture(autouse=True)
 def _sem_escrita_no_estado_real(tmp_path, monkeypatch):
     """Reaponta todo caminho de estado do usuario para um diretorio temporario."""
@@ -163,6 +246,25 @@ def _sem_escrita_no_estado_real(tmp_path, monkeypatch):
 
     yield raiz
 
+    # O chromadb guarda um sistema por caminho num cache de classe e nunca o solta: cada teste
+    # que abre um indice numa pasta temporaria deixava o `chroma.sqlite3` dela aberto ate o fim da
+    # suite. Medido em 27/11/2026: 75 desses arquivos abertos no fim, numa suite que terminava
+    # com 632 descritores de um limite padrao de 1.024 no Linux.
+    if "chromadb.api.client" in sys.modules:
+        try:
+            from chromadb.api.client import SharedSystemClient
+            cache = getattr(SharedSystemClient, "_identifier_to_system", {})
+            refcounts = getattr(SharedSystemClient, "_identifier_to_refcount", {})
+            for ident, system in list(cache.items()):
+                try:
+                    system.stop()
+                except Exception:  # noqa: BLE001 - limpeza: um sistema que nao para nao derruba o teste
+                    pass
+                cache.pop(ident, None)
+                refcounts.pop(ident, None)
+        except Exception:  # noqa: BLE001 - versao do chromadb sem esse cache: nada a soltar
+            pass
+
 
 
 @pytest.fixture(autouse=True)
@@ -221,6 +323,25 @@ def _sem_gerenciador_de_servico_real(tmp_path, monkeypatch):
         monkeypatch.setattr(service_mod, atributo, destino, raising=False)
 
 
+def _so_os_hooks_do_dc_mudaram(orig: bytes | None, atual: bytes) -> bool:
+    """A escrita tem a forma da do instalador: so a chave `hooks` mudou e o novo cita o delegation-core.
+
+    O instalador mescla os hooks e preserva o resto do arquivo; o Claude Code, quando grava o
+    settings.json por conta propria (/effort, /model), muda outras chaves.
+    """
+    import json
+    try:
+        a = json.loads(orig) if orig else {}
+        b = json.loads(atual)
+    except ValueError:
+        return False
+    if not isinstance(a, dict) or not isinstance(b, dict):
+        return False
+    mudaram = {k for k in set(a) | set(b) if a.get(k) != b.get(k)}
+    texto = json.dumps(b.get("hooks"))
+    return mudaram == {"hooks"} and ("delegation-core" in texto or "delegation_core" in texto)
+
+
 @pytest.fixture(autouse=True)
 def _units_do_systemd_intactas():
     """Rede de seguranca para o mesmo estrago, caso alguem contorne o bloqueio.
@@ -231,6 +352,13 @@ def _units_do_systemd_intactas():
     """
     unidades = Path.home() / ".config" / "systemd" / "user"
     antes = {p.name for p in unidades.glob("delegation-core*.service")} if unidades.exists() else set()
+    # Conteudo, e nao so presenca: um teste que dispara um processo filho do delegation-core
+    # reescreve a unit e os hooks dos clientes sem passar por monkeypatch nenhum (o bloqueio de
+    # `service._run` acima vale so para este processo). Arquivo que mudou volta ao original e o
+    # teste falha pelo nome; arquivo que o teste criou e removido.
+    vigiados = [unidades / n for n in sorted(antes)] + [
+        Path.home() / ".claude" / "settings.json", Path.home() / ".codex" / "hooks.json"]
+    conteudo = {c: (c.read_bytes() if c.is_file() else None) for c in vigiados}
 
     yield
 
@@ -241,6 +369,32 @@ def _units_do_systemd_intactas():
             f"o teste removeu {', '.join(sorted(sumiram))} de {unidades}. "
             "Nenhum teste desregistra servico real: use um dublê de service._run. "
             "Para reverter a mao: delegation-core service install"
+        )
+    mexidos = []
+    for c, orig in conteudo.items():
+        atual = c.read_bytes() if c.is_file() else None
+        if atual == orig:
+            continue
+        # O settings.json tambem e escrito pelo proprio Claude Code (/effort, /model) enquanto a suite
+        # roda; so volta ao original a escrita com sinal da suite (o python dela ou caminho temporario).
+        da_suite = c.parent == unidades or (atual is not None and (
+            sys.executable.encode() in atual or b"/tmp/" in atual or b"pytest" in atual
+            or _so_os_hooks_do_dc_mudaram(orig, atual)))
+        if not da_suite:
+            mexidos.append(f"{c} (mudou, sem sinal da suite: nao revertido)")
+            continue
+        mexidos.append(str(c))
+        if orig is None:
+            c.unlink(missing_ok=True)
+        else:
+            c.write_bytes(orig)
+    for n in sorted(depois - antes):
+        mexidos.append(str(unidades / n))
+        (unidades / n).unlink(missing_ok=True)
+    if mexidos:
+        pytest.fail(
+            f"o teste mexeu em {', '.join(mexidos)} (os da suite ja voltaram ao original). Um processo filho "
+            "do delegation-core nao herda monkeypatch: troque o passo que o dispara por um dublê."
         )
 
 @pytest.fixture(autouse=True)

@@ -52,5 +52,10 @@ jobs:
       - name: Analise estatica
         run: python -m ruff check --no-cache --select F,E9 --exclude src/delegation_core/graph src/
 
+      # So erro de sintaxe (E9), com o alvo que o ruff tira do `requires-python`: um arquivo de
+      # teste com sintaxe que so existe no 3.12 passava aqui, porque a matriz so roda o 3.12.
+      - name: Sintaxe dos testes e dos scripts
+        run: python -m ruff check --no-cache --select E9 tests/ scripts/
+
       - name: Suite
         run: python -m pytest -q -p no:cacheprovider

@@ -100,7 +100,9 @@ def test_filter_ruff_check_caps_violations_and_emits_hint():
         diags.append(
             f'  {{\n    "code": "F401",\n    "message": "`module_{i}` imported but unused",\n    "location": {{"row": {i}, "column": 4}},\n    "end_location": {{"row": {i}, "column": 20}},\n    "filename": "/Users/dev/project/src/feature_{i}.py",\n    "fix": null\n  }}'
         )
-    json_str = f"[\n{',\n'.join(diags)}\n]"
+    # Sem barra invertida dentro da expressao do f-string: isso so e sintaxe valida no Python 3.12,
+    # e o pacote declara `requires-python >=3.11`.
+    json_str = "[\n" + ",\n".join(diags) + "\n]"
     result = filter_ruff_check_json(json_str)
 
     in_section = result.split("Violations:")[1] if "Violations:" in result else ""

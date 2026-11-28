@@ -28,12 +28,17 @@ def _pool_limpo(monkeypatch):
     pool.encerrar()
 
 
-def _um_worker(monkeypatch, ordem, duracao=0.25):
+def _um_worker(monkeypatch, ordem, duracao=0.25, segura=None):
+    """`segura` e {conteudo: threading.Event}: esse trabalho ocupa a vaga ate o teste soltar o evento."""
     exec_ = ThreadPoolExecutor(max_workers=1)
 
     def trabalho(conteudo, contexto, tipo, bias, guardar, config_dir):
         ordem.append(conteudo)
-        time.sleep(duracao)
+        evento = (segura or {}).get(conteudo)
+        if evento is not None:
+            evento.wait(30)
+        else:
+            time.sleep(duracao)
         return {"resultado": {"output": conteudo, "compressor": "none"}, "ccr": []}
 
     monkeypatch.setenv("DELEGATION_CORE_COMPRESS_WORKERS", "1")
@@ -54,9 +59,24 @@ def _em_outro_laco(coro_fn, *args):
     return t, caixa
 
 
+def _ate(condicao, segundos=20.0):
+    """Espera a condicao valer, em vez de dormir um tempo fixo e torcer."""
+    limite = time.monotonic() + segundos
+    while time.monotonic() < limite:
+        if condicao():
+            return
+        time.sleep(0.005)
+    raise AssertionError("a condicao esperada nao chegou a valer")
+
+
 def test_interativa_de_outro_laco_passa_na_frente_do_lote_que_espera(monkeypatch):
+    """A ordem de chegada era garantida por `time.sleep(0.05)` entre as threads, e o trabalho que ocupava a vaga
+    durava 0,25 s. Numa maquina lenta o "agente" entrava na fila depois de a vaga ja ter ido para o "lote", e o
+    teste falhava sem defeito nenhum no portao (CI do macOS, 24 e 27/11/2026). Agora cada passo espera o anterior
+    acontecer de verdade, e a vaga so e solta com os dois ja na fila."""
     ordem = []
-    exec_ = _um_worker(monkeypatch, ordem)
+    solta = threading.Event()
+    exec_ = _um_worker(monkeypatch, ordem, segura={"ocupa": solta})
 
     async def lote(nome):
         return await pool.comprimir(nome, prioridade=pool.LOTE, kompress=False)
@@ -64,13 +84,18 @@ def test_interativa_de_outro_laco_passa_na_frente_do_lote_que_espera(monkeypatch
     async def interativa(nome):
         return await pool.comprimir(nome, prioridade=pool.INTERATIVA, kompress=False)
 
+    def esperando() -> int:
+        return pool._PORTAO.esperando if pool._PORTAO is not None else 0
+
     t1, _ = _em_outro_laco(lote, "ocupa")       # pega a unica vaga
-    time.sleep(0.05)
+    _ate(lambda: ordem == ["ocupa"])
     t2, _ = _em_outro_laco(lote, "lote")        # espera, noutro laco
-    time.sleep(0.05)
+    _ate(lambda: esperando() == 1)
     t3, _ = _em_outro_laco(interativa, "agente")  # chega depois, noutro laco, e passa na frente
+    _ate(lambda: esperando() == 2)
+    solta.set()
     for t in (t1, t2, t3):
-        t.join(10)
+        t.join(30)
     exec_.shutdown()
     assert ordem == ["ocupa", "agente", "lote"]
 

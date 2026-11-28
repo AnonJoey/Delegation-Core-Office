@@ -105,6 +105,9 @@ def cmd_run(args):
     # declara local. A atribuicao direta cobre o caso de o fastmcp ja ter sido
     # importado, quando a variavel de ambiente chega tarde.
     os.environ.setdefault("FASTMCP_CHECK_FOR_UPDATES", "off")
+    # O mesmo para o huggingface_hub, que consulta o Hub ate numa leitura so do cache (hub_local.py).
+    from .hub_local import sem_telemetria
+    sem_telemetria()
     try:
         import fastmcp
         if "FASTMCP_CHECK_FOR_UPDATES" not in os.environ or os.environ["FASTMCP_CHECK_FOR_UPDATES"] == "off":

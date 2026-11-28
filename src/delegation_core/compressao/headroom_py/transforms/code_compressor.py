@@ -2334,7 +2334,11 @@ class CodeAwareCompressor(Transform):
 
             if is_kompress_available():
                 compressor = KompressCompressor()
-                result = compressor.compress(code)
+                # Divergencia deliberada do Headroom: la o uso direto baixa o modelo na primeira
+                # chamada. Aqui o modelo so vem por `delegation-core kompress setup` (config.py), e
+                # este recuo roda dentro de uma chamada do daemon: sem o modelo em cache o codigo
+                # volta inteiro, em vez de buscar 264 MB no Hugging Face no meio do pedido.
+                result = compressor.compress(code, allow_download=False)
                 return CodeCompressionResult(
                     compressed=result.compressed,
                     original=code,

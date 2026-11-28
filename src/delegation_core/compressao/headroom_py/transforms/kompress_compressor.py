@@ -783,6 +783,9 @@ def _load_modernbert_tokenizer(auto_tokenizer: Any, *, allow_download: bool) -> 
     Mirrors ``onnx_runtime.hf_hub_download_local_first``, which the ONNX half of
     this loader already uses.
     """
+    from delegation_core.hub_local import sem_telemetria
+
+    sem_telemetria()
     try:
         return auto_tokenizer.from_pretrained("answerdotai/ModernBERT-base", local_files_only=True)
     except _NOT_CACHED_ERRORS as exc:

@@ -22,6 +22,11 @@ import re
 #: Ferramentas que apagam, sobrescrevem ou desfazem algo que nao volta sozinho.
 #: Sempre um subconjunto de escopos.ESCRITA; um teste confere.
 DESTRUTIVAS = frozenset({
+    # Executa os comandos de shell que vierem no YAML, com a conta do daemon: nada do que um
+    # comando apaga volta sozinho. Ficou fora desta lista ate 27/11/2026, classificada como
+    # `write`: a politica `destructive: require_approval` nao a alcancava e a dica
+    # `destructiveHint` saia falsa para o cliente.
+    "dag_run",
     "dream_apply",
     "graph_hook_uninstall",
     "ingest_forget",
