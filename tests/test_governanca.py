@@ -183,3 +183,30 @@ def test_middleware_de_verdade_no_fastmcp(tmp_path):
             mw.aprovacoes.decidir(pid, aprovar=True)
             assert (await c.call_tool("ingest_forget", {"source_path": "/a"})).data == "esquecido /a"
     asyncio.run(roda())
+
+
+def test_dag_run_e_destrutiva_e_anuncia_isso_ao_cliente():
+    """`dag_run` executa comando de shell com a conta do daemon. Era classe `write`: a politica
+    por classe nao a alcancava e a dica do protocolo dizia ao cliente que ela nao destroi nada."""
+    from delegation_core.anotacoes import anotacoes_de
+    assert "dag_run" in DESTRUTIVAS and classe_de("dag_run") == "destructive"
+    dicas = anotacoes_de("dag_run")
+    assert dicas == {"readOnlyHint": False, "destructiveHint": True, "idempotentHint": False, "openWorldHint": True}
+    assert politica_efetiva({"*": {"destructive": "require_approval"}}, "qualquer", "dag_run")[0] == "require_approval"
+    assert politica_efetiva({}, "qualquer", "dag_run")[0] == "allow"      # sem politica nada muda
+
+
+def test_toda_ferramenta_que_executa_um_workflow_e_destrutiva():
+    """A classe sai do que a ferramenta faz. Toda ferramenta do servidor que manda o
+    `DAGRunner` executar (`execute_workflow` roda os passos com `shell=True`) tem de ser
+    destrutiva. Hoje e uma so; o teste pega a proxima."""
+    import ast
+    import inspect
+    from delegation_core import dag_runner, server
+    assert "shell=True" in inspect.getsource(dag_runner.DAGRunner._run_single_step)
+    arvore = ast.parse(inspect.getsource(server))
+    executam = {no.name for no in ast.walk(arvore)
+                if isinstance(no, (ast.FunctionDef, ast.AsyncFunctionDef))
+                and any(isinstance(x, ast.Attribute) and x.attr == "execute_workflow" for x in ast.walk(no))}
+    assert executam == {"dag_run"}, executam
+    assert executam <= DESTRUTIVAS

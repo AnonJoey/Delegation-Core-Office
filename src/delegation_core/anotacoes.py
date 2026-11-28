@@ -14,8 +14,8 @@ escopo do token e a politica. Ferramenta sem classificacao sai como escrita.
 
 from __future__ import annotations
 
-#: Ferramentas que falam com o mundo de fora da maquina.
-MUNDO_ABERTO = frozenset({"search_web"})
+#: Ferramentas que falam com o mundo de fora da maquina. Um comando de shell alcanca o que quiser.
+MUNDO_ABERTO = frozenset({"search_web", "dag_run"})
 
 
 def anotacoes_de(nome: str) -> dict:

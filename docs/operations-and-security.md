@@ -12,6 +12,8 @@
 ## Loopback binding, tokens, and secrets
 
 - The HTTP daemon binds to `127.0.0.1` (loopback only). Do not expose the daemon port directly to a public network.
+- The token guards against other local processes; it is not network isolation. If `server_host` is set to anything outside loopback, `delegation-core doctor` reports it (`network_exposure`): whoever holds the token on that network can call every tool, and `dag_run` runs shell commands as the daemon's user. Prefer an SSH tunnel or a private network; if the port must stay open, restrict it in the firewall and set a policy such as `delegation-core policy set '*' dag_run block`.
+- `dag_run` is in the `destructive` class: a policy written for that class (`'*' destructive require_approval`) covers it, and MCP clients receive it with `destructiveHint`.
 - Per-client bearer tokens are stored in `~/.delegation_core/` and written into client configurations by `delegation-core clients`.
 - Session transcript export (`hooks/session_export.py`) redacts known credential shapes before writing raw transcripts into `Sessions/`, but you should still rotate any secret that was pasted into a terminal session.
 - Agent session roots (`~/.claude/projects`, `~/.codex/sessions`) are skipped by default during external folder ingestion unless explicitly listed in `ingest_sources`, preventing raw session dumps from polluting the index.
