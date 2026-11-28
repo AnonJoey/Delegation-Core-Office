@@ -246,6 +246,25 @@ def _sem_escrita_no_estado_real(tmp_path, monkeypatch):
 
     yield raiz
 
+    # O chromadb guarda um sistema por caminho num cache de classe e nunca o solta: cada teste
+    # que abre um indice numa pasta temporaria deixava o `chroma.sqlite3` dela aberto ate o fim da
+    # suite. Medido em 27/11/2026: 75 desses arquivos abertos no fim, numa suite que terminava
+    # com 632 descritores de um limite padrao de 1.024 no Linux.
+    if "chromadb.api.client" in sys.modules:
+        try:
+            from chromadb.api.client import SharedSystemClient
+            cache = getattr(SharedSystemClient, "_identifier_to_system", {})
+            refcounts = getattr(SharedSystemClient, "_identifier_to_refcount", {})
+            for ident, system in list(cache.items()):
+                try:
+                    system.stop()
+                except Exception:  # noqa: BLE001 - limpeza: um sistema que nao para nao derruba o teste
+                    pass
+                cache.pop(ident, None)
+                refcounts.pop(ident, None)
+        except Exception:  # noqa: BLE001 - versao do chromadb sem esse cache: nada a soltar
+            pass
+
 
 
 @pytest.fixture(autouse=True)
