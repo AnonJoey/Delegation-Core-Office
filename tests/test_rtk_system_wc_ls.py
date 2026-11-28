@@ -151,6 +151,10 @@ def test_ls_de_verdade(tmp_path):
     (tmp_path / "src").mkdir()
     (tmp_path / "node_modules").mkdir()
     (tmp_path / "a.txt").write_text("x" * 2048)
+    # O teste compara a permissao que o `ls -l` mostra. Sem fixar, ela vem da umask de quem roda:
+    # numa maquina com umask 002 saia 775 e 664 e o teste falhava (medido em 27/11/2026).
+    for nome, modo in (("src", 0o755), ("node_modules", 0o755), ("a.txt", 0o644)):
+        os.chmod(tmp_path / nome, modo)
     amb = Ambiente.em_memoria(str(tmp_path), env={"PATH": os.environ["PATH"], "HOME": str(tmp_path.parent)})
     assert ls.rodar([], amb) == 0
     saida = amb.saida_gravada()[0].decode()
