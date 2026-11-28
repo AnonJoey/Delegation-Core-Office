@@ -221,6 +221,25 @@ def _sem_gerenciador_de_servico_real(tmp_path, monkeypatch):
         monkeypatch.setattr(service_mod, atributo, destino, raising=False)
 
 
+def _so_os_hooks_do_dc_mudaram(orig: bytes | None, atual: bytes) -> bool:
+    """A escrita tem a forma da do instalador: so a chave `hooks` mudou e o novo cita o delegation-core.
+
+    O instalador mescla os hooks e preserva o resto do arquivo; o Claude Code, quando grava o
+    settings.json por conta propria (/effort, /model), muda outras chaves.
+    """
+    import json
+    try:
+        a = json.loads(orig) if orig else {}
+        b = json.loads(atual)
+    except ValueError:
+        return False
+    if not isinstance(a, dict) or not isinstance(b, dict):
+        return False
+    mudaram = {k for k in set(a) | set(b) if a.get(k) != b.get(k)}
+    texto = json.dumps(b.get("hooks"))
+    return mudaram == {"hooks"} and ("delegation-core" in texto or "delegation_core" in texto)
+
+
 @pytest.fixture(autouse=True)
 def _units_do_systemd_intactas():
     """Rede de seguranca para o mesmo estrago, caso alguem contorne o bloqueio.
@@ -231,6 +250,13 @@ def _units_do_systemd_intactas():
     """
     unidades = Path.home() / ".config" / "systemd" / "user"
     antes = {p.name for p in unidades.glob("delegation-core*.service")} if unidades.exists() else set()
+    # Conteudo, e nao so presenca: um teste que dispara um processo filho do delegation-core
+    # reescreve a unit e os hooks dos clientes sem passar por monkeypatch nenhum (o bloqueio de
+    # `service._run` acima vale so para este processo). Arquivo que mudou volta ao original e o
+    # teste falha pelo nome; arquivo que o teste criou e removido.
+    vigiados = [unidades / n for n in sorted(antes)] + [
+        Path.home() / ".claude" / "settings.json", Path.home() / ".codex" / "hooks.json"]
+    conteudo = {c: (c.read_bytes() if c.is_file() else None) for c in vigiados}
 
     yield
 
@@ -241,6 +267,32 @@ def _units_do_systemd_intactas():
             f"o teste removeu {', '.join(sorted(sumiram))} de {unidades}. "
             "Nenhum teste desregistra servico real: use um dublê de service._run. "
             "Para reverter a mao: delegation-core service install"
+        )
+    mexidos = []
+    for c, orig in conteudo.items():
+        atual = c.read_bytes() if c.is_file() else None
+        if atual == orig:
+            continue
+        # O settings.json tambem e escrito pelo proprio Claude Code (/effort, /model) enquanto a suite
+        # roda; so volta ao original a escrita com sinal da suite (o python dela ou caminho temporario).
+        da_suite = c.parent == unidades or (atual is not None and (
+            sys.executable.encode() in atual or b"/tmp/" in atual or b"pytest" in atual
+            or _so_os_hooks_do_dc_mudaram(orig, atual)))
+        if not da_suite:
+            mexidos.append(f"{c} (mudou, sem sinal da suite: nao revertido)")
+            continue
+        mexidos.append(str(c))
+        if orig is None:
+            c.unlink(missing_ok=True)
+        else:
+            c.write_bytes(orig)
+    for n in sorted(depois - antes):
+        mexidos.append(str(unidades / n))
+        (unidades / n).unlink(missing_ok=True)
+    if mexidos:
+        pytest.fail(
+            f"o teste mexeu em {', '.join(mexidos)} (os da suite ja voltaram ao original). Um processo filho "
+            "do delegation-core nao herda monkeypatch: troque o passo que o dispara por um dublê."
         )
 
 @pytest.fixture(autouse=True)
